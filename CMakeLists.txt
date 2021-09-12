@@ -21,7 +21,6 @@ include_directories(
   # ${CSPARSE_INCLUDE_DIR}
   # ${Cholmod_INCLUDE_DIR}
   ${G2O_INCLUDE_DIR}
-  # /usr/include/suitesparse
 )
 link_directories(
   ${G2O_LIB_DIR}
@@ -49,7 +48,7 @@ g2o_solver_eigen
 )
 
 
-add_executable(ba_demo ba_demo.cpp)
+add_executable(ba_demo src/demo/ba_demo.cpp)
 target_link_libraries(ba_demo 
 ${G2O_LIBS}
 )
