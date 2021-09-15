@@ -14,10 +14,6 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/bin)
 
-# Add subdirectories
-add_subdirectory(apps)
-add_subdirectory(src)
-
 
 # Setup Eigen
 find_package(Eigen3 3.3 REQUIRED)
@@ -55,3 +51,6 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(json)
 link_libraries(nlohmann_json::nlohmann_json)
 
+# Add subdirectories
+add_subdirectory(apps)
+add_subdirectory(src)
