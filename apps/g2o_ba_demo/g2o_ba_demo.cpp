@@ -143,8 +143,7 @@ int main(int argc, const char* argv[]){
     Eigen:: Quaterniond q;
     q.setIdentity();
     g2o::SE3Quat pose(q,trans);
-    g2o::VertexSE3Expmap * v_se3
-        = new g2o::VertexSE3Expmap();
+    g2o::VertexSE3Expmap * v_se3 = new g2o::VertexSE3Expmap();
     v_se3->setId(vertex_id);
     if (i<2){
       v_se3->setFixed(true);
