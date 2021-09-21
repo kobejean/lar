@@ -1,6 +1,8 @@
-# # Create parse_map executable
-# add_executable(parse_map parse_map.cpp)
-# target_link_libraries(parse_map 
-# ${G2O_LIBS}
-# nlohmann_json::nlohmann_json
-# )
+set(HEADER_LIST "${geoar_SOURCE_DIR}/include/geoar/process/map_processor.h")
+
+add_library(geoar_process map_processor.cpp ${HEADER_LIST})
+  target_include_directories(geoar_process PUBLIC ../../include)
+  target_link_libraries(geoar_process 
+  ${G2O_LIBS}
+  nlohmann_json::nlohmann_json
+)
