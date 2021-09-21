@@ -37,7 +37,8 @@
 #include "g2o/solvers/structure_only/structure_only_solver.h"
 #include "g2o/stuff/sampler.h"
 #include "g2o/types/sba/types_six_dof_expmap.h"
-#include "g2o/types/sba/types_six_dof_expmap.h"
+#include "g2o/types/slam3d/types_slam3d.h"
+#include "g2o/core/factory.h"
 
 #if defined G2O_HAVE_CHOLMOD
 G2O_USE_OPTIMIZATION_LIBRARY(cholmod);
@@ -100,45 +101,6 @@ int main(int argc, const char* argv[]){
   std::map<std::string, Vector3d> original_points;
   std::map<std::string, g2o::SE3Quat> original_poses;
 
-  // double focal_length= 1000.;
-  // Vector2d principal_point(320., 240.);
-
-  // g2o::CameraParameters * cam_params = new g2o::CameraParameters(focal_length, principal_point, 0.);
-  // cam_params->setId(0);
-
-  // if (!optimizer.addParameter(cam_params)) {
-  //   assert(false);
-  // }
-
-
-  // Vector3d trans2(0, 0, 0);
-  // Eigen:: Quaterniond q;
-  // q.setIdentity();
-  // g2o::SE3Quat pose(q, trans2);
-  // g2o::VertexSE3Expmap * v_se3 = new g2o::VertexSE3Expmap();
-  // v_se3->setId(0);
-  // v_se3->setEstimate(pose);
-  // v_se3->setFixed(true);
-  // optimizer.addVertex(v_se3);
-
-  // Vector3d trans1(0, 0, 1);
-  // g2o::VertexPointXYZ * v_p = new g2o::VertexPointXYZ();
-  // v_p->setId(1);
-  // v_p->setMarginalized(true);
-  // v_p->setEstimate(trans1);
-  // optimizer.addVertex(v_p);
-
-  // Vector2d z = cam_params->cam_map(pose.map(trans1)) + Vector2d(10., 10.);
-  // g2o::EdgeProjectXYZ2UV * e = new g2o::EdgeProjectXYZ2UV();
-  // e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(v_p));
-  // e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(0)));
-  // e->setMeasurement(z);
-  // e->information() = Matrix2d::Identity();
-  // e->setParameterId(0, 0);
-  // optimizer.addEdge(e);
-  // std::cout << "Done" << '\n';
-
-
   // Feature Points
   for (auto& el : featurePoints.items()) {
     json featurePoint = el.value();
@@ -148,7 +110,7 @@ int main(int argc, const char* argv[]){
 
     g2o::VertexPointXYZ * v_p = new g2o::VertexPointXYZ();
     v_p->setId(vertex_id);
-    v_p->setMarginalized(true);
+    // v_p->setMarginalized(true);
     v_p->setEstimate(trans);
 
     optimizer.addVertex(v_p);
@@ -185,6 +147,14 @@ int main(int argc, const char* argv[]){
       }
       optimizer.addVertex(v_se3);
 
+      if (cameraPoint > 0) {
+        g2o::EdgeSE3Expmap * e = new g2o::EdgeSE3Expmap();
+        e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(vertex_id-1)));
+        e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(vertex_id)));
+        e->information() = Eigen::MatrixXd::Identity(6,6) * 2;
+        optimizer.addEdge(e);
+      }
+
 
       json intrinsics = cameraPoint["intrinsics"];
       double focalLength = intrinsics["focalLength"];
@@ -208,7 +178,7 @@ int main(int argc, const char* argv[]){
           e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(vertex_id)));
           e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(id)));
           e->setMeasurement(z);
-          e->information() = Matrix2d::Identity();
+          e->information() = Matrix2d::Identity() * 100;
           e->setParameterId(0, camera_points);
           optimizer.addEdge(e);
         }
@@ -225,7 +195,7 @@ int main(int argc, const char* argv[]){
   optimizer.initializeOptimization();
   optimizer.setVerbose(true);
 
-  optimizer.save("../output/test.g2o");
+  optimizer.save("../output/map.g2o");
   cout << endl;
   cout << "Performing full BA:" << endl;
   optimizer.optimize(10);
