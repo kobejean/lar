@@ -64,17 +64,17 @@ namespace geoar {
     for (auto& el : feature_points.items()) {
       vertex_id++;
       json fp = el.value();
-      auto identifier = fp["identifier"];
+      string fp_uuid = fp["identifier"];
       json t = fp["transform"];
       Vector3d position(t[3][0], t[3][1], t[3][2]);
-      points[identifier] = { vertex_id, identifier, position };
+      points[fp_uuid] = { vertex_id, fp_uuid, position };
     }
 
     // Populate `poses[]`
     for (auto& el : camera_points.items()) {
       vertex_id++;
       json cp = el.value();
-      auto identifier = cp["identifier"];
+      string cp_uuid = cp["identifier"];
 
       // Create transform
       json t = cp["transform"];
@@ -86,7 +86,7 @@ namespace geoar {
       Quaterniond orientation(rot);
       g2o::SE3Quat transform = g2o::SE3Quat(orientation, position).inverse();
 
-      poses[identifier] = { vertex_id, identifier, transform };
+      poses[cp_uuid] = { vertex_id, cp_uuid, transform };
 
       // Count feature point observations `points[].obs_count`
       for (auto& el : cp["featurePoints"].items()) {
