@@ -119,7 +119,6 @@ namespace geoar {
         // Register uuid -> vertex id mapping
         int camera_point_id = optimizer.vertices().size()+1;
         vertex_id_map[identifier] = camera_point_id;
-        cout << "camera_point_id" << camera_point_id << endl;
 
         // Create pose measurement
         json t = camera_point["transform"];
@@ -142,13 +141,13 @@ namespace geoar {
         optimizer.addVertex(vertex);
 
         // Add edge from camera point to camera point after the second camera point has been added
-        // if (camera_point_count > 0) {
-        //   g2o::EdgeSE3Expmap * edge = new g2o::EdgeSE3Expmap();
-        //   edge->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(camera_point_id-1)));
-        //   edge->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(camera_point_id)));
-        //   edge->information() = Eigen::MatrixXd::Identity(6,6);
-        //   optimizer.addEdge(edge);
-        // }
+        if (camera_point_count > 0) {
+          g2o::EdgeSE3Expmap * edge = new g2o::EdgeSE3Expmap();
+          edge->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(camera_point_id-1)));
+          edge->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(camera_point_id)));
+          edge->information() = Eigen::MatrixXd::Identity(6,6);
+          optimizer.addEdge(edge);
+        }
 
         camera_point_count++;
 
@@ -178,18 +177,9 @@ namespace geoar {
           // if (kp[0] >= 0 && kp[1] >= 0 && kp[0] < principle_point_x*2 && kp[1] < principle_point_y*2) {
           // if (z[0] >= 0 && z[1] >= 0 && z[0] < principle_point[0]*2 && z[1] < principle_point[1]*2 && observation_count[identifier] > 2 && feature_point_id > 0) {
           if (observation_count[identifier] > 2 && feature_point_id > 0 && abs(diff[0]) < 100 && abs(diff[1]) < 100) {
-            cout << "pose\n" << pose << endl;
-            cout << "p\n" << p << endl;
-            cout << "m\n" << m << endl;
-            cout << "z\n" << z << endl;
-            cout << "kp\n" << kp << endl;
-            cout << "diff\n" << diff << endl;
-            cout << "edge" << camera_point_id << "->" << feature_point_id << endl;
-            // cout << "pose" << camera_point_id << '\n' << pose << endl;
-            // cout << "points[identifier]" << feature_point_id << '\n'  << points[identifier] << endl;
             g2o::EdgeProjectXYZ2UV * edge = new g2o::EdgeProjectXYZ2UV();
-            edge->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(camera_point_id)));
-            edge->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(feature_point_id)));
+            edge->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(feature_point_id)));
+            edge->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(camera_point_id)));
             edge->setMeasurement(kp);
             edge->information() = Matrix2d::Identity();
             edge->setParameterId(0, camera_point_count);
