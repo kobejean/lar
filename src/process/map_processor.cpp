@@ -51,35 +51,25 @@ namespace geoar {
     // json location_points = point_cloud["locationPoints"];
 
     countObservations(camera_points);
-
     addFeaturePoints(feature_points);
     addCameraPoints(camera_points);
+  }
 
-    // map.json layout:
-    //
-    // cameraPoints.featurePoints = []
-    // cameraPoints.identifier = "402D8F8C-786B-4758-A914-89D2F05C1D26"
-    // cameraPoints.intrinsics = {"focalLength":1596.0804443359375,"principlePoint":{"x":952.559326171875,"y":714.2745971679688}}
-    // cameraPoints.locationPoints = ["B215810D-196F-45D6-B2EC-2DF6E9DA4448"]
-    // cameraPoints.transform = [[0.7096548080444336,-0.05337836220860481,0.7025245428085327,0],[0.3269939422607422,0.9081810116767883,-0.2613084614276886,0],[-0.6240712404251099,0.4151601195335388,0.6619495153427124,0],[0.6320425271987915,0.36971643567085266,-1.1188805103302002,0.9999999403953552]]
-    // cameraPoints[*].featurePoints[*].identifier
-    // cameraPoints[*].featurePoints[*].keyPoint
-    // cameraPoints[*].intrinsics.focalLength
-    // cameraPoints[*].intrinsics.principlePoint
-    // cameraPoints[*].intrinsics.principlePoint.x
-    // cameraPoints[*].intrinsics.principlePoint.y
-    // featurePoints[*].descriptor
-    // featurePoints[*].identifier
-    // featurePoints[*].response
-    // featurePoints[*].transform
-    // locationPoints[*].identifier
-    // locationPoints[*].latitude
-    // locationPoints[*].longitude
-    // locationPoints[*].transform
-    
-    // for (auto& el : camera_points[0].items()) {
-    //   std::cout << "cameraPoints." << el.key() << " = " << el.value() << '\n';
-    // }
+  void MapProcessor::countObservations(json& camera_points) {
+    for (auto& el : camera_points.items()) {
+      json camera_point = el.value();
+      int feature_point_count = 0;
+
+      for (auto& el : camera_point["featurePoints"].items()) {
+        json feature_point = el.value();
+        std::string identifier = feature_point["identifier"];
+        observation_count[identifier]++;
+        feature_point_count++;
+      }
+
+      std::string identifier = camera_point["identifier"];
+      observation_count[identifier] = feature_point_count;
+    }
   }
 
   void MapProcessor::addFeaturePoints(json& feature_points) {
@@ -114,8 +104,7 @@ namespace geoar {
       auto identifier = camera_point["identifier"];
 
       // Handle camera points that have associated feature points
-      if (camera_point.contains("featurePoints") && camera_point["featurePoints"].size() > 0) {
-      // if (observation_count[identifier] > 2) {
+      if (camera_point["featurePoints"].size() > 0) {
         // Register uuid -> vertex id mapping
         int camera_point_id = optimizer.vertices().size()+1;
         vertex_id_map[identifier] = camera_point_id;
@@ -174,8 +163,6 @@ namespace geoar {
           Vector2d z = camera_params->cam_map(m);
           Vector2d diff = z - kp;
 
-          // if (kp[0] >= 0 && kp[1] >= 0 && kp[0] < principle_point_x*2 && kp[1] < principle_point_y*2) {
-          // if (z[0] >= 0 && z[1] >= 0 && z[0] < principle_point[0]*2 && z[1] < principle_point[1]*2 && observation_count[identifier] > 2 && feature_point_id > 0) {
           if (observation_count[identifier] > 2 && feature_point_id > 0 && abs(diff[0]) < 100 && abs(diff[1]) < 100) {
             g2o::EdgeProjectXYZ2UV * edge = new g2o::EdgeProjectXYZ2UV();
             edge->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(feature_point_id)));
@@ -190,24 +177,6 @@ namespace geoar {
           }
         }
       }
-    }
-  }
-
-  void MapProcessor::countObservations(json& camera_points) {
-    for (auto& el : camera_points.items()) {
-      json camera_point = el.value();
-      int feature_point_count = 0;
-      if (camera_point.contains("featurePoints") && camera_point["featurePoints"].size() > 0) {
-        for (auto& el : camera_point["featurePoints"].items()) {
-          json feature_point = el.value();
-          std::string identifier = feature_point["identifier"];
-          observation_count[identifier]++;
-          feature_point_count++;
-        }
-      }
-
-      std::string identifier = camera_point["identifier"];
-      observation_count[identifier] = feature_point_count;
     }
   }
 }
