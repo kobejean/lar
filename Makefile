@@ -19,5 +19,5 @@ build/Makefile:
 	@ echo "Running cmake to generate Makefile"; \
 	mkdir build; \
 	cd build; \
-	cmake ../; \
+	cmake -DCMAKE_BUILD_TYPE=Debug ../; \
 	cd -

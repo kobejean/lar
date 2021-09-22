@@ -7,6 +7,23 @@ list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake_modules)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -Wall")
 set(CMAKE_CXX_STANDARD 14)
 
+# postfix, based on type
+set(CMAKE_DEBUG_POSTFIX "_d" CACHE STRING "postfix applied to debug build of libraries")
+set(CMAKE_RELEASE_POSTFIX "" CACHE STRING "postfix applied to release build of libraries")
+set(CMAKE_RELWITHDEBINFO_POSTFIX "_rd" CACHE STRING "postfix applied to release-with-debug-information libraries")
+set(CMAKE_MINSIZEREL_POSTFIX "_s" CACHE STRING "postfix applied to minimium-size-build libraries")
+
+# work out the postfix; required where we use OUTPUT_NAME
+if(CMAKE_BUILD_TYPE MATCHES Release)
+  set(EXE_POSTFIX)
+elseif(CMAKE_BUILD_TYPE MATCHES Debug)
+  set(EXE_POSTFIX ${CMAKE_DEBUG_POSTFIX})
+elseif(CMAKE_BUILD_TYPE MATCHES RelWithDebInfo)
+  set(EXE_POSTFIX ${CMAKE_RELWITHDEBINFO_POSTFIX})
+elseif(CMAKE_BUILD_TYPE MATCHES MinSizeRel)
+  set(EXE_POSTFIX ${CMAKE_MINSIZEREL_POSTFIX})
+endif(CMAKE_BUILD_TYPE MATCHES Release)
+
 # Setup output directories
 file(MAKE_DIRECTORY lib)
 file(MAKE_DIRECTORY bin)
@@ -40,7 +57,7 @@ if(CHOLMOD_FOUND)
 else()
   list(APPEND G2O_LIBS g2o_solver_eigen)
 endif()
-
+list(TRANSFORM G2O_LIBS APPEND ${EXE_POSTFIX})
 
 # Setup nlohmann_json
 FetchContent_Declare(
