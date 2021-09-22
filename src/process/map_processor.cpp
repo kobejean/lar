@@ -60,6 +60,7 @@ namespace geoar {
   void MapProcessor::parseVertices(json& feature_points, json& camera_points) {
     int vertex_id = 0;
 
+    // Populate `points[]`
     for (auto& el : feature_points.items()) {
       vertex_id++;
       json fp = el.value();
@@ -69,6 +70,7 @@ namespace geoar {
       points[identifier] = { vertex_id, identifier, position };
     }
 
+    // Populate `poses[]`
     for (auto& el : camera_points.items()) {
       vertex_id++;
       json cp = el.value();
@@ -86,7 +88,7 @@ namespace geoar {
 
       poses[identifier] = { vertex_id, identifier, transform };
 
-      // Count feature point observations `obs_count`
+      // Count feature point observations `points[].obs_count`
       for (auto& el : cp["featurePoints"].items()) {
         json fp = el.value();
         std::string fp_uuid = fp["identifier"];
