@@ -27,8 +27,8 @@ using namespace std;
 using namespace geoar;
 
 int main(int argc, const char* argv[]){
-  char input[] = "../input/map.json";
-  char output[] = "../output/map.g2o";
+  std::string input = "../input/map.json";
+  std::string output = "../output/map.g2o";
 
   ifstream ifs(input);
   if (ifs.fail()) {
@@ -39,7 +39,7 @@ int main(int argc, const char* argv[]){
   processor.parseMap(ifs);
 
   cout << endl;
-  processor.optimizer.save(output);
+  processor.optimizer.save(output.c_str());
   cout << "Saved g2o file to: " << output << endl;
 
   processor.optimizer.initializeOptimization();

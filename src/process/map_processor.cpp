@@ -12,6 +12,7 @@
 #include "g2o/solvers/structure_only/structure_only_solver.h"
 #include "g2o/stuff/sampler.h"
 #include "g2o/types/sba/types_six_dof_expmap.h"
+#include "g2o/types/slam3d/types_slam3d.h"
 
 #include "geoar/process/map_processor.h"
 
@@ -49,6 +50,8 @@ namespace geoar {
     json feature_points = point_cloud["featurePoints"];
     // json location_points = point_cloud["locationPoints"];
 
+    countObservations(camera_points);
+
     addFeaturePoints(feature_points);
     addCameraPoints(camera_points);
 
@@ -82,22 +85,25 @@ namespace geoar {
   void MapProcessor::addFeaturePoints(json& feature_points) {
     for (auto& el : feature_points.items()) {
       json feature_point = el.value();
-
-      // Register uuid -> vertex id mapping
-      int id = optimizer.vertices().size();
       auto identifier = feature_point["identifier"];
-      vertex_id_map[identifier] = id;
 
-      // Create position measurement
-      json t = feature_point["transform"];
-      Vector3d position(t[3][0], t[3][1], t[3][2]);
+      if (observation_count[identifier] > 2) {
+        // Register uuid -> vertex id mapping
+        int id = optimizer.vertices().size()+1;
+        vertex_id_map[identifier] = id;
 
-      // Create feature point vertex
-      g2o::VertexPointXYZ * vertex = new g2o::VertexPointXYZ();
-      vertex->setId(id);
-      vertex->setMarginalized(true);
-      vertex->setEstimate(position);
-      optimizer.addVertex(vertex);
+        // Create position measurement
+        json t = feature_point["transform"];
+        Vector3d position(t[3][0], t[3][1], t[3][2]);
+        points[identifier] = position;
+
+        // Create feature point vertex
+        g2o::VertexPointXYZ * vertex = new g2o::VertexPointXYZ();
+        vertex->setId(id);
+        vertex->setMarginalized(true);
+        vertex->setEstimate(position);
+        optimizer.addVertex(vertex);
+      }
     }
   }
 
@@ -105,13 +111,15 @@ namespace geoar {
     int camera_point_count = 0;
     for (auto& el : camera_points.items()) {
       json camera_point = el.value();
+      auto identifier = camera_point["identifier"];
 
       // Handle camera points that have associated feature points
       if (camera_point.contains("featurePoints") && camera_point["featurePoints"].size() > 0) {
+      // if (observation_count[identifier] > 2) {
         // Register uuid -> vertex id mapping
-        int camera_point_id = optimizer.vertices().size();
-        auto identifier = camera_point["identifier"];
+        int camera_point_id = optimizer.vertices().size()+1;
         vertex_id_map[identifier] = camera_point_id;
+        cout << "camera_point_id" << camera_point_id << endl;
 
         // Create pose measurement
         json t = camera_point["transform"];
@@ -120,37 +128,37 @@ namespace geoar {
                t[0][1], t[1][1], t[2][1],
                t[0][2], t[1][2], t[2][2]; 
         Vector3d position(t[3][0], t[3][1], t[3][2]);
-        Eigen::Quaterniond orientation(rot);
-        g2o::SE3Quat pose(orientation, position);
+        Quaterniond orientation(rot);
+        g2o::SE3Quat pose;
+        pose = g2o::SE3Quat(orientation, position).inverse();
 
         // Create camera point vertex
         g2o::VertexSE3Expmap * vertex = new g2o::VertexSE3Expmap();
         vertex->setId(camera_point_id);
-        vertex->setMarginalized(true);
         vertex->setEstimate(pose);
-        if (camera_point_count == 0){
+        if (camera_point_count < 2){
           vertex->setFixed(true); // Fix the first camera point
         }
         optimizer.addVertex(vertex);
 
         // Add edge from camera point to camera point after the second camera point has been added
-        if (camera_point_count > 0) {
-          g2o::EdgeSE3Expmap * edge = new g2o::EdgeSE3Expmap();
-          edge->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(camera_point_id-1)));
-          edge->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(camera_point_id)));
-          edge->information() = Eigen::MatrixXd::Identity(6,6);
-          optimizer.addEdge(edge);
-        }
+        // if (camera_point_count > 0) {
+        //   g2o::EdgeSE3Expmap * edge = new g2o::EdgeSE3Expmap();
+        //   edge->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(camera_point_id-1)));
+        //   edge->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(camera_point_id)));
+        //   edge->information() = Eigen::MatrixXd::Identity(6,6);
+        //   optimizer.addEdge(edge);
+        // }
 
         camera_point_count++;
 
-        // Create camera parameters
+        // Get camera intrinsics
         json intrinsics = camera_point["intrinsics"];
-        double focalLength = intrinsics["focalLength"];
-        Vector2d principlePoint(intrinsics["principlePoint"]["x"], intrinsics["principlePoint"]["y"]);
-        auto * cameraParams = new g2o::CameraParameters(focalLength, principlePoint, 0.);
-        cameraParams->setId(camera_point_count);
-        if (!optimizer.addParameter(cameraParams)) {
+        double focal_length = intrinsics["focalLength"];
+        Vector2d principle_point(intrinsics["principlePoint"]["x"], intrinsics["principlePoint"]["y"]);
+        auto * camera_params = new g2o::CameraParameters(focal_length, principle_point, 0.);
+        camera_params->setId(camera_point_count);
+        if (!optimizer.addParameter(camera_params)) {
           assert(false);
         }
 
@@ -160,19 +168,56 @@ namespace geoar {
           std::string identifier = feature_point["identifier"];
           int feature_point_id = vertex_id_map[identifier];
           json key_point = feature_point["keyPoint"];
-          Vector2d kp = Vector2d(key_point["x"], key_point["y"]);
+          double key_point_x = key_point["x"];
+          Vector2d kp = Vector2d(principle_point[0]*2-key_point_x, key_point["y"]);
+          auto p = points[identifier];
+          auto m = pose.map(p);
+          Vector2d z = camera_params->cam_map(m);
+          Vector2d diff = z - kp;
 
-          if (kp[0] >= 0 && kp[1] >= 0 && kp[0] < principlePoint[0]*2 && kp[1] < principlePoint[1]*2) {
+          // if (kp[0] >= 0 && kp[1] >= 0 && kp[0] < principle_point_x*2 && kp[1] < principle_point_y*2) {
+          // if (z[0] >= 0 && z[1] >= 0 && z[0] < principle_point[0]*2 && z[1] < principle_point[1]*2 && observation_count[identifier] > 2 && feature_point_id > 0) {
+          if (observation_count[identifier] > 2 && feature_point_id > 0 && abs(diff[0]) < 100 && abs(diff[1]) < 100) {
+            cout << "pose\n" << pose << endl;
+            cout << "p\n" << p << endl;
+            cout << "m\n" << m << endl;
+            cout << "z\n" << z << endl;
+            cout << "kp\n" << kp << endl;
+            cout << "diff\n" << diff << endl;
+            cout << "edge" << camera_point_id << "->" << feature_point_id << endl;
+            // cout << "pose" << camera_point_id << '\n' << pose << endl;
+            // cout << "points[identifier]" << feature_point_id << '\n'  << points[identifier] << endl;
             g2o::EdgeProjectXYZ2UV * edge = new g2o::EdgeProjectXYZ2UV();
             edge->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(camera_point_id)));
             edge->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(feature_point_id)));
             edge->setMeasurement(kp);
             edge->information() = Matrix2d::Identity();
             edge->setParameterId(0, camera_point_count);
+            // g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
+            // rk->setDelta(100.0);
+            // edge->setRobustKernel(rk);
             optimizer.addEdge(edge);
           }
         }
       }
+    }
+  }
+
+  void MapProcessor::countObservations(json& camera_points) {
+    for (auto& el : camera_points.items()) {
+      json camera_point = el.value();
+      int feature_point_count = 0;
+      if (camera_point.contains("featurePoints") && camera_point["featurePoints"].size() > 0) {
+        for (auto& el : camera_point["featurePoints"].items()) {
+          json feature_point = el.value();
+          std::string identifier = feature_point["identifier"];
+          observation_count[identifier]++;
+          feature_point_count++;
+        }
+      }
+
+      std::string identifier = camera_point["identifier"];
+      observation_count[identifier] = feature_point_count;
     }
   }
 }

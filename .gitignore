@@ -1,6 +1,6 @@
-bin/
-build/
-input/
-output/
-lib/
-.DS_Store
+bin
+build
+input
+output
+lib
+**/.DS_Store
