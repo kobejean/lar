@@ -16,14 +16,25 @@ namespace geoar {
       void parseMap(std::ifstream& map_ifs);
 
     private:
-      /// Map from uuid string to vertex id integer
-      std::map<std::string, int> vertex_id_map;
-      std::map<std::string, int> observation_count;
-      std::map<std::string, Vector3d> points;
+
+      struct Pose {
+          int id;
+          std::string uuid;
+          g2o::SE3Quat transform;
+      };
+
+      struct Point {
+          int id;
+          std::string uuid;
+          Vector3d position;
+          int obs_count = 0;
+      };
+
+      std::map<std::string, Point> points;
+      std::map<std::string, Pose> poses;
     
+      void parseVertices(json& feature_points, json& camera_points);
       void addFeaturePoints(json& feature_points);
       void addCameraPoints(json& camera_points);
-      void countObservations(json& camera_points);
   };
-
 }

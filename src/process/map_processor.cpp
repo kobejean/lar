@@ -50,130 +50,136 @@ namespace geoar {
     json feature_points = point_cloud["featurePoints"];
     // json location_points = point_cloud["locationPoints"];
 
-    countObservations(camera_points);
+    parseVertices(feature_points, camera_points);
     addFeaturePoints(feature_points);
     addCameraPoints(camera_points);
   }
 
-  void MapProcessor::countObservations(json& camera_points) {
+  // Private functions
+
+  void MapProcessor::parseVertices(json& feature_points, json& camera_points) {
+    int vertex_id = 0;
+
+    for (auto& el : feature_points.items()) {
+      vertex_id++;
+      json fp = el.value();
+      auto identifier = fp["identifier"];
+      json t = fp["transform"];
+      Vector3d position(t[3][0], t[3][1], t[3][2]);
+      points[identifier] = { vertex_id, identifier, position };
+    }
+
     for (auto& el : camera_points.items()) {
-      json camera_point = el.value();
-      int feature_point_count = 0;
+      vertex_id++;
+      json cp = el.value();
+      auto identifier = cp["identifier"];
 
-      for (auto& el : camera_point["featurePoints"].items()) {
-        json feature_point = el.value();
-        std::string identifier = feature_point["identifier"];
-        observation_count[identifier]++;
-        feature_point_count++;
+      // Create transform
+      json t = cp["transform"];
+      Matrix3d rot;
+      rot << t[0][0], t[1][0], t[2][0],
+             t[0][1], t[1][1], t[2][1],
+             t[0][2], t[1][2], t[2][2]; 
+      Vector3d position(t[3][0], t[3][1], t[3][2]);
+      Quaterniond orientation(rot);
+      g2o::SE3Quat transform = g2o::SE3Quat(orientation, position).inverse();
+
+      poses[identifier] = { vertex_id, identifier, transform };
+
+      // Count feature point observations `obs_count`
+      for (auto& el : cp["featurePoints"].items()) {
+        json fp = el.value();
+        std::string fp_uuid = fp["identifier"];
+        if (points.count(fp_uuid)) {
+          points[fp_uuid].obs_count++;
+        }
       }
-
-      std::string identifier = camera_point["identifier"];
-      observation_count[identifier] = feature_point_count;
     }
   }
 
   void MapProcessor::addFeaturePoints(json& feature_points) {
     for (auto& el : feature_points.items()) {
-      json feature_point = el.value();
-      auto identifier = feature_point["identifier"];
+      json fp = el.value();
+      auto fp_uuid = fp["identifier"];
+      Point point = points[fp_uuid];
 
-      if (observation_count[identifier] > 2) {
-        // Register uuid -> vertex id mapping
-        int id = optimizer.vertices().size()+1;
-        vertex_id_map[identifier] = id;
-
-        // Create position measurement
-        json t = feature_point["transform"];
-        Vector3d position(t[3][0], t[3][1], t[3][2]);
-        points[identifier] = position;
-
+      if (point.obs_count > 2) {
         // Create feature point vertex
         g2o::VertexPointXYZ * vertex = new g2o::VertexPointXYZ();
-        vertex->setId(id);
+        vertex->setId(point.id);
         vertex->setMarginalized(true);
-        vertex->setEstimate(position);
+        vertex->setEstimate(point.position);
         optimizer.addVertex(vertex);
       }
     }
   }
 
   void MapProcessor::addCameraPoints(json& camera_points) {
-    int camera_point_count = 0;
+    int cp_count = 0;
+    int last_cp_id = 0;
+
     for (auto& el : camera_points.items()) {
-      json camera_point = el.value();
-      auto identifier = camera_point["identifier"];
+      json cp = el.value();
+      auto cp_uuid = cp["identifier"];
 
       // Handle camera points that have associated feature points
-      if (camera_point["featurePoints"].size() > 0) {
-        // Register uuid -> vertex id mapping
-        int camera_point_id = optimizer.vertices().size()+1;
-        vertex_id_map[identifier] = camera_point_id;
-
-        // Create pose measurement
-        json t = camera_point["transform"];
-        Matrix3d rot;
-        rot << t[0][0], t[1][0], t[2][0],
-               t[0][1], t[1][1], t[2][1],
-               t[0][2], t[1][2], t[2][2]; 
-        Vector3d position(t[3][0], t[3][1], t[3][2]);
-        Quaterniond orientation(rot);
-        g2o::SE3Quat pose;
-        pose = g2o::SE3Quat(orientation, position).inverse();
-
+      if (cp["featurePoints"].size() > 0) {
         // Create camera point vertex
+        Pose pose = poses[cp_uuid];
+        int cp_id = pose.id;
         g2o::VertexSE3Expmap * vertex = new g2o::VertexSE3Expmap();
-        vertex->setId(camera_point_id);
-        vertex->setEstimate(pose);
-        if (camera_point_count < 2){
+        vertex->setId(cp_id);
+        vertex->setEstimate(pose.transform);
+        if (cp_count == 0){
           vertex->setFixed(true); // Fix the first camera point
         }
         optimizer.addVertex(vertex);
 
         // Add edge from camera point to camera point after the second camera point has been added
-        if (camera_point_count > 0) {
-          g2o::EdgeSE3Expmap * edge = new g2o::EdgeSE3Expmap();
-          edge->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(camera_point_id-1)));
-          edge->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(camera_point_id)));
-          edge->information() = Eigen::MatrixXd::Identity(6,6);
-          optimizer.addEdge(edge);
+        if (cp_count > 0) {
+          g2o::EdgeSE3Expmap * e = new g2o::EdgeSE3Expmap();
+          e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(last_cp_id)));
+          e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(cp_id)));
+          e->information() = Eigen::MatrixXd::Identity(6,6);
+          optimizer.addEdge(e);
         }
-
-        camera_point_count++;
+        last_cp_id = cp_id;
+        cp_count++;
 
         // Get camera intrinsics
-        json intrinsics = camera_point["intrinsics"];
+        json intrinsics = cp["intrinsics"];
         double focal_length = intrinsics["focalLength"];
         Vector2d principle_point(intrinsics["principlePoint"]["x"], intrinsics["principlePoint"]["y"]);
-        auto * camera_params = new g2o::CameraParameters(focal_length, principle_point, 0.);
-        camera_params->setId(camera_point_count);
-        if (!optimizer.addParameter(camera_params)) {
+        auto * cam_params = new g2o::CameraParameters(focal_length, principle_point, 0.);
+        cam_params->setId(cp_count);
+        if (!optimizer.addParameter(cam_params)) {
           assert(false);
         }
 
         // Add edges connecting from camera pose to feature point position
-        for (auto& el : camera_point["featurePoints"].items()) {
-          json feature_point = el.value();
-          std::string identifier = feature_point["identifier"];
-          int feature_point_id = vertex_id_map[identifier];
-          json key_point = feature_point["keyPoint"];
-          double key_point_x = key_point["x"];
-          Vector2d kp = Vector2d(principle_point[0]*2-key_point_x, key_point["y"]);
-          auto p = points[identifier];
-          auto m = pose.map(p);
-          Vector2d z = camera_params->cam_map(m);
+        for (auto& el : cp["featurePoints"].items()) {
+          json fp = el.value();
+          std::string fp_uuid = fp["identifier"];
+          Point point = points[fp_uuid];
+          int fp_id = point.id;
+          double kp_x = fp["keyPoint"]["x"];
+          double kp_y = fp["keyPoint"]["y"];
+          Vector2d kp = Vector2d(principle_point[0]*2 - kp_x, kp_y);
+          Vector2d z = cam_params->cam_map(pose.transform.map(point.position));
           Vector2d diff = z - kp;
 
-          if (observation_count[identifier] > 2 && feature_point_id > 0 && abs(diff[0]) < 100 && abs(diff[1]) < 100) {
-            g2o::EdgeProjectXYZ2UV * edge = new g2o::EdgeProjectXYZ2UV();
-            edge->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(feature_point_id)));
-            edge->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(camera_point_id)));
-            edge->setMeasurement(kp);
-            edge->information() = Matrix2d::Identity();
-            edge->setParameterId(0, camera_point_count);
+          // TODO: Revisit fp_id > 0 
+          if (point.obs_count > 2 && fp_id > 0 && abs(diff[0]) < 100 && abs(diff[1]) < 100) {
+            g2o::EdgeProjectXYZ2UV * e = new g2o::EdgeProjectXYZ2UV();
+            e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(fp_id)));
+            e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(cp_id)));
+            e->setMeasurement(kp);
+            e->information() = Matrix2d::Identity();
+            e->setParameterId(0, cp_count);
             // g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
             // rk->setDelta(100.0);
-            // edge->setRobustKernel(rk);
-            optimizer.addEdge(edge);
+            // e->setRobustKernel(rk);
+            optimizer.addEdge(e);
           }
         }
       }
