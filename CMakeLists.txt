@@ -57,7 +57,10 @@ if(CHOLMOD_FOUND)
 else()
   list(APPEND G2O_LIBS g2o_solver_eigen)
 endif()
-list(TRANSFORM G2O_LIBS APPEND ${EXE_POSTFIX})
+
+if(EXE_POSTFIX)
+  list(TRANSFORM G2O_LIBS APPEND ${EXE_POSTFIX})
+endif()
 
 # Setup nlohmann_json
 FetchContent_Declare(
