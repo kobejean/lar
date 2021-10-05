@@ -35,8 +35,13 @@
 #include "g2o/solvers/structure_only/structure_only_solver.h"
 #include "g2o/stuff/sampler.h"
 #include "g2o/types/sba/types_six_dof_expmap.h"
+#include "g2o/types/sba/types_six_dof_expmap.h"
 
+#if defined G2O_HAVE_CHOLMOD
+G2O_USE_OPTIMIZATION_LIBRARY(cholmod);
+#else
 G2O_USE_OPTIMIZATION_LIBRARY(eigen);
+#endif
 
 G2O_USE_OPTIMIZATION_LIBRARY(dense);
 
@@ -99,7 +104,11 @@ int main(int argc, const char* argv[]){
   if (DENSE) {
     solverName = "lm_dense6_3";
   } else {
+#ifdef G2O_HAVE_CHOLMOD
+    solverName = "lm_fix6_3_cholmod";
+#else
     solverName = "lm_fix6_3";
+#endif
   }
 
   g2o::OptimizationAlgorithmProperty solverProperty;

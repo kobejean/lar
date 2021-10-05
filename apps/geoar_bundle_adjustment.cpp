@@ -14,7 +14,12 @@
 
 #include "geoar/process/map_processor.h"
 
+#if defined G2O_HAVE_CHOLMOD
+G2O_USE_OPTIMIZATION_LIBRARY(cholmod);
+#else
 G2O_USE_OPTIMIZATION_LIBRARY(eigen);
+#endif
+
 G2O_USE_OPTIMIZATION_LIBRARY(dense);
 
 using namespace Eigen;

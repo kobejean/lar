@@ -51,7 +51,12 @@ include_directories(${g2o_SOURCE_DIR} ${g2o_BINARY_DIR})
 link_directories(${g2o_SOURCE_DIR}/lib)
 add_definitions(-DG2O_USE_VENDORED_CERES) # TODO: Figure out why we have specify this
 # Create G2O_LIBS list
-list(APPEND G2O_LIBS g2o_core g2o_types_sba g2o_types_slam3d g2o_solver_dense, g2o_solver_eigen)
+list(APPEND G2O_LIBS g2o_core g2o_types_sba g2o_types_slam3d g2o_solver_dense)
+if(CHOLMOD_FOUND)
+  list(APPEND G2O_LIBS g2o_solver_cholmod)
+else()
+  list(APPEND G2O_LIBS g2o_solver_eigen)
+endif()
 
 if(EXE_POSTFIX)
   list(TRANSFORM G2O_LIBS APPEND ${EXE_POSTFIX})
