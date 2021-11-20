@@ -6,6 +6,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include <opencv2/imgcodecs.hpp>
+
 #include "g2o/core/optimization_algorithm_factory.h"
 #include "g2o/core/robust_kernel_impl.h"
 #include "g2o/core/sparse_optimizer.h"
