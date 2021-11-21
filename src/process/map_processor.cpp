@@ -6,6 +6,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <opencv2/core.hpp>
 #include <opencv2/imgcodecs.hpp>
 
 #include "g2o/core/optimization_algorithm_factory.h"

@@ -71,7 +71,6 @@ file(COPY_FILE ${CMAKE_BINARY_DIR}/opencv2/cvconfig.h thirdparty/opencv/include/
 file(COPY_FILE ${CMAKE_BINARY_DIR}/opencv2/opencv_modules.hpp thirdparty/opencv/include/opencv2/opencv_modules.hpp)
 list(APPEND OpenCV_LIBS opencv_core opencv_features2d opencv_imgcodecs)
 include_directories(
-  CMAKE_BINARY_DIR
   thirdparty/opencv/include
   thirdparty/opencv/modules/calib3d/include
   thirdparty/opencv/modules/core/include

@@ -1,6 +1,0 @@
-{
-  "files.associations": {
-    "*.geojson": "json",
-    "*.in": "cpp"
-  }
-}
