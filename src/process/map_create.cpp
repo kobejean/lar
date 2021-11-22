@@ -45,11 +45,9 @@ namespace geoar {
     ifstream metadata_ifs(directory + "/metadata.json");
     json metadata = json::parse(metadata_ifs);
 
-    for (json frame : metadata) {
-      cout << frame["id"] << endl;
-      Frame aframe(frame, directory);
-      cout << aframe.transform[0][0] << endl;
-      frames.push_back(aframe);
+    for (json frame_data : metadata) {
+      Frame frame(frame_data, directory);
+      frames.push_back(frame);
     }
   }
 }

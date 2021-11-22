@@ -2,6 +2,7 @@
 
 #include <nlohmann/json.hpp>
 #include <Eigen/Core>
+#include <opencv2/features2d.hpp>
 
 #include "g2o/core/optimization_algorithm_factory.h"
 #include "g2o/core/robust_kernel_impl.h"
@@ -18,6 +19,8 @@ namespace geoar {
 
   class Frame {
     public: 
+      static cv::Ptr<cv::AKAZE> detector;
+
       json transform;
       g2o::SE3Quat pose;
 
@@ -25,11 +28,7 @@ namespace geoar {
 
     private:
 
-      struct Point {
-          int id;
-          std::string uuid;
-          Vector3d position;
-          int obs_count = 0;
-      };
+      void createPose(json& t);
+      void createFeatures(int id, std::string directory);
   };
 }
