@@ -1,6 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
 project(geoar)
-
 include(FetchContent)
 
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake_modules)
@@ -39,6 +38,47 @@ if(TARGET Eigen3::Eigen)
 else()
   include_directories(${EIGEN3_INCLUDE_DIR})
 endif()
+
+# Setup OpenCV
+
+set(BUILD_LIST "calib3d,features2d,imgcodecs")
+set(BUILD_SHARED_LIBS OFF)
+set(BUILD_DOCS OFF)
+set(BUILD_TESTS OFF)
+set(BUILD_PERF_TESTS OFF)
+set(BUILD_EXAMPLES OFF)
+set(BUILD_opencv_apps OFF)
+set(BUILD_PNG OFF)
+# set(BUILD_TIFF OFF)
+set(BUILD_WEBP OFF)
+set(BUILD_OPENJPEG OFF)
+set(BUILD_JASPER OFF)
+set(BUILD_OPENEXR OFF)
+set(WITH_PNG OFF)
+set(WITH_JPEG ON)
+set(WITH_TIFF ON)
+set(WITH_WEBP OFF)
+set(WITH_OPENJPEG OFF)
+set(WITH_JASPER OFF)
+set(WITH_OPENEXR OFF)
+set(WITH_IMGCODEC_HDR OFF)
+set(WITH_IMGCODEC_SUNRASTER OFF)
+set(WITH_IMGCODEC_PXM OFF)
+set(WITH_IMGCODEC_PFM ON)
+
+add_subdirectory(thirdparty/opencv)
+file(COPY_FILE ${CMAKE_BINARY_DIR}/opencv2/cvconfig.h thirdparty/opencv/include/opencv2/cvconfig.h)
+file(COPY_FILE ${CMAKE_BINARY_DIR}/opencv2/opencv_modules.hpp thirdparty/opencv/include/opencv2/opencv_modules.hpp)
+list(APPEND OpenCV_LIBS opencv_core opencv_features2d opencv_imgcodecs)
+include_directories(
+  thirdparty/opencv/include
+  thirdparty/opencv/modules/calib3d/include
+  thirdparty/opencv/modules/core/include
+  thirdparty/opencv/modules/features2d/include
+  thirdparty/opencv/modules/flann/include
+  thirdparty/opencv/modules/imgcodecs/include
+  thirdparty/opencv/modules/imgproc/include
+)
 
 # Setup G2O
 FetchContent_Declare(
