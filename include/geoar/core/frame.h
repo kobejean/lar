@@ -19,6 +19,5 @@ namespace geoar {
     private:
 
       void createPose(json& t);
-      void createFeatures(int id, std::string directory);
   };
 }

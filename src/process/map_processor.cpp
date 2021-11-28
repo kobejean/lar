@@ -59,6 +59,7 @@ namespace geoar {
     json metadata = json::parse(metadata_ifs);
 
     for (json frame_data : metadata["frames"]) {
+      vector<Landmark> landmarks = extractor.extractLandmarks(frame_data, directory);
       Frame frame(frame_data, directory);
       frames.push_back(frame);
     }
