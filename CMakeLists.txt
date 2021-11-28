@@ -32,7 +32,8 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/bin)
 
 
 # Setup Eigen
-find_package(Eigen3 3.3 REQUIRED)
+add_subdirectory(thirdparty/eigen3)
+set(EIGEN3_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/include/eigen3)
 if(TARGET Eigen3::Eigen)
   set(G2O_EIGEN3_EIGEN_TARGET Eigen3::Eigen)
 else()
@@ -67,8 +68,9 @@ set(WITH_IMGCODEC_PXM OFF)
 set(WITH_IMGCODEC_PFM ON)
 
 add_subdirectory(thirdparty/opencv)
-file(COPY_FILE ${CMAKE_BINARY_DIR}/opencv2/cvconfig.h thirdparty/opencv/include/opencv2/cvconfig.h)
-file(COPY_FILE ${CMAKE_BINARY_DIR}/opencv2/opencv_modules.hpp thirdparty/opencv/include/opencv2/opencv_modules.hpp)
+file(COPY thirdparty/opencv/include/opencv2 DESTINATION include/opencv2)
+file(COPY_FILE ${CMAKE_BINARY_DIR}/opencv2/cvconfig.h include/opencv2/cvconfig.h)
+file(COPY_FILE ${CMAKE_BINARY_DIR}/opencv2/opencv_modules.hpp include/opencv2/opencv_modules.hpp)
 list(APPEND OpenCV_LIBS opencv_core opencv_features2d opencv_imgcodecs)
 include_directories(
   thirdparty/opencv/include
@@ -81,21 +83,16 @@ include_directories(
 )
 
 # Setup G2O
-FetchContent_Declare(
-  g2o
-  GIT_REPOSITORY https://github.com/RainerKuemmerle/g2o.git
-  GIT_TAG 5b14535b8d63f837699d1dde27fd350fc6738b2a
-)
-FetchContent_MakeAvailable(g2o)
-include_directories(${g2o_SOURCE_DIR} ${g2o_BINARY_DIR})
-link_directories(${g2o_SOURCE_DIR}/lib)
 add_definitions(-DG2O_USE_VENDORED_CERES) # TODO: Figure out why we have specify this
+include_directories(include)
+add_subdirectory(thirdparty/g2o)
+
 # Create G2O_LIBS list
-list(APPEND G2O_LIBS g2o_core g2o_types_sba g2o_types_slam3d g2o_solver_dense)
+list(APPEND G2O_LIBS types_sba types_slam3d solver_dense)
 if(CHOLMOD_FOUND)
-  list(APPEND G2O_LIBS g2o_solver_cholmod)
+  list(APPEND G2O_LIBS solver_cholmod)
 else()
-  list(APPEND G2O_LIBS g2o_solver_eigen)
+  list(APPEND G2O_LIBS solver_eigen)
 endif()
 
 if(EXE_POSTFIX)

@@ -9,7 +9,7 @@ endif
 CMAKE_ARGS=
 
 all: build/Makefile
-	$(MAKE) $(QUIET) -C build
+	$(MAKE) $(QUIET) -C build -j 10
 
 debug: CMAKE_ARGS=$(CMAKE_ARGS) -DCMAKE_BUILD_TYPE=Debug
 debug: build/Makefile

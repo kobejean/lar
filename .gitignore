@@ -3,4 +3,6 @@ build
 input
 output
 lib
+include/*
+!include/geoar
 **/.DS_Store
