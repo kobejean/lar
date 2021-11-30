@@ -13,10 +13,10 @@ all: build/Makefile
 
 debug: CMAKE_ARGS=$(CMAKE_ARGS) -DCMAKE_BUILD_TYPE=Debug
 debug: build/Makefile
-	$(MAKE) $(QUIET) -C build
+	$(MAKE) $(QUIET) -C build -j 10
 
 clean: build/Makefile
-	$(MAKE) $(QUIET) -C build clean
+	$(MAKE) $(QUIET) -C build clean -j 10
 
 build/Makefile:
 	@ echo "Running cmake to generate Makefile"; \
