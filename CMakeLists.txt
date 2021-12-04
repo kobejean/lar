@@ -68,19 +68,7 @@ set(WITH_IMGCODEC_PXM OFF)
 set(WITH_IMGCODEC_PFM ON)
 
 add_subdirectory(thirdparty/opencv)
-# file(COPY thirdparty/opencv/include/opencv2 DESTINATION include/opencv2)
-# file(COPY_FILE ${CMAKE_BINARY_DIR}/opencv2/cvconfig.h include/opencv2/cvconfig.h)
-# file(COPY_FILE ${CMAKE_BINARY_DIR}/opencv2/opencv_modules.hpp include/opencv2/opencv_modules.hpp)
 list(APPEND OpenCV_LIBS opencv_core opencv_features2d opencv_imgcodecs)
-# include_directories(
-#   thirdparty/opencv/include
-#   thirdparty/opencv/modules/calib3d/include
-#   thirdparty/opencv/modules/core/include
-#   thirdparty/opencv/modules/features2d/include
-#   thirdparty/opencv/modules/flann/include
-#   thirdparty/opencv/modules/imgcodecs/include
-#   thirdparty/opencv/modules/imgproc/include
-# )
 
 # Setup G2O
 add_definitions(-DG2O_USE_VENDORED_CERES) # TODO: Figure out why we have specify this
