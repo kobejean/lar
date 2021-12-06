@@ -88,6 +88,8 @@
     "vector": "cpp",
     "filesystem": "cpp",
     "hash_map": "cpp",
-    "hash_set": "cpp"
-  }
+    "hash_set": "cpp",
+    "__bits": "cpp"
+  },
+  "C_Cpp.default.cppStandard": "c++14"
 }

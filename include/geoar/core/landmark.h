@@ -8,12 +8,12 @@ using namespace std;
 namespace geoar {
 
   class Landmark {
-    public: 
-
+    public:
+      Vector3f position;
       cv::Mat desc;
       cv::KeyPoint kpt;
 
-      Landmark(cv::KeyPoint kpt, cv::Mat desc);
+      Landmark(Vector3f &position, cv::KeyPoint &kpt, cv::Mat desc);
 
       static void concatDescriptions(vector<Landmark> landmarks, cv::Mat &desc);
   };

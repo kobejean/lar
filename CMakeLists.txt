@@ -34,11 +34,13 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/bin)
 # Setup Eigen
 add_subdirectory(thirdparty/eigen3)
 set(EIGEN3_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/include/eigen3)
-if(TARGET Eigen3::Eigen)
-  set(G2O_EIGEN3_EIGEN_TARGET Eigen3::Eigen)
-else()
-  include_directories(${EIGEN3_INCLUDE_DIR})
-endif()
+include_directories(${EIGEN3_INCLUDE_DIR})
+# if(TARGET Eigen3::Eigen)
+#   set(G2O_EIGEN3_EIGEN_TARGET Eigen3::Eigen)
+#   include_directories(${EIGEN3_INCLUDE_DIR})
+# else()
+#   include_directories(${EIGEN3_INCLUDE_DIR})
+# endif()
 
 # Setup OpenCV
 
@@ -83,9 +85,9 @@ else()
   list(APPEND G2O_LIBS solver_eigen)
 endif()
 
-if(EXE_POSTFIX)
-  list(TRANSFORM G2O_LIBS APPEND ${EXE_POSTFIX})
-endif()
+# if(EXE_POSTFIX)
+#   list(TRANSFORM G2O_LIBS APPEND ${EXE_POSTFIX})
+# endif()
 
 # Setup nlohmann_json
 FetchContent_Declare(

@@ -4,12 +4,13 @@
 
 #include "geoar/core/landmark.h"
 
+using namespace Eigen;
 using namespace std;
 
 namespace geoar {
 
-
-  Landmark::Landmark(cv::KeyPoint kpt, cv::Mat desc) {
+  Landmark::Landmark(Vector3f &position, cv::KeyPoint &kpt, cv::Mat desc) {
+    this->position = position;
     this->kpt = kpt;
     this->desc = desc;
   }
