@@ -14,7 +14,7 @@ namespace geoar {
       cv::Ptr<cv::AKAZE> detector;
       cv::BFMatcher matcher;
       cv::Mat all_desc;
-      vector<Landmark> discoveredLandmarks;
+      vector<Landmark> all_landmarks;
 
       LandmarkExtractor();
       vector<Landmark> extractLandmarks(json& frame_data, std::string directory);

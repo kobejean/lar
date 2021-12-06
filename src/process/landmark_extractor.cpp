@@ -179,9 +179,9 @@ namespace geoar {
     } else {
       all_desc = desc;
     }
-    // Append contents of landmarks to `discoveredLandmarks`
-    discoveredLandmarks.reserve(discoveredLandmarks.size() + distance(landmarks.begin(), landmarks.end()));
-    discoveredLandmarks.insert(discoveredLandmarks.end(), landmarks.begin(), landmarks.end());
+    // Append contents of landmarks to `all_landmarks`
+    all_landmarks.reserve(all_landmarks.size() + distance(landmarks.begin(), landmarks.end()));
+    all_landmarks.insert(all_landmarks.end(), landmarks.begin(), landmarks.end());
   }
 
   vector<cv::DMatch> LandmarkExtractor::match(cv::Mat desc1, cv::Mat desc2) {
