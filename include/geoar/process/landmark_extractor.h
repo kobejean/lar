@@ -26,7 +26,7 @@ namespace geoar {
       vector<Landmark> createLandmarks(vector<Vector3f> &pts3d, vector<cv::KeyPoint> &kpts, cv::Mat &desc);
       void recordFeatures(vector<Landmark> &landmarks, cv::Mat &desc);
 
-      vector<cv::DMatch> match(cv::Mat desc1, cv::Mat desc2);
+      vector<cv::DMatch> match(cv::Mat &desc1, cv::Mat &desc2);
   };
 
 }

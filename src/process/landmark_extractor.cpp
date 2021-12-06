@@ -184,7 +184,7 @@ namespace geoar {
     all_landmarks.insert(all_landmarks.end(), landmarks.begin(), landmarks.end());
   }
 
-  vector<cv::DMatch> LandmarkExtractor::match(cv::Mat desc1, cv::Mat desc2) {
+  vector<cv::DMatch> LandmarkExtractor::match(cv::Mat &desc1, cv::Mat &desc2) {
     vector<cv::DMatch> filtered_matches;
     // We need at least 2 rows to perform ratio test
     if (desc1.rows <= 2 || desc2.rows <= 2) return filtered_matches;
