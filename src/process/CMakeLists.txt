@@ -8,5 +8,6 @@ target_link_libraries(geoar_process
   ${G2O_LIBS}
   ${OpenCV_LIBS}
   nlohmann_json::nlohmann_json
+  # Eigen3::Eigen
   geoar_core
 )

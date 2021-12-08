@@ -35,12 +35,6 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/bin)
 add_subdirectory(thirdparty/eigen3)
 set(EIGEN3_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/include/eigen3)
 include_directories(${EIGEN3_INCLUDE_DIR})
-# if(TARGET Eigen3::Eigen)
-#   set(G2O_EIGEN3_EIGEN_TARGET Eigen3::Eigen)
-#   include_directories(${EIGEN3_INCLUDE_DIR})
-# else()
-#   include_directories(${EIGEN3_INCLUDE_DIR})
-# endif()
 
 # Setup OpenCV
 

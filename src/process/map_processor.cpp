@@ -35,14 +35,14 @@ namespace geoar {
 
   MapProcessor::MapProcessor() {
     optimizer.setVerbose(true);
-    string solverName = "lm_fix6_3";
+    string solver_name = "lm_fix6_3";
   #ifdef G2O_HAVE_CHOLMOD
-    solverName = "lm_fix6_3_cholmod";
+    solver_name = "lm_fix6_3_cholmod";
   #else
-    solverName = "lm_fix6_3";
+    solver_name = "lm_fix6_3";
   #endif
-    g2o::OptimizationAlgorithmProperty solverProperty;
-    auto algorithm = g2o::OptimizationAlgorithmFactory::instance()->construct(solverName, solverProperty);
+    g2o::OptimizationAlgorithmProperty solver_property;
+    auto algorithm = g2o::OptimizationAlgorithmFactory::instance()->construct(solver_name, solver_property);
     optimizer.setAlgorithm(algorithm);
   }
 
