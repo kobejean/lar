@@ -1,5 +1,5 @@
-#ifndef VISION_H
-#define VISION_H
+#ifndef GEOAR_VISION_H
+#define GEOAR_VISION_H
 
 #include <opencv2/features2d.hpp>
 
@@ -20,4 +20,4 @@ namespace geoar {
 
 }
 
-#endif /* VISION_H */
+#endif /* GEOAR_VISION_H */

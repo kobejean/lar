@@ -1,5 +1,5 @@
-#ifndef MAP_PROCESSOR_H
-#define MAP_PROCESSOR_H
+#ifndef GEOAR_MAP_PROCESSOR_H
+#define GEOAR_MAP_PROCESSOR_H
 
 #include "g2o/core/optimization_algorithm_factory.h"
 #include "g2o/core/robust_kernel_impl.h"
@@ -28,4 +28,4 @@ namespace geoar {
   };
 }
 
-#endif /* MAP_PROCESSOR_H */
+#endif /* GEOAR_MAP_PROCESSOR_H */

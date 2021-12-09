@@ -1,5 +1,5 @@
-#ifndef GRAPH_CONSTRUCTION_H
-#define GRAPH_CONSTRUCTION_H
+#ifndef GEOAR_GRAPH_CONSTRUCTION_H
+#define GEOAR_GRAPH_CONSTRUCTION_H
 
 #include <opencv2/features2d.hpp>
 #include <nlohmann/json.hpp>
@@ -44,4 +44,4 @@ namespace geoar {
 
 }
 
-#endif /* GRAPH_CONSTRUCTION_H */
+#endif /* GEOAR_GRAPH_CONSTRUCTION_H */

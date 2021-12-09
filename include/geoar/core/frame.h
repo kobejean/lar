@@ -1,5 +1,5 @@
-#ifndef FRAME_H
-#define FRAME_H
+#ifndef GEOAR_FRAME_H
+#define GEOAR_FRAME_H
 
 #include <nlohmann/json.hpp>
 #include <Eigen/Core>
@@ -25,4 +25,4 @@ namespace geoar {
   };
 }
 
-#endif /* FRAME_H */
+#endif /* GEOAR_FRAME_H */

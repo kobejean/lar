@@ -1,5 +1,5 @@
-#ifndef LANDMARK_H
-#define LANDMARK_H
+#ifndef GEOAR_LANDMARK_H
+#define GEOAR_LANDMARK_H
 
 #include <Eigen/Core>
 #include <opencv2/features2d.hpp>
@@ -21,4 +21,4 @@ namespace geoar {
   };
 }
 
-#endif /* LANDMARK_H */
+#endif /* GEOAR_LANDMARK_H */
