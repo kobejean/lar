@@ -16,10 +16,9 @@ namespace geoar {
   }
 
   void Landmark::concatDescriptions(vector<Landmark> landmarks, cv::Mat &desc) {
-    for(size_t i = 0; i < landmarks.size(); i++) {
+    for (size_t i = 0; i < landmarks.size(); i++) {
       desc.push_back(landmarks[i].desc);
     }
-    cout << "desc.row(10): " << desc.row(10) << endl;
   }
 
 }

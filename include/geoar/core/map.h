@@ -1,16 +1,16 @@
-#include "geoar/core/frame.h"
+#ifndef MAP_H
+#define MAP_H
+
+#include "geoar/core/landmark_database.h"
 
 namespace geoar {
 
   class Map {
     public: 
-
-      std::vector<Frame> frames;
+      LandmarkDatabase landmarkDatabase;
 
       Map();
-
-    private:
-
-      // void createPose(json& t);
   };
 }
+
+#endif /* MAP_H */

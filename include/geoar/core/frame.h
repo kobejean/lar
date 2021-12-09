@@ -1,3 +1,6 @@
+#ifndef FRAME_H
+#define FRAME_H
+
 #include <nlohmann/json.hpp>
 #include <Eigen/Core>
 
@@ -21,3 +24,5 @@ namespace geoar {
       void createPose(json& t);
   };
 }
+
+#endif /* FRAME_H */

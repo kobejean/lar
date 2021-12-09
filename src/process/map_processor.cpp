@@ -33,7 +33,7 @@ using json = nlohmann::json;
 
 namespace geoar {
 
-  MapProcessor::MapProcessor() {
+  MapProcessor::MapProcessor() : graphConstruction(optimizer, map) {
     optimizer.setVerbose(true);
     string solver_name = "lm_fix6_3";
   #ifdef G2O_HAVE_CHOLMOD
@@ -48,20 +48,10 @@ namespace geoar {
 
 
   void MapProcessor::createMap(string directory) {
-    createFrames(directory);
+    graphConstruction.processRawData(directory);
   }
 
 
   // Private methods
 
-  void MapProcessor::createFrames(string directory) {
-    ifstream metadata_ifs(directory + "/metadata.json");
-    json metadata = json::parse(metadata_ifs);
-
-    for (json frame_data : metadata["frames"]) {
-      vector<Landmark> landmarks = extractor.extractLandmarks(frame_data, directory);
-      Frame frame(frame_data, directory);
-      frames.push_back(frame);
-    }
-  }
 }

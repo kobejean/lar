@@ -1,4 +1,3 @@
-
 #include <stdint.h>
 
 #include <iostream>
@@ -11,7 +10,7 @@
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 
-#include "geoar/process/landmark_extractor.h"
+#include "geoar/process/graph_construction.h"
 
 using namespace Eigen;
 using namespace std;
@@ -19,15 +18,21 @@ using json = nlohmann::json;
 
 namespace geoar {
 
-  const float RATIO_TEST_THRESHOLD = 0.2f;
-  const float MARGIN_TEST_DISTANCE = 25.f; // TODO: Think of clearer name
-
-  LandmarkExtractor::LandmarkExtractor() {
-    detector = cv::AKAZE::create(cv::AKAZE::DESCRIPTOR_MLDB, 0, 3, 0.0008f, 4, 4, cv::KAZE::DIFF_PM_G2);
-    matcher = cv::BFMatcher(cv::NORM_HAMMING);
+  GraphConstruction::GraphConstruction(g2o::SparseOptimizer &optimizer, Map &map) {
+    this->optimizer = &optimizer;
+    this->map = &map;
   }
 
-  vector<Landmark> LandmarkExtractor::extractLandmarks(json& frame_data, std::string directory) {
+  void GraphConstruction::processRawData(string directory) {
+    ifstream metadata_ifs(directory + "/metadata.json");
+    json metadata = json::parse(metadata_ifs);
+
+    for (json frame_data : metadata["frames"]) {
+      processFrameData(frame_data, directory);
+    }
+  }
+
+  void GraphConstruction::processFrameData(json& frame_data, std::string directory) {
     int id = frame_data["id"];
 
     // Create filename paths
@@ -44,7 +49,7 @@ namespace geoar {
     // Extract features
     vector<cv::KeyPoint> kpts;
     cv::Mat desc;
-    extractFeatures(image, cv::noArray(), kpts, desc);
+    vision.extractFeatures(image, cv::noArray(), kpts, desc);
     cout << "feature count: " << kpts.size() << endl;
 
     // Match and filter features
@@ -64,36 +69,13 @@ namespace geoar {
 
     // Add feature history
     recordFeatures(landmarks, desc);
-
-    return landmarks;
   }
 
   // Private methods
 
-  void LandmarkExtractor::extractFeatures(cv::InputArray image, cv::InputArray mask, vector<cv::KeyPoint> &kpts, cv::Mat &desc) {
+  void GraphConstruction::matchAndFilter(vector<cv::KeyPoint> &kpts, cv::Mat &desc) {
 
-    vector<cv::KeyPoint> new_kpts;
-    cv::Mat new_desc;
-
-    detector->detectAndCompute(image, mask, new_kpts, new_desc);
-
-    // Match function uses ratio test and margin test. We can reuse it to filter features 
-    // that are not distinct enough by matching the set of descriptions with each other.
-    vector<cv::DMatch> matches = match(new_desc, new_desc);
-
-    // Populate `desc` and `kpts` with matched key points and descriptions
-    for (size_t i = 0; i < matches.size(); i++) {
-      int idx = matches[i].queryIdx;
-      // Matches should have sucessfully matched with itself, but it is redundant to check if it did
-      assert(idx == matches[i].trainIdx);
-      kpts.push_back(new_kpts[idx]);
-      desc.push_back(new_desc.row(idx));
-    }
-  }
-
-  void LandmarkExtractor::matchAndFilter(vector<cv::KeyPoint> &kpts, cv::Mat &desc) {
-
-    vector<cv::DMatch> matches = match(desc, all_desc);
+    vector<cv::DMatch> matches = vision.match(desc, all_desc);
     cout << "match count: " << matches.size() << endl;
 
     // Populate `idx_matched` map
@@ -121,7 +103,7 @@ namespace geoar {
     unmatched_desc.copyTo(desc);
   }
 
-  vector<Vector3f> LandmarkExtractor::projectKeyPoints(vector<cv::KeyPoint> &kpts, cv::Mat &depth, json& frame_data) {
+  vector<Vector3f> GraphConstruction::projectKeyPoints(vector<cv::KeyPoint> &kpts, cv::Mat &depth, json& frame_data) {
     // Parse camera transform
     json t = frame_data["transform"];
     Matrix3f rotation;
@@ -158,7 +140,7 @@ namespace geoar {
     return pts3d;
   }
 
-  vector<Landmark> LandmarkExtractor::createLandmarks(vector<Vector3f> &pts3d, vector<cv::KeyPoint> &kpts, cv::Mat &desc) {
+  vector<Landmark> GraphConstruction::createLandmarks(vector<Vector3f> &pts3d, vector<cv::KeyPoint> &kpts, cv::Mat &desc) {
     assert(pts3d.size() == kpts.size() && kpts.size() == desc.rows);
     size_t count = pts3d.size();
 
@@ -172,40 +154,15 @@ namespace geoar {
     return landmarks;
   }
 
-  void LandmarkExtractor::recordFeatures(vector<Landmark> &landmarks, cv::Mat &desc) {
+  void GraphConstruction::recordFeatures(vector<Landmark> &landmarks, cv::Mat &desc) {
     // Add new descriptions to `all_desc`
     if (all_desc.rows > 0) {
       cv::vconcat(all_desc, desc, all_desc);
     } else {
       all_desc = desc;
     }
-    // Append contents of landmarks to `all_landmarks`
-    all_landmarks.reserve(all_landmarks.size() + distance(landmarks.begin(), landmarks.end()));
-    all_landmarks.insert(all_landmarks.end(), landmarks.begin(), landmarks.end());
-  }
-
-  vector<cv::DMatch> LandmarkExtractor::match(cv::Mat &desc1, cv::Mat &desc2) {
-    vector<cv::DMatch> filtered_matches;
-    // We need at least 2 rows to perform ratio test
-    if (desc1.rows <= 2 || desc2.rows <= 2) return filtered_matches;
-    vector< vector<cv::DMatch> > nn_matches;
-
-    matcher.knnMatch(desc1, desc2, nn_matches, 2);
-
-    // Filter matches
-    for (size_t i = 0; i < nn_matches.size(); i++) {
-        cv::DMatch first = nn_matches[i][0];
-        float dist1 = nn_matches[i][0].distance;
-        float dist2 = nn_matches[i][1].distance;
-
-        bool ratio_test = dist1 < RATIO_TEST_THRESHOLD * dist2;
-        bool margin_test = dist2 >= MARGIN_TEST_DISTANCE;
-        if (ratio_test && margin_test) {
-            filtered_matches.push_back(first);
-        }
-    }
-
-    return filtered_matches;
+    // Append contents of landmarks to `map->landmarks`
+    map->landmarkDatabase.addLandmarks(landmarks);
   }
 
 }

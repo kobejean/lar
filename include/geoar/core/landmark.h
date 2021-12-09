@@ -1,3 +1,5 @@
+#ifndef LANDMARK_H
+#define LANDMARK_H
 
 #include <Eigen/Core>
 #include <opencv2/features2d.hpp>
@@ -18,3 +20,5 @@ namespace geoar {
       static void concatDescriptions(vector<Landmark> landmarks, cv::Mat &desc);
   };
 }
+
+#endif /* LANDMARK_H */
