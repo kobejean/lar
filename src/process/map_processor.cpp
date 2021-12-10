@@ -19,12 +19,7 @@
 
 #include "geoar/process/map_processor.h"
 
-#if defined G2O_HAVE_CHOLMOD
-G2O_USE_OPTIMIZATION_LIBRARY(cholmod);
-#else
 G2O_USE_OPTIMIZATION_LIBRARY(eigen);
-#endif
-
 G2O_USE_OPTIMIZATION_LIBRARY(dense);
 
 using namespace Eigen;
@@ -33,25 +28,17 @@ using json = nlohmann::json;
 
 namespace geoar {
 
-  MapProcessor::MapProcessor() : graphConstruction(optimizer, map) {
-    optimizer.setVerbose(true);
+  MapProcessor::MapProcessor() : graph_construction(data) {
+    data.optimizer.setVerbose(true);
     string solver_name = "lm_fix6_3";
-  #ifdef G2O_HAVE_CHOLMOD
-    solver_name = "lm_fix6_3_cholmod";
-  #else
-    solver_name = "lm_fix6_3";
-  #endif
     g2o::OptimizationAlgorithmProperty solver_property;
     auto algorithm = g2o::OptimizationAlgorithmFactory::instance()->construct(solver_name, solver_property);
-    optimizer.setAlgorithm(algorithm);
+    data.optimizer.setAlgorithm(algorithm);
   }
 
 
   void MapProcessor::createMap(string directory) {
-    graphConstruction.processRawData(directory);
+    graph_construction.processRawData(directory);
   }
-
-
-  // Private methods
 
 }

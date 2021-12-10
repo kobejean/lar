@@ -2,9 +2,8 @@ cmake_minimum_required(VERSION 3.14)
 project(geoar)
 include(FetchContent)
 
-list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake_modules)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -Wall")
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -Wall -Wextra")
+set(CMAKE_CXX_STANDARD 17)
 
 # postfix, based on type
 set(CMAKE_DEBUG_POSTFIX "_d" CACHE STRING "postfix applied to debug build of libraries")
@@ -78,10 +77,6 @@ if(CHOLMOD_FOUND)
 else()
   list(APPEND G2O_LIBS solver_eigen)
 endif()
-
-# if(EXE_POSTFIX)
-#   list(TRANSFORM G2O_LIBS APPEND ${EXE_POSTFIX})
-# endif()
 
 # Setup nlohmann_json
 FetchContent_Declare(

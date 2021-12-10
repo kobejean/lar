@@ -14,6 +14,7 @@ namespace geoar {
       Vector3f position;
       cv::Mat desc;
       cv::KeyPoint kpt;
+      int sightings{1};
 
       Landmark(Vector3f &position, cv::KeyPoint &kpt, cv::Mat desc);
 

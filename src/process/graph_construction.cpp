@@ -1,7 +1,6 @@
 #include <stdint.h>
 
 #include <iostream>
-#include <unordered_set>
 
 #include <nlohmann/json.hpp>
 
@@ -18,9 +17,8 @@ using json = nlohmann::json;
 
 namespace geoar {
 
-  GraphConstruction::GraphConstruction(g2o::SparseOptimizer &optimizer, Map &map) {
-    this->optimizer = &optimizer;
-    this->map = &map;
+  GraphConstruction::GraphConstruction(MapProcessingData &data) {
+    this->data = &data;
   }
 
   void GraphConstruction::processRawData(string directory) {
@@ -50,11 +48,11 @@ namespace geoar {
     vector<cv::KeyPoint> kpts;
     cv::Mat desc;
     vision.extractFeatures(image, cv::noArray(), kpts, desc);
-    cout << "feature count: " << kpts.size() << endl;
+    cout << "features: " << kpts.size() << endl;
 
     // Match and filter features
     matchAndFilter(kpts, desc);
-    cout << "filtered feature count: " << kpts.size() << endl;
+    cout << "filtered features: " << kpts.size() << endl;
 
     // Load depth map
     cout << "loading: " << depth_filepath << endl;
@@ -75,14 +73,15 @@ namespace geoar {
 
   void GraphConstruction::matchAndFilter(vector<cv::KeyPoint> &kpts, cv::Mat &desc) {
 
-    vector<cv::DMatch> matches = vision.match(desc, all_desc);
-    cout << "match count: " << matches.size() << endl;
+    vector<cv::DMatch> matches = vision.match(desc, data->desc);
+    cout << "matches: " << matches.size() << endl;
 
     // Populate `idx_matched` map
     std::map<int, bool> idx_matched;
     for (size_t i = 0; i < matches.size(); i++) {
       int idx = matches[i].queryIdx;
       idx_matched[idx] = true;
+      data->map.landmarkDatabase.landmarks[idx].sightings++;
     }
 
     // Populate unmatched features
@@ -155,14 +154,14 @@ namespace geoar {
   }
 
   void GraphConstruction::recordFeatures(vector<Landmark> &landmarks, cv::Mat &desc) {
-    // Add new descriptions to `all_desc`
-    if (all_desc.rows > 0) {
-      cv::vconcat(all_desc, desc, all_desc);
+    // Add new descriptions to `data->desc`
+    if (data->desc.rows > 0) {
+      cv::vconcat(data->desc, desc, data->desc);
     } else {
-      all_desc = desc;
+      data->desc = desc;
     }
     // Append contents of landmarks to `map->landmarks`
-    map->landmarkDatabase.addLandmarks(landmarks);
+    data->map.landmarkDatabase.addLandmarks(landmarks);
   }
 
 }

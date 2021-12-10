@@ -12,7 +12,7 @@ all: build/Makefile
 	$(MAKE) $(QUIET) -C build
 
 fast: build/Makefile
-	$(MAKE) $(QUIET) -C build -j 10
+	$(MAKE) $(QUIET) -C build -j 8
 
 debug: CMAKE_ARGS=-DCMAKE_BUILD_TYPE=Debug
 debug: build/Makefile

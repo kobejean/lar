@@ -15,6 +15,7 @@
 
 #include "geoar/core/landmark.h"
 #include "geoar/core/map.h"
+#include "geoar/process/map_processing_data.h"
 #include "geoar/process/vision.h"
 
 using namespace Eigen;
@@ -26,12 +27,9 @@ namespace geoar {
   class GraphConstruction {
     public:
       Vision vision;
+      MapProcessingData* data;
 
-      g2o::SparseOptimizer* optimizer;
-      Map* map;
-      cv::Mat all_desc;
-
-      GraphConstruction(g2o::SparseOptimizer &optimizer, Map &map);
+      GraphConstruction(MapProcessingData &data);
       void processRawData(std::string directory);
       void processFrameData(json& frame_data, std::string directory);
 
