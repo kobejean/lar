@@ -5,11 +5,11 @@ using namespace std;
 
 namespace geoar {
 
-  const float RATIO_TEST_THRESHOLD = 0.2f;
+  const float RATIO_TEST_THRESHOLD = 0.6f;
   const float MARGIN_TEST_DISTANCE = 25.f; // TODO: Think of clearer name
 
   Vision::Vision() {
-    detector = cv::AKAZE::create(cv::AKAZE::DESCRIPTOR_MLDB, 0, 3, 0.0008f, 4, 4, cv::KAZE::DIFF_PM_G2);
+    detector = cv::AKAZE::create(cv::AKAZE::DESCRIPTOR_MLDB, 0, 3, 0.001f, 4, 4, cv::KAZE::DIFF_PM_G2);
     matcher = cv::BFMatcher(cv::NORM_HAMMING);
   }
 

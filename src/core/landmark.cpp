@@ -9,7 +9,7 @@ using namespace std;
 
 namespace geoar {
 
-  Landmark::Landmark(Vector3f &position, cv::KeyPoint &kpt, cv::Mat desc) {
+  Landmark::Landmark(Vector3d &position, cv::KeyPoint &kpt, cv::Mat desc) {
     this->position = position;
     this->kpt = kpt;
     this->desc = desc;

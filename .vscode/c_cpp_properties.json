@@ -3,15 +3,17 @@
         {
             "name": "Mac",
             "includePath": [
-                "${workspaceFolder}/**"
+                "${workspaceFolder}/include",
+                "${workspaceFolder}/include/eigen3",
+                "${workspaceFolder}/include/g2o/EXTERNAL",
+                "${workspaceFolder}/build/_deps/json-src/include"
             ],
             "defines": ["G2O_USE_VENDORED_CERES"],
             "macFrameworkPath": [
                 "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks"
             ],
             "compilerPath": "/usr/bin/clang",
-            "cStandard": "c17",
-            "intelliSenseMode": "macos-clang-arm64"
+            "cStandard": "c17"
         }
     ],
     "version": 4

@@ -21,8 +21,9 @@ using json = nlohmann::json;
 
 namespace geoar {
 
-  Frame::Frame(json& frame_data, std::string directory) {
+  Frame::Frame(json& frame_data) {
       transform = frame_data["transform"];
+      intrinsics = frame_data["intrinsics"];
       createPose(transform);
   }
 

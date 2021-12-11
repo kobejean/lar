@@ -2,6 +2,9 @@
 #define GEOAR_GRAPH_CONSTRUCTION_H
 
 #include <opencv2/features2d.hpp>
+#include <opencv2/imgcodecs.hpp>
+#include <opencv2/imgproc.hpp>
+
 #include <nlohmann/json.hpp>
 #include <Eigen/Core>
 
@@ -33,11 +36,15 @@ namespace geoar {
       void processRawData(std::string directory);
       void processFrameData(json& frame_data, std::string directory);
 
+      void construct();
+
     private:
-      void matchAndFilter(vector<cv::KeyPoint> &kpts, cv::Mat &desc);
-      vector<Vector3f> projectKeyPoints(vector<cv::KeyPoint> &kpts, cv::Mat &depth, json& transform);
-      vector<Landmark> createLandmarks(vector<Vector3f> &pts3d, vector<cv::KeyPoint> &kpts, cv::Mat &desc);
-      void recordFeatures(vector<Landmark> &landmarks, cv::Mat &desc);
+      void printStats();
+      vector<size_t> getLandmarks(vector<cv::KeyPoint> &kpts, cv::Mat &desc, vector<float> &depth, json& transform);
+      vector<float> getDepthValues(vector<cv::KeyPoint> &kpts, std::string depth_filepath, cv::Size img_size);
+      std::map<size_t, size_t> getMatches(cv::Mat &desc);
+      std::string getPathPrefix(int id, std::string directory);
+
   };
 
 }

@@ -37,8 +37,20 @@ namespace geoar {
   }
 
 
-  void MapProcessor::createMap(string directory) {
+  void MapProcessor::createMap(std::string directory) {
     graph_construction.processRawData(directory);
+    graph_construction.construct();
+    std::string output = directory + "/map.g2o";
+
+    cout << endl;
+    data.optimizer.save(output.c_str());
+    cout << "Saved g2o file to: " << output << endl;
+
+    data.optimizer.initializeOptimization();
+    data.optimizer.setVerbose(true);
+
+    cout << "Performing full Bundle Adjustment:" << endl;
+    data.optimizer.optimize(10);
   }
 
 }
