@@ -93,5 +93,6 @@
     "core": "cpp"
   },
   "C_Cpp.default.cppStandard": "c++14",
-  "C_Cpp.default.intelliSenseMode": "gcc-arm64"
+  "C_Cpp.default.intelliSenseMode": "gcc-arm64",
+  "editor.tabSize": 2
 }

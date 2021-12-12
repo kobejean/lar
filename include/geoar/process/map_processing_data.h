@@ -1,6 +1,7 @@
 #ifndef GEOAR_MAP_PROCESSING_DATA_H
 #define GEOAR_MAP_PROCESSING_DATA_H
 
+#include "g2o/core/factory.h"
 #include "g2o/core/optimization_algorithm_factory.h"
 #include "g2o/core/robust_kernel_impl.h"
 #include "g2o/core/sparse_optimizer.h"

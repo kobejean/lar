@@ -46,7 +46,7 @@ namespace geoar {
     data->frames.push_back(frame);
   }
 
-  void GraphConstruction::construct() {
+  void GraphConstruction::construct(std::string directory) {
     size_t landmark_count = data->map.landmarkDatabase.landmarks.size();
     for (size_t i = 0; i < landmark_count; i++) {
       Landmark &landmark = data->map.landmarkDatabase.landmarks[i];
@@ -68,12 +68,10 @@ namespace geoar {
       g2o::VertexSE3Expmap * vertex = new g2o::VertexSE3Expmap();
       vertex->setId(frame_id);
       vertex->setEstimate(frame.pose);
-      if (frame_id == landmark_count){
-        vertex->setFixed(true); // Fix the first camera point
-      }
+      vertex->setFixed(true);
       data->optimizer.addVertex(vertex);
 
-      if (i > 0) {
+      if (frame_id > landmark_count) {
         g2o::EdgeSE3Expmap * e = new g2o::EdgeSE3Expmap();
         e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(data->optimizer.vertex(frame_id-1)));
         e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(data->optimizer.vertex(frame_id)));
@@ -96,7 +94,6 @@ namespace geoar {
         Landmark &landmark = data->map.landmarkDatabase.landmarks[landmark_idx];
         if (landmark.sightings >= 3) {
           cv::KeyPoint keypoint = frame.kpts[j];
-          // Vector2d kp = Vector2d(keypoint.pt.x, keypoint.pt.y);
           Vector2d kp = Vector2d(principle_point[0]*2 - keypoint.pt.x, keypoint.pt.y);
 
           g2o::EdgeProjectXYZ2UV * e = new g2o::EdgeProjectXYZ2UV();
@@ -105,9 +102,9 @@ namespace geoar {
           e->setMeasurement(kp);
           e->information() = Matrix2d::Identity();
           e->setParameterId(0, i+1);
-          g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
-          rk->setDelta(100.0);
-          e->setRobustKernel(rk);
+          // g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
+          // rk->setDelta(100.0);
+          // e->setRobustKernel(rk);
           data->optimizer.addEdge(e);
         }
       }
@@ -130,12 +127,22 @@ namespace geoar {
     cout << "usable landmarks: " << count << endl;
 
     for (Frame const& frame : data->frames) {
+      Projection projection(frame.frame_data);
       int count = 0;
       for (size_t i = 0; i < frame.landmarks.size(); i++) {
         size_t landmark_idx = frame.landmarks[i];
         Landmark &landmark = data->map.landmarkDatabase.landmarks[landmark_idx];
         if (landmark.sightings >= 3) {
           count++;
+        }
+
+        cv::Point2f pt = projection.projectToImage(landmark.position);
+        cv::Point2f diff = frame.kpts[i].pt - pt;
+        float dist = sqrt(diff.dot(diff));
+        float ang_diff = angleDifference(frame.kpts[i].angle, landmark.kpt.angle);
+        if (dist > 30.0f || ang_diff > 30.0f) {
+          cout << "diff: " << diff << endl;
+          cout << "dist: " << dist << " ang_diff: " << ang_diff << endl;
         }
       }
       cout << "frame landmarks: " << frame.landmarks.size() << endl;
@@ -144,45 +151,23 @@ namespace geoar {
   }
 
   vector<size_t> GraphConstruction::getLandmarks(vector<cv::KeyPoint> &kpts, cv::Mat &desc, vector<float> &depth, json& frame_data) {
-
     // Filter out features that have been matched
     std::map<size_t, size_t> matches = getMatches(desc);
-
-    // Variables used for projection
-    json t = frame_data["transform"];
-    Matrix3d rotation;
-    rotation << t[0][0], t[1][0], t[2][0],
-                t[0][1], t[1][1], t[2][1],
-                t[0][2], t[1][2], t[2][2]; 
-    Vector3d translation(t[3][0], t[3][1], t[3][2]);
-    // Parse intrinsics properties
-    json intrinsics = frame_data["intrinsics"];
-    json principle_point = intrinsics["principlePoint"];
-    float focal_length = intrinsics["focalLength"];
-    float principle_point_x = principle_point["x"];
-    float principle_point_y = principle_point["y"];
+    Projection projection(frame_data);
 
     vector<size_t> landmarks;
+    landmarks.reserve(kpts.size());
 
     for (size_t i = 0; i < kpts.size(); i++) {
       if (matches.find(i) == matches.end()) {
         // No match so create landmark
-        float depth_value = depth[i];
-
-        // Use intrinsics and depth to project image coordinates to 3d camera space point
-        float cam_x = (kpts[i].pt.x - principle_point_x) * depth_value / focal_length;
-        float cam_y = -(kpts[i].pt.y - principle_point_y) * depth_value / focal_length;
-        float cam_z = -depth_value;
-        Vector3d cam_point(cam_x, cam_y, cam_z);
-
-        // Convert camera space point to world space point
-        Vector3d pt3d = rotation * cam_point + translation;
-
+        Vector3d pt3d = projection.projectToWorld(kpts[i].pt, depth[i]);
         Landmark landmark(pt3d, kpts[i], desc.row(i));
 
         landmarks.push_back(data->map.landmarkDatabase.landmarks.size());
         data->map.landmarkDatabase.landmarks.push_back(landmark);
       } else {
+        // We have a match so just push the match index
         landmarks.push_back(matches[i]);
       }
     }
@@ -197,6 +182,7 @@ namespace geoar {
     cv::resize(depth, depth, img_size, 0, 0, cv::INTER_LINEAR);
 
     vector<float> depth_values;
+    depth_values.reserve(kpts.size());
 
     for (cv::KeyPoint const& kpt : kpts) {
       // Get depth value
@@ -222,7 +208,7 @@ namespace geoar {
     }
 
     // Populate unmatched descriptions
-    cv::Mat unmatched_desc;
+    cv::Mat unmatched_desc; // TODO: see if there's a way to reserve capacity
     for (size_t i = 0; i < (unsigned)desc.rows; i++) {
       if (idx_matched.find(i) == idx_matched.end()) {
         unmatched_desc.push_back(desc.row(i));
@@ -246,4 +232,8 @@ namespace geoar {
     return directory + '/' + prefix;
   }
 
+  float GraphConstruction::angleDifference(float alpha, float beta) {
+    float phi = fmod(abs(beta - alpha), 360.f);
+    return phi > 180.f ? 360.f - phi : phi;
+  }
 }

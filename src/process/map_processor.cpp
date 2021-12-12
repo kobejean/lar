@@ -9,6 +9,7 @@
 #include <opencv2/core.hpp>
 #include <opencv2/imgcodecs.hpp>
 
+#include "g2o/core/factory.h"
 #include "g2o/core/optimization_algorithm_factory.h"
 #include "g2o/core/robust_kernel_impl.h"
 #include "g2o/core/sparse_optimizer.h"
@@ -39,7 +40,7 @@ namespace geoar {
 
   void MapProcessor::createMap(std::string directory) {
     graph_construction.processRawData(directory);
-    graph_construction.construct();
+    graph_construction.construct(directory);
     std::string output = directory + "/map.g2o";
 
     cout << endl;
@@ -50,7 +51,7 @@ namespace geoar {
     data.optimizer.setVerbose(true);
 
     cout << "Performing full Bundle Adjustment:" << endl;
-    data.optimizer.optimize(10);
+    data.optimizer.optimize(2);
   }
 
 }

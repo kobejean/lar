@@ -8,6 +8,7 @@
 #include <nlohmann/json.hpp>
 #include <Eigen/Core>
 
+#include "g2o/core/factory.h"
 #include "g2o/core/optimization_algorithm_factory.h"
 #include "g2o/core/robust_kernel_impl.h"
 #include "g2o/core/sparse_optimizer.h"
@@ -19,6 +20,8 @@
 #include "geoar/core/landmark.h"
 #include "geoar/core/map.h"
 #include "geoar/process/map_processing_data.h"
+#include "geoar/process/projection.h"
+// #include "geoar/process/vertex_se3_expmap.h"
 #include "geoar/process/vision.h"
 
 using namespace Eigen;
@@ -36,7 +39,7 @@ namespace geoar {
       void processRawData(std::string directory);
       void processFrameData(json& frame_data, std::string directory);
 
-      void construct();
+      void construct(std::string directory);
 
     private:
       void printStats();
@@ -45,6 +48,7 @@ namespace geoar {
       std::map<size_t, size_t> getMatches(cv::Mat &desc);
       std::string getPathPrefix(int id, std::string directory);
 
+      float angleDifference(float alpha, float beta);
   };
 
 }

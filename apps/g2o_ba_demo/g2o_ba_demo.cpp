@@ -29,6 +29,7 @@
 #include <iostream>
 #include <unordered_set>
 
+#include "g2o/core/factory.h"
 #include "g2o/core/optimization_algorithm_factory.h"
 #include "g2o/core/robust_kernel_impl.h"
 #include "g2o/core/sparse_optimizer.h"

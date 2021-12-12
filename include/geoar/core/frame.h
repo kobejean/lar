@@ -17,6 +17,7 @@ namespace geoar {
 
   class Frame {
     public:
+      json frame_data;
       json transform;
       json intrinsics;
       g2o::SE3Quat pose;
