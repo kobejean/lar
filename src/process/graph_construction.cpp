@@ -54,6 +54,7 @@ namespace geoar {
         // Create feature point vertex
         g2o::VertexPointXYZ * vertex = new g2o::VertexPointXYZ();
         vertex->setId(i);
+        // vertex->setFixed(true);
         vertex->setMarginalized(true);
         vertex->setEstimate(landmark.position);
         data->optimizer.addVertex(vertex);
@@ -68,14 +69,19 @@ namespace geoar {
       g2o::VertexSE3Expmap * vertex = new g2o::VertexSE3Expmap();
       vertex->setId(frame_id);
       vertex->setEstimate(frame.pose);
-      vertex->setFixed(true);
+      vertex->setFixed(frame_id == landmark_count);
       data->optimizer.addVertex(vertex);
 
       if (frame_id > landmark_count) {
+        g2o::VertexSE3Expmap* v1 = dynamic_cast<g2o::VertexSE3Expmap*>(data->optimizer.vertex(frame_id-1));
+        g2o::VertexSE3Expmap* v2 = dynamic_cast<g2o::VertexSE3Expmap*>(data->optimizer.vertex(frame_id));
+        g2o::SE3Quat m = v2->estimate() * v1->estimate().inverse();
+
         g2o::EdgeSE3Expmap * e = new g2o::EdgeSE3Expmap();
-        e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(data->optimizer.vertex(frame_id-1)));
-        e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(data->optimizer.vertex(frame_id)));
-        e->information() = Eigen::MatrixXd::Identity(6,6);
+        e->setVertex(0, v1);
+        e->setVertex(1, v2);
+        e->setMeasurement(m);
+        e->information() = Eigen::MatrixXd::Identity(6,6) * 100000000;
         data->optimizer.addEdge(e);
       }
 
@@ -94,7 +100,7 @@ namespace geoar {
         Landmark &landmark = data->map.landmarkDatabase.landmarks[landmark_idx];
         if (landmark.sightings >= 3) {
           cv::KeyPoint keypoint = frame.kpts[j];
-          Vector2d kp = Vector2d(principle_point[0]*2 - keypoint.pt.x, keypoint.pt.y);
+          Vector2d kp = Vector2d(keypoint.pt.x, keypoint.pt.y);
 
           g2o::EdgeProjectXYZ2UV * e = new g2o::EdgeProjectXYZ2UV();
           e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(data->optimizer.vertex(landmark_idx)));
@@ -139,11 +145,11 @@ namespace geoar {
         cv::Point2f pt = projection.projectToImage(landmark.position);
         cv::Point2f diff = frame.kpts[i].pt - pt;
         float dist = sqrt(diff.dot(diff));
-        float ang_diff = angleDifference(frame.kpts[i].angle, landmark.kpt.angle);
-        if (dist > 30.0f || ang_diff > 30.0f) {
-          cout << "diff: " << diff << endl;
-          cout << "dist: " << dist << " ang_diff: " << ang_diff << endl;
-        }
+        // float ang_diff = angleDifference(frame.kpts[i].angle, landmark.kpt.angle);
+        // if (dist > 200.0f || ang_diff > 30.0f) {
+        //   cout << "diff: " << diff << endl;
+        //   cout << "dist: " << dist << " ang_diff: " << ang_diff << endl;
+        // }
       }
       cout << "frame landmarks: " << frame.landmarks.size() << endl;
       cout << "frame usable landmarks: " << count << endl;
@@ -169,6 +175,7 @@ namespace geoar {
       } else {
         // We have a match so just push the match index
         landmarks.push_back(matches[i]);
+        data->map.landmarkDatabase.landmarks[matches[i]].sightings++;
       }
     }
 
@@ -204,7 +211,6 @@ namespace geoar {
     for (size_t i = 0; i < matches.size(); i++) {
       int idx = matches[i].queryIdx;
       idx_matched[idx] = matches[i].trainIdx;
-      data->map.landmarkDatabase.landmarks[idx].sightings++;
     }
 
     // Populate unmatched descriptions

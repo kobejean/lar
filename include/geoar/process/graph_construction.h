@@ -21,7 +21,6 @@
 #include "geoar/core/map.h"
 #include "geoar/process/map_processing_data.h"
 #include "geoar/process/projection.h"
-// #include "geoar/process/vertex_se3_expmap.h"
 #include "geoar/process/vision.h"
 
 using namespace Eigen;
