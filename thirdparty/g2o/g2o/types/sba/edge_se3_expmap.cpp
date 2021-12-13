@@ -26,6 +26,11 @@
 
 #include "edge_se3_expmap.h"
 
+#ifdef G2O_HAVE_OPENGL
+#include "g2o/stuff/opengl_wrapper.h"
+#include "g2o/stuff/opengl_primitives.h"
+#endif
+
 namespace g2o {
 
 EdgeSE3Expmap::EdgeSE3Expmap() : BaseBinaryEdge<6, SE3Quat, VertexSE3Expmap, VertexSE3Expmap>() {}
@@ -67,5 +72,38 @@ void EdgeSE3Expmap::linearizeOplus() {
   _jacobianOplusXi = invTj_Tij.adj();
   _jacobianOplusXj = -infTi_invTij.adj();
 }
+
+#ifdef G2O_HAVE_OPENGL
+  EdgeSE3ExpmapDrawAction::EdgeSE3ExpmapDrawAction(): DrawAction(typeid(EdgeSE3Expmap).name()){}
+
+  HyperGraphElementAction* EdgeSE3ExpmapDrawAction::operator()(HyperGraph::HyperGraphElement* element,
+               HyperGraphElementAction::Parameters* params_){
+    if (typeid(*element).name()!=_typeName)
+      return nullptr;
+    refreshPropertyPtrs(params_);
+    if (! _previousParams)
+      return this;
+
+    if (_show && !_show->value())
+      return this;
+
+    EdgeSE3Expmap* e =  static_cast<EdgeSE3Expmap*>(element);
+    VertexSE3Expmap* fromEdge = static_cast<VertexSE3Expmap*>(e->vertices()[0]);
+    VertexSE3Expmap* toEdge   = static_cast<VertexSE3Expmap*>(e->vertices()[1]);
+    if (! fromEdge || ! toEdge)
+      return this;
+    glColor3f(POSE_EDGE_COLOR);
+    glPushAttrib(GL_ENABLE_BIT);
+    glDisable(GL_LIGHTING);
+    glBegin(GL_LINES);
+    Eigen::Vector3d fromTranslation = fromEdge->estimate().inverse().translation();
+    Eigen::Vector3d toTranslation = toEdge->estimate().inverse().translation();
+    glVertex3f(fromTranslation.x(),fromTranslation.y(),fromTranslation.z());
+    glVertex3f(toTranslation.x(),toTranslation.y(),toTranslation.z());
+    glEnd();
+    glPopAttrib();
+    return this;
+  }
+#endif
 
 }  // namespace g2o

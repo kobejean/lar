@@ -25,6 +25,10 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "edge_project_xyz2uv.h"
+#ifdef G2O_HAVE_OPENGL
+#include "g2o/stuff/opengl_wrapper.h"
+#include "g2o/stuff/opengl_primitives.h"
+#endif
 
 namespace g2o {
 
@@ -93,5 +97,66 @@ void EdgeProjectXYZ2UV::linearizeOplus() {
   _jacobianOplusXj(1, 4) = -1. / z * cam->focal_length;
   _jacobianOplusXj(1, 5) = y / z_2 * cam->focal_length;
 }
+
+#ifdef G2O_HAVE_OPENGL
+
+  Eigen::Vector3d getDirectionVector(const CameraParameters* cam, Eigen::Vector2d kpt) {
+    double scale = 1.0 / (double)cam->focal_length;
+    double x = (kpt.x() - cam->principle_point[0]) * scale;
+    double y = (kpt.y() - cam->principle_point[1]) * scale;
+    double z = 1;
+    return Eigen::Vector3d(x, y, z).normalized();
+  }
+
+  EdgeProjectXYZ2UVDrawAction::EdgeProjectXYZ2UVDrawAction(): DrawAction(typeid(EdgeProjectXYZ2UV).name()){}
+
+  HyperGraphElementAction* EdgeProjectXYZ2UVDrawAction::operator()(HyperGraph::HyperGraphElement* element,
+               HyperGraphElementAction::Parameters* params_){
+    if (typeid(*element).name()!=_typeName)
+      return nullptr;
+    refreshPropertyPtrs(params_);
+    if (! _previousParams)
+      return this;
+
+    if (_show && !_show->value())
+      return this;
+
+    EdgeProjectXYZ2UV* e =  static_cast<EdgeProjectXYZ2UV*>(element);
+    const CameraParameters* cam = static_cast<const CameraParameters*>(e->parameter(0));
+    Eigen::Vector2d kpt = e->measurement();
+    Eigen::Vector3d direction = getDirectionVector(cam, kpt);
+
+    VertexPointXYZ* fromEdge = static_cast<VertexPointXYZ*>(e->vertices()[0]);
+    VertexSE3Expmap* toEdge  = static_cast<VertexSE3Expmap*>(e->vertices()[1]);
+    if (! fromEdge || ! toEdge)
+      return this;
+
+    Eigen::Vector3d fromTranslation = fromEdge->estimate();
+    Eigen::Vector3d toTranslation = toEdge->estimate().inverse().translation();
+
+    Eigen::Vector3d compliment = direction * (toTranslation-fromTranslation).dot(direction);
+    Eigen::Vector3d target = toEdge->estimate().inverse() * compliment;
+
+    glPushAttrib(GL_ENABLE_BIT);
+    glDisable(GL_LIGHTING);
+
+    // Draw line in direction of key point
+    glColor3f(0.4f, 0.7f, 0.4f);
+    glBegin(GL_LINES);
+    glVertex3f(toTranslation.x(),toTranslation.y(),toTranslation.z());
+    glVertex3f(target.x(),target.y(),target.z());
+
+    
+    // Draw line to vertex
+    glColor3f(0.7f, 0.4f, 0.4f);
+    glBegin(GL_LINES);
+    glVertex3f(target.x(),target.y(),target.z());
+    glVertex3f(fromTranslation.x(),fromTranslation.y(),fromTranslation.z());
+
+    glEnd();
+    glPopAttrib();
+    return this;
+  }
+#endif
 
 }  // namespace g2o

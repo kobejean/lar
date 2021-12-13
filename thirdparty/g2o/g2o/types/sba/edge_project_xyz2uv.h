@@ -50,6 +50,18 @@ class G2O_TYPES_SBA_API EdgeProjectXYZ2UV
   CameraParameters* _cam;  // TODO make protected member?
 };
 
+
+#ifdef G2O_HAVE_OPENGL
+  /**
+   * \brief Visualize a 3D pose-pose constraint
+   */
+  class G2O_TYPES_SBA_API EdgeProjectXYZ2UVDrawAction: public DrawAction{
+  public:
+    EdgeProjectXYZ2UVDrawAction();
+    virtual HyperGraphElementAction* operator()(HyperGraph::HyperGraphElement* element, 
+            HyperGraphElementAction::Parameters* params_);
+  };
+#endif
 }  // namespace g2o
 
 #endif

@@ -46,7 +46,7 @@ VertexPointXYZDrawAction::VertexPointXYZDrawAction() : DrawAction(typeid(VertexP
 bool VertexPointXYZDrawAction::refreshPropertyPtrs(HyperGraphElementAction::Parameters* params_) {
   if (!DrawAction::refreshPropertyPtrs(params_)) return false;
   if (_previousParams) {
-    _pointSize = _previousParams->makeProperty<FloatProperty>(_typeName + "::POINT_SIZE", 1.);
+    _pointSize = _previousParams->makeProperty<FloatProperty>(_typeName + "::POINT_SIZE", 5.);
   } else {
     _pointSize = nullptr;
   }
@@ -72,7 +72,7 @@ bool VertexPointXYZDrawAction::refreshPropertyPtrs(HyperGraphElementAction::Para
     glPushAttrib(GL_ENABLE_BIT | GL_POINT_BIT);
     glDisable(GL_LIGHTING);
     glColor3f(LANDMARK_VERTEX_COLOR);
-    float ps = _pointSize ? _pointSize->value() :  1.f;
+    float ps = _pointSize ? _pointSize->value() :  5.f;
     glTranslatef((float)that->estimate()(0),(float)that->estimate()(1),(float)that->estimate()(2));
     opengl::drawPoint(ps);
     glPopAttrib();

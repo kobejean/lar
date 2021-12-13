@@ -25,6 +25,11 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "vertex_se3_expmap.h"
+#include "g2o/core/factory.h"
+#ifdef G2O_HAVE_OPENGL
+#include "g2o/stuff/opengl_wrapper.h"
+#include "g2o/stuff/opengl_primitives.h"
+#endif
 
 #include "g2o/stuff/misc.h"
 
@@ -50,4 +55,54 @@ void VertexSE3Expmap::oplusImpl(const number_t* update_) {
   setEstimate(SE3Quat::exp(update) * estimate());
 }
 
+#ifdef G2O_HAVE_OPENGL
+
+  VertexSE3ExpmapDrawAction::VertexSE3ExpmapDrawAction()
+      : DrawAction(typeid(VertexSE3Expmap).name()), _length(nullptr), _depth(nullptr) {
+    _cacheDrawActions = 0;
+  }
+
+  bool VertexSE3ExpmapDrawAction::refreshPropertyPtrs(HyperGraphElementAction::Parameters* params_){
+    if (!DrawAction::refreshPropertyPtrs(params_))
+      return false;
+    if (_previousParams){
+      _length = _previousParams->makeProperty<FloatProperty>(_typeName + "::LENGTH", .2f);
+      _depth = _previousParams->makeProperty<FloatProperty>(_typeName + "::DEPTH", .2f);
+    } else {
+      _length = 0;
+      _depth = 0;
+    }
+    return true;
+  }
+
+  HyperGraphElementAction* VertexSE3ExpmapDrawAction::operator()(HyperGraph::HyperGraphElement* element,
+                 HyperGraphElementAction::Parameters* params_){
+    if (typeid(*element).name()!=_typeName)
+      return nullptr;
+    initializeDrawActionsCache();
+    refreshPropertyPtrs(params_);
+
+    if (! _previousParams)
+      return this;
+
+    if (_show && !_show->value())
+      return this;
+
+    VertexSE3Expmap* that = static_cast<VertexSE3Expmap*>(element);
+
+    glColor3f(POSE_VERTEX_COLOR);
+    glPushMatrix();
+    g2o::Isometry3 isometry = that->estimate().inverse();
+    Eigen::Matrix4d transform = isometry.matrix();
+    transform(Eigen::indexing::all, 1) = -transform(Eigen::indexing::all, 1);
+    transform(Eigen::indexing::all, 2) = -transform(Eigen::indexing::all, 2);
+    glMultMatrixd(transform.cast<double>().eval().data());
+    opengl::drawPyramid(_length->value(), _depth->value());
+    drawCache(that->cacheContainer(), params_);
+    drawUserData(that->userData(), params_);
+    glPopMatrix();
+    return this;
+  }
+
+#endif
 }  // namespace g2o

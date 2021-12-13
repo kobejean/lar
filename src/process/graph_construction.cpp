@@ -144,7 +144,7 @@ namespace geoar {
 
         cv::Point2f pt = projection.projectToImage(landmark.position);
         cv::Point2f diff = frame.kpts[i].pt - pt;
-        float dist = sqrt(diff.dot(diff));
+        // float dist = sqrt(diff.dot(diff));
         // float ang_diff = angleDifference(frame.kpts[i].angle, landmark.kpt.angle);
         // if (dist > 200.0f || ang_diff > 30.0f) {
         //   cout << "diff: " << diff << endl;
