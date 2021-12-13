@@ -31,6 +31,9 @@
 #include "g2o/core/base_vertex.h"
 #include "g2o_types_sba_api.h"
 
+#include "g2o/config.h"
+#include "g2o/core/hyper_graph_action.h"
+
 namespace g2o {
 
 /**
@@ -49,6 +52,20 @@ class G2O_TYPES_SBA_API VertexSE3Expmap : public BaseVertex<6, SE3Quat> {
   void oplusImpl(const number_t* update_);
 };
 
+#ifdef G2O_HAVE_OPENGL
+  /**
+   * \brief visualize the 3D pose vertex
+   */
+  class G2O_TYPES_SBA_API VertexSE3ExpmapDrawAction: public DrawAction{
+    public:
+      VertexSE3ExpmapDrawAction();
+      virtual HyperGraphElementAction* operator()(HyperGraph::HyperGraphElement* element, HyperGraphElementAction::Parameters* params_);
+    protected:
+      virtual bool refreshPropertyPtrs(HyperGraphElementAction::Parameters* params_);
+      FloatProperty* _length, *_depth;
+  };
+
+#endif
 }  // namespace g2o
 
 #endif

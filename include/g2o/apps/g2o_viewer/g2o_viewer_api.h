@@ -1,5 +1,5 @@
 // g2o - General Graph Optimization
-// Copyright (C) 2011 H. Strasdat
+// Copyright (C) 2011 R. Kuemmerle, G. Grisetti, H. Strasdat, W. Burgard
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -24,44 +24,27 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef G2O_SBA_EDGEPROJECTXYZ2UV_H
-#define G2O_SBA_EDGEPROJECTXYZ2UV_H
+#ifndef G2O_VIEWER_API_H
+#define G2O_VIEWER_API_H
 
-#include "g2o/core/base_binary_edge.h"
-#include "g2o/types/slam3d/vertex_pointxyz.h"
-#include "g2o_types_sba_api.h"
-#include "parameter_cameraparameters.h"
-#include "vertex_se3_expmap.h"
+#include "g2o/config.h"
 
-namespace g2o {
+#ifdef _MSC_VER
+// We are using a Microsoft compiler:
 
-class G2O_TYPES_SBA_API EdgeProjectXYZ2UV
-    : public BaseBinaryEdge<2, Vector2, VertexPointXYZ, VertexSE3Expmap> {
- public:
-  EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
-
-  EdgeProjectXYZ2UV();
-  bool read(std::istream& is);
-  bool write(std::ostream& os) const;
-  void computeError();
-  virtual void linearizeOplus();
-
- public:
-  CameraParameters* _cam;  // TODO make protected member?
-};
-
-
-#ifdef G2O_HAVE_OPENGL
-  /**
-   * \brief Visualize a 3D pose-pose constraint
-   */
-  class G2O_TYPES_SBA_API EdgeProjectXYZ2UVDrawAction: public DrawAction{
-  public:
-    EdgeProjectXYZ2UVDrawAction();
-    virtual HyperGraphElementAction* operator()(HyperGraph::HyperGraphElement* element, 
-            HyperGraphElementAction::Parameters* params_);
-  };
+#ifdef G2O_SHARED_LIBS
+#ifdef viewer_library_EXPORTS
+#define G2O_VIEWER_API __declspec(dllexport)
+#else
+#define G2O_VIEWER_API __declspec(dllimport)
 #endif
-}  // namespace g2o
-
+#else
+#define G2O_VIEWER_API
 #endif
+
+#else
+// Not Microsoft compiler so set empty definition:
+#define G2O_VIEWER_API
+#endif
+
+#endif // G2O_STUFF_API_H

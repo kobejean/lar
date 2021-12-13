@@ -48,6 +48,18 @@ class G2O_TYPES_SBA_API EdgeSE3Expmap
   void linearizeOplus();
 };
 
+#ifdef G2O_HAVE_OPENGL
+  /**
+   * \brief Visualize a 3D pose-pose constraint
+   */
+  class G2O_TYPES_SBA_API EdgeSE3ExpmapDrawAction: public DrawAction{
+  public:
+    EdgeSE3ExpmapDrawAction();
+    virtual HyperGraphElementAction* operator()(HyperGraph::HyperGraphElement* element, 
+            HyperGraphElementAction::Parameters* params_);
+  };
+#endif
+
 }  // namespace g2o
 
 #endif

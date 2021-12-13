@@ -3,7 +3,7 @@ cd tmp
 
 mkdir install
 cmake ../thirdparty/eigen3 -DCMAKE_INSTALL_PREFIX=./install
-make install -j 10
+make install -j 8
 cp -R ./install/include/eigen3 ../include
 rm -r *
 
@@ -33,13 +33,13 @@ cmake ../thirdparty/opencv -DCMAKE_INSTALL_PREFIX=./install \
     -DWITH_IMGCODEC_SUNRASTER=OFF \
     -DWITH_IMGCODEC_PXM=OFF \
     -DWITH_IMGCODEC_PFM=ON
-make install -j 10
+make install -j 8
 cp -R ./install/include/opencv4/opencv2 ../include
 rm -r *
 
 mkdir install
 cmake ../thirdparty/g2o -DCMAKE_INSTALL_PREFIX=./install -DEIGEN3_INCLUDE_DIR=$(cd "../include/eigen3"; pwd) -DG2O_USE_VENDORED_CERES=ON
-make install -j 10
+make install -j 8
 cp -R ./install/include/g2o ../include
 rm -r *
 
