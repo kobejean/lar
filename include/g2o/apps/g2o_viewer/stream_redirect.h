@@ -1,5 +1,5 @@
 // g2o - General Graph Optimization
-// Copyright (C) 2011 H. Strasdat
+// Copyright (C) 2011 R. Kuemmerle, G. Grisetti, W. Burgard
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -24,44 +24,40 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef G2O_SBA_EDGEPROJECTXYZ2UV_H
-#define G2O_SBA_EDGEPROJECTXYZ2UV_H
+#ifndef G2O_STREAM_REDIRECT_H
+#define G2O_STREAM_REDIRECT_H
 
-#include "g2o/core/base_binary_edge.h"
-#include "g2o/types/slam3d/vertex_pointxyz.h"
-#include "g2o_types_sba_api.h"
-#include "parameter_cameraparameters.h"
-#include "vertex_se3_expmap.h"
+#include <iostream>
+#include <streambuf>
+#include <string>
+#include <QMutex>
 
-namespace g2o {
+#include "g2o_viewer_api.h"
 
-class G2O_TYPES_SBA_API EdgeProjectXYZ2UV
-    : public BaseBinaryEdge<2, Vector2, VertexPointXYZ, VertexSE3Expmap> {
- public:
-  EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
+class QPlainTextEdit;
 
-  EdgeProjectXYZ2UV();
-  bool read(std::istream& is);
-  bool write(std::ostream& os) const;
-  void computeError();
-  virtual void linearizeOplus();
-
- public:
-  CameraParameters* _cam;  // TODO make protected member?
-};
-
-
-#ifdef G2O_HAVE_OPENGL
-  /**
-   * \brief Visualize a 3D pose-pose constraint
-   */
-  class G2O_TYPES_SBA_API EdgeProjectXYZ2UVDrawAction: public DrawAction{
+/**
+ * \brief redirect a stream to a QPlainTextEdit
+ */
+class G2O_VIEWER_API StreamRedirect : public std::basic_streambuf<char>
+{
   public:
-    EdgeProjectXYZ2UVDrawAction();
-    virtual HyperGraphElementAction* operator()(HyperGraph::HyperGraphElement* element, 
-            HyperGraphElementAction::Parameters* params_);
-  };
-#endif
-}  // namespace g2o
+    typedef std::char_traits<char>::int_type int_type;
+
+  public:
+    StreamRedirect(std::ostream &stream, QPlainTextEdit* te);
+    ~StreamRedirect();
+
+  protected:
+    virtual std::char_traits<char>::int_type overflow(int_type v);
+    virtual std::streamsize xsputn(const char *p, std::streamsize n); 
+
+  private:
+    std::ostream& _stream;
+    std::streambuf* _old_buf;
+    std::string _buffer;
+    QPlainTextEdit* _te;
+    QMutex _mutex;
+};
 
 #endif
