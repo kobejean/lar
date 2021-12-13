@@ -44,15 +44,15 @@ namespace geoar {
 
     // Filter matches
     for (size_t i = 0; i < nn_matches.size(); i++) {
-        cv::DMatch first = nn_matches[i][0];
-        float dist1 = nn_matches[i][0].distance;
-        float dist2 = nn_matches[i][1].distance;
+      cv::DMatch first = nn_matches[i][0];
+      float dist1 = nn_matches[i][0].distance;
+      float dist2 = nn_matches[i][1].distance;
 
-        bool ratio_test = dist1 < RATIO_TEST_THRESHOLD * dist2;
-        bool margin_test = dist2 >= MARGIN_TEST_DISTANCE;
-        if (ratio_test && margin_test) {
-            filtered_matches.push_back(first);
-        }
+      bool ratio_test = dist1 < RATIO_TEST_THRESHOLD * dist2;
+      bool margin_test = dist2 >= MARGIN_TEST_DISTANCE;
+      if (ratio_test && margin_test) {
+          filtered_matches.push_back(first);
+      }
     }
 
     return filtered_matches;

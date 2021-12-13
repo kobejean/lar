@@ -1,5 +1,5 @@
 set(HEADER_LIST 
-  "${PROJECT_SOURCE_DIR}/include/geoar/process/graph_construction.h"
+  "${PROJECT_SOURCE_DIR}/include/geoar/process/bundle_adjustment.h"
   "${PROJECT_SOURCE_DIR}/include/geoar/process/map_processing_data.h"
   "${PROJECT_SOURCE_DIR}/include/geoar/process/map_processor.h"
   "${PROJECT_SOURCE_DIR}/include/geoar/process/projection.h"
@@ -8,7 +8,7 @@ set(HEADER_LIST
 
 add_library(geoar_process
   map_processing_data.cpp
-  graph_construction.cpp
+  bundle_adjustment.cpp
   map_processor.cpp
   projection.cpp
   vision.cpp

@@ -1,5 +1,5 @@
-#ifndef GEOAR_GRAPH_CONSTRUCTION_H
-#define GEOAR_GRAPH_CONSTRUCTION_H
+#ifndef GEOAR_BUNDLE_ADJUSTMENT_H
+#define GEOAR_BUNDLE_ADJUSTMENT_H
 
 #include <opencv2/features2d.hpp>
 #include <opencv2/imgcodecs.hpp>
@@ -29,27 +29,19 @@ using json = nlohmann::json;
 
 namespace geoar {
 
-  class GraphConstruction {
+  class BundleAdjustment {
     public:
-      Vision vision;
+      g2o::SparseOptimizer optimizer;
       MapProcessingData* data;
 
-      GraphConstruction(MapProcessingData &data);
-      void processRawData(std::string directory);
-      void processFrameData(json& frame_data, std::string directory);
-
+      BundleAdjustment(MapProcessingData &data);
       void construct(std::string directory);
 
     private:
       void printStats();
-      vector<size_t> getLandmarks(vector<cv::KeyPoint> &kpts, cv::Mat &desc, vector<float> &depth, json& transform);
-      vector<float> getDepthValues(vector<cv::KeyPoint> &kpts, std::string depth_filepath, cv::Size img_size);
-      std::map<size_t, size_t> getMatches(cv::Mat &desc);
-      std::string getPathPrefix(int id, std::string directory);
-
       float angleDifference(float alpha, float beta);
   };
 
 }
 
-#endif /* GEOAR_GRAPH_CONSTRUCTION_H */
+#endif /* GEOAR_BUNDLE_ADJUSTMENT_H */
