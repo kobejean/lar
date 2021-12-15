@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 INCLUDE_DIR="$SCRIPT_DIR/thirdparty/include"
 TMP_DIR="$SCRIPT_DIR/tmp"

@@ -8,7 +8,7 @@ set(CMAKE_CXX_STANDARD 17)
 # Generate third party header include files if it doesn't exist
 if (NOT EXISTS "${PROJECT_SOURCE_DIR}/thirdparty/include")
   message("Making Third Party Includes")
-  execute_process(COMMAND "${PROJECT_SOURCE_DIR}/build.sh")
+  execute_process(COMMAND "${PROJECT_SOURCE_DIR}/build.bash")
 endif()
 
 # postfix, based on type
