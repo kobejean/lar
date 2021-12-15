@@ -2,8 +2,8 @@
 #define G2O_CONFIG_H
 
 
-#define G2O_HAVE_OPENGL 1
-#define G2O_OPENGL_FOUND 1
+/* #undef G2O_HAVE_OPENGL */
+/* #undef G2O_OPENGL_FOUND */
 /* #undef G2O_OPENMP */
 #define G2O_SHARED_LIBS 1
 /* #undef G2O_LGPL_SHARED_LIBS */
@@ -39,7 +39,7 @@
     #endif
 #endif
 
-#define G2O_CXX_COMPILER "AppleClang /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/c++"
-#define G2O_SRC_DIR "/Users/kobejean/Developer/GitHub/GeoARCore/thirdparty/g2o"
+#define G2O_CXX_COMPILER "GNU /usr/bin/c++"
+#define G2O_SRC_DIR "/home/ccl/Developer/GitHub/GeoARCore/thirdparty/g2o"
 
 #endif
