@@ -80,11 +80,7 @@ add_subdirectory(thirdparty/g2o)
 
 # Create G2O_LIBS list
 list(APPEND G2O_LIBS types_sba types_slam3d solver_dense)
-if(CHOLMOD_FOUND)
-  list(APPEND G2O_LIBS solver_cholmod)
-else()
-  list(APPEND G2O_LIBS solver_eigen)
-endif()
+list(APPEND G2O_LIBS solver_eigen)
 
 # Setup nlohmann_json
 FetchContent_Declare(
