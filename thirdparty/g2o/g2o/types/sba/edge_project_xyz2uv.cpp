@@ -134,7 +134,7 @@ void EdgeProjectXYZ2UV::linearizeOplus() {
     Eigen::Vector3d fromTranslation = fromEdge->estimate();
     Eigen::Vector3d toTranslation = toEdge->estimate().inverse().translation();
 
-    Eigen::Vector3d compliment = direction * (toTranslation-fromTranslation).dot(direction);
+    Eigen::Vector3d compliment = direction * (toTranslation-fromTranslation).norm();
     Eigen::Vector3d target = toEdge->estimate().inverse() * compliment;
 
     glPushAttrib(GL_ENABLE_BIT);
