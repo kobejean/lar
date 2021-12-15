@@ -16,5 +16,7 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+    - name: git submodule update
+      run: git submodule update --init --recursive
     - name: make fast
       run: make fast
