@@ -5,6 +5,12 @@ include(FetchContent)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -Wall -Wextra")
 set(CMAKE_CXX_STANDARD 17)
 
+# Generate third party header include files if it doesn't exist
+if (NOT EXISTS "${PROJECT_SOURCE_DIR}/thirdparty/include")
+  message("Making Third Party Includes")
+  execute_process(COMMAND "${PROJECT_SOURCE_DIR}/build.sh")
+endif()
+
 # postfix, based on type
 set(CMAKE_DEBUG_POSTFIX "_d" CACHE STRING "postfix applied to debug build of libraries")
 set(CMAKE_RELEASE_POSTFIX "" CACHE STRING "postfix applied to release build of libraries")
@@ -29,10 +35,13 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/bin)
 
+include_directories(${PROJECT_SOURCE_DIR}/include)
+include_directories(${PROJECT_SOURCE_DIR}/thirdparty/include)
+
 
 # Setup Eigen
 add_subdirectory(thirdparty/eigen3)
-set(EIGEN3_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/include/eigen3)
+set(EIGEN3_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/thirdparty/include/eigen3)
 include_directories(${EIGEN3_INCLUDE_DIR})
 
 # Setup OpenCV
@@ -67,7 +76,6 @@ list(APPEND OpenCV_LIBS opencv_core opencv_features2d opencv_imgcodecs)
 
 # Setup G2O
 add_definitions(-DG2O_USE_VENDORED_CERES) # TODO: Figure out why we have specify this
-include_directories(include)
 add_subdirectory(thirdparty/g2o)
 
 # Create G2O_LIBS list

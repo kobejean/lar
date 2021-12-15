@@ -4,8 +4,9 @@
             "name": "Mac",
             "includePath": [
                 "${workspaceFolder}/include",
-                "${workspaceFolder}/include/eigen3",
-                "${workspaceFolder}/include/g2o/EXTERNAL",
+                "${workspaceFolder}/thirdparty/include",
+                "${workspaceFolder}/thirdparty/include/eigen3",
+                "${workspaceFolder}/thirdparty/include/g2o/EXTERNAL",
                 "${workspaceFolder}/build/_deps/json-src/include"
             ],
             "defines": ["G2O_USE_VENDORED_CERES"],
