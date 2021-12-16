@@ -16,9 +16,9 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-    - name: update submodules
+    - name: Update Submodules
       run: git submodule update --init --recursive
-    - name: build
-      run: make test
-    - name: test
-      run: cd build && ctest
+    - name: Build
+      run: make tests
+    - name: Test
+      run: ./bin/geoar_test
