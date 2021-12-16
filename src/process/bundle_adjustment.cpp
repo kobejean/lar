@@ -68,7 +68,7 @@ namespace geoar {
         e->setVertex(0, v1);
         e->setVertex(1, v2);
         e->setMeasurement(m);
-        e->information() = Eigen::MatrixXd::Identity(6,6) * 100000000;
+        e->information() = Eigen::MatrixXd::Identity(6,6) * 10000000;
         optimizer.addEdge(e);
       }
 

@@ -89,8 +89,13 @@ FetchContent_Declare(
   GIT_TAG v3.10.2
 )
 FetchContent_MakeAvailable(json)
-link_libraries(nlohmann_json::nlohmann_json)
 
 # Add subdirectories
 add_subdirectory(apps)
 add_subdirectory(src)
+
+if(GEOAR_BUILD_TESTS)
+  message("GeoAR Build Tests Enabled")
+  enable_testing()
+  add_subdirectory(test)
+endif()
