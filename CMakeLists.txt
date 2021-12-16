@@ -80,11 +80,7 @@ add_subdirectory(thirdparty/g2o)
 
 # Create G2O_LIBS list
 list(APPEND G2O_LIBS types_sba types_slam3d solver_dense)
-if(CHOLMOD_FOUND)
-  list(APPEND G2O_LIBS solver_cholmod)
-else()
-  list(APPEND G2O_LIBS solver_eigen)
-endif()
+list(APPEND G2O_LIBS solver_eigen)
 
 # Setup nlohmann_json
 FetchContent_Declare(
@@ -93,8 +89,13 @@ FetchContent_Declare(
   GIT_TAG v3.10.2
 )
 FetchContent_MakeAvailable(json)
-link_libraries(nlohmann_json::nlohmann_json)
 
 # Add subdirectories
 add_subdirectory(apps)
 add_subdirectory(src)
+
+if(GEOAR_BUILD_TESTS)
+  message("GeoAR Build Tests Enabled")
+  enable_testing()
+  add_subdirectory(test)
+endif()

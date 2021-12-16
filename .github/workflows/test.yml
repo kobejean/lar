@@ -16,7 +16,9 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-    - name: git submodule update
+    - name: update submodules
       run: git submodule update --init --recursive
-    - name: make fast
-      run: make fast
+    - name: build
+      run: make test
+    - name: test
+      run: cd build && ctest
