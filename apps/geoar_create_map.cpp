@@ -10,8 +10,8 @@ using namespace std;
 using namespace geoar;
 
 int main(int argc, const char* argv[]){
-  string input = "../input/snapshot";
-  // string output = "../output/map.g2o";
+  string input = "./input/snapshot";
+  // string output = "./output/map.g2o";
 
   struct stat st;
   int status = stat(input.c_str(), &st);
