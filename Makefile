@@ -7,9 +7,6 @@ else
 endif
 
 CMAKE_ARGS=
-# CMAKE=@ echo "Running cmake to generate Makefile"; \
-# 	mkdir build; \
-# 	cd build && cmake ..
 
 all: CMAKE_ARGS =
 all: configure
