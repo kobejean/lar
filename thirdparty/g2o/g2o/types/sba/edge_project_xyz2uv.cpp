@@ -72,16 +72,16 @@ void EdgeProjectXYZ2UV::linearizeOplus() {
 
   const CameraParameters* cam = static_cast<const CameraParameters*>(parameter(0));
 
-  Eigen::Matrix<number_t, 2, 3, Eigen::ColMajor> intrinsics;
-  intrinsics(0, 0) = -1. / z * cam->focal_length;
-  intrinsics(0, 1) = 0;
-  intrinsics(0, 2) = x / z_2 * cam->focal_length;
+  Eigen::Matrix<number_t, 2, 3, Eigen::ColMajor> J_intr;
+  J_intr(0, 0) = -1. / z * cam->focal_length;
+  J_intr(0, 1) = 0;
+  J_intr(0, 2) = x / z_2 * cam->focal_length;
 
-  intrinsics(1, 0) = 0;
-  intrinsics(1, 1) = -1. / z * cam->focal_length;
-  intrinsics(1, 2) = y / z_2 * cam->focal_length;
+  J_intr(1, 0) = 0;
+  J_intr(1, 1) = -1. / z * cam->focal_length;
+  J_intr(1, 2) = y / z_2 * cam->focal_length;
 
-  _jacobianOplusXi = intrinsics * T.rotation().toRotationMatrix();
+  _jacobianOplusXi = J_intr * T.rotation().toRotationMatrix();
 
   _jacobianOplusXj(0, 0) = x * y / z_2 * cam->focal_length;
   _jacobianOplusXj(0, 1) = -(1 + (x * x / z_2)) * cam->focal_length;
@@ -91,7 +91,7 @@ void EdgeProjectXYZ2UV::linearizeOplus() {
   _jacobianOplusXj(1, 1) = -x * y / z_2 * cam->focal_length;
   _jacobianOplusXj(1, 2) = -x / z * cam->focal_length;
 
-  _jacobianOplusXj.block<2,3>(0, 3) = intrinsics;
+  _jacobianOplusXj.block<2,3>(0, 3) = J_intr;
 }
 
 #ifdef G2O_HAVE_OPENGL
