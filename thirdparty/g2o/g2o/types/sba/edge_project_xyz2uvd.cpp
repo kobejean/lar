@@ -24,7 +24,7 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include "edge_project_xyz2uv.h"
+#include "edge_project_xyz2uvd.h"
 #ifdef G2O_HAVE_OPENGL
 #include "g2o/stuff/opengl_wrapper.h"
 #include "g2o/stuff/opengl_primitives.h"
@@ -32,33 +32,36 @@
 
 namespace g2o {
 
-EdgeProjectXYZ2UV::EdgeProjectXYZ2UV()
-    : BaseBinaryEdge<2, Vector2, VertexPointXYZ, VertexSE3Expmap>() {
+EdgeProjectXYZ2UVD::EdgeProjectXYZ2UVD()
+    : BaseBinaryEdge<3, Vector3, VertexPointXYZ, VertexSE3Expmap>() {
   _cam = 0;
   resizeParameters(1);
   installParameter(_cam, 0);
 }
 
-bool EdgeProjectXYZ2UV::read(std::istream& is) {
+bool EdgeProjectXYZ2UVD::read(std::istream& is) {
   readParamIds(is);
   internal::readVector(is, _measurement);
   return readInformationMatrix(is);
 }
 
-bool EdgeProjectXYZ2UV::write(std::ostream& os) const {
+bool EdgeProjectXYZ2UVD::write(std::ostream& os) const {
   writeParamIds(os);
   internal::writeVector(os, measurement());
   return writeInformationMatrix(os);
 }
 
-void EdgeProjectXYZ2UV::computeError() {
+void EdgeProjectXYZ2UVD::computeError() {
   const VertexSE3Expmap* v1 = static_cast<const VertexSE3Expmap*>(_vertices[1]);
   const VertexPointXYZ* v2 = static_cast<const VertexPointXYZ*>(_vertices[0]);
   const CameraParameters* cam = static_cast<const CameraParameters*>(parameter(0));
-  _error = measurement() - cam->cam_map(v1->estimate().map(v2->estimate()));
+  const Vector3 cam_space = v1->estimate().map(v2->estimate());
+  const Vector2 img_coord = cam->cam_map(cam_space);
+  const Vector3 img_space(img_coord[0], img_coord[1], cam_space[2]);
+  _error = measurement() - img_space;
 }
 
-void EdgeProjectXYZ2UV::linearizeOplus() {
+void EdgeProjectXYZ2UVD::linearizeOplus() {
   VertexSE3Expmap* vj = static_cast<VertexSE3Expmap*>(_vertices[1]);
   SE3Quat T(vj->estimate());
   VertexPointXYZ* vi = static_cast<VertexPointXYZ*>(_vertices[0]);
@@ -72,7 +75,7 @@ void EdgeProjectXYZ2UV::linearizeOplus() {
 
   const CameraParameters* cam = static_cast<const CameraParameters*>(parameter(0));
 
-  Eigen::Matrix<number_t, 2, 3, Eigen::ColMajor> intrinsics;
+  Eigen::Matrix<number_t, 3, 3, Eigen::ColMajor> intrinsics;
   intrinsics(0, 0) = -1. / z * cam->focal_length;
   intrinsics(0, 1) = 0;
   intrinsics(0, 2) = x / z_2 * cam->focal_length;
@@ -81,8 +84,18 @@ void EdgeProjectXYZ2UV::linearizeOplus() {
   intrinsics(1, 1) = -1. / z * cam->focal_length;
   intrinsics(1, 2) = y / z_2 * cam->focal_length;
 
+  intrinsics(2, 0) = 0;
+  intrinsics(2, 1) = 0;
+  intrinsics(2, 2) = 1;
+
   _jacobianOplusXi = intrinsics * T.rotation().toRotationMatrix();
 
+  /*
+  Translation Jacobian:
+  intrinsics * [[   0,  -z,   y],
+                [   z,   0,  -x],
+                [-y*f, x*f,   0]]
+  */
   _jacobianOplusXj(0, 0) = x * y / z_2 * cam->focal_length;
   _jacobianOplusXj(0, 1) = -(1 + (x * x / z_2)) * cam->focal_length;
   _jacobianOplusXj(0, 2) = y / z * cam->focal_length;
@@ -91,12 +104,19 @@ void EdgeProjectXYZ2UV::linearizeOplus() {
   _jacobianOplusXj(1, 1) = -x * y / z_2 * cam->focal_length;
   _jacobianOplusXj(1, 2) = -x / z * cam->focal_length;
 
-  _jacobianOplusXj.block<2,3>(0, 3) = intrinsics;
+  _jacobianOplusXj(2, 0) = -y * cam->focal_length;
+  _jacobianOplusXj(2, 1) = x * cam->focal_length;
+  _jacobianOplusXj(2, 2) = 0;
+
+  /*
+  Rotation Jacobian:
+  */
+  _jacobianOplusXj.block<3,3>(0, 3) = intrinsics;
 }
 
 #ifdef G2O_HAVE_OPENGL
 
-  Eigen::Vector3d EdgeProjectXYZ2UVDrawAction::getDirectionVector(const CameraParameters* cam, Eigen::Vector2d kpt) {
+  Eigen::Vector3d EdgeProjectXYZ2UVDDrawAction::getDirectionVector(const CameraParameters* cam, Eigen::Vector2d kpt) {
     double scale = 1.0 / (double)cam->focal_length;
     double x = (kpt.x() - cam->principle_point[0]) * scale;
     double y = (kpt.y() - cam->principle_point[1]) * scale;
@@ -104,9 +124,9 @@ void EdgeProjectXYZ2UV::linearizeOplus() {
     return Eigen::Vector3d(x, y, z).normalized();
   }
 
-  EdgeProjectXYZ2UVDrawAction::EdgeProjectXYZ2UVDrawAction(): DrawAction(typeid(EdgeProjectXYZ2UV).name()){}
+  EdgeProjectXYZ2UVDDrawAction::EdgeProjectXYZ2UVDDrawAction(): DrawAction(typeid(EdgeProjectXYZ2UVD).name()){}
 
-  HyperGraphElementAction* EdgeProjectXYZ2UVDrawAction::operator()(HyperGraph::HyperGraphElement* element,
+  HyperGraphElementAction* EdgeProjectXYZ2UVDDrawAction::operator()(HyperGraph::HyperGraphElement* element,
                HyperGraphElementAction::Parameters* params_){
     if (typeid(*element).name()!=_typeName)
       return nullptr;
@@ -117,9 +137,10 @@ void EdgeProjectXYZ2UV::linearizeOplus() {
     if (_show && !_show->value())
       return this;
 
-    EdgeProjectXYZ2UV* e =  static_cast<EdgeProjectXYZ2UV*>(element);
+    EdgeProjectXYZ2UVD* e =  static_cast<EdgeProjectXYZ2UVD*>(element);
     const CameraParameters* cam = static_cast<const CameraParameters*>(e->parameter(0));
-    Eigen::Vector2d kpt = e->measurement();
+    Eigen::Vector3d img_space = e->measurement();
+    Eigen::Vector2d kpt(img_space[0], img_space[1]);
     Eigen::Vector3d direction = getDirectionVector(cam, kpt);
 
     VertexPointXYZ* fromEdge = static_cast<VertexPointXYZ*>(e->vertices()[0]);
@@ -131,7 +152,9 @@ void EdgeProjectXYZ2UV::linearizeOplus() {
     Eigen::Vector3d toTranslation = toEdge->estimate().inverse().translation();
 
     Eigen::Vector3d compliment = direction * (toTranslation-fromTranslation).norm();
-    Eigen::Vector3d target = toEdge->estimate().inverse() * compliment;
+    Eigen::Vector3d measurement = direction * img_space[2];
+    Eigen::Vector3d target = toEdge->estimate().inverse() * measurement;
+    Eigen::Vector3d continuation = toEdge->estimate().inverse() * compliment;
 
     glPushAttrib(GL_ENABLE_BIT);
     glDisable(GL_LIGHTING);
@@ -142,11 +165,17 @@ void EdgeProjectXYZ2UV::linearizeOplus() {
     glVertex3f(toTranslation.x(),toTranslation.y(),toTranslation.z());
     glVertex3f(target.x(),target.y(),target.z());
 
+    // 
+    glColor3f(0.7f, 0.7f, 0.7f);
+    glBegin(GL_LINES);
+    glVertex3f(target.x(),target.y(),target.z());
+    glVertex3f(continuation.x(),continuation.y(),continuation.z());
+
     
     // Draw line to vertex
     glColor3f(0.7f, 0.4f, 0.4f);
     glBegin(GL_LINES);
-    glVertex3f(target.x(),target.y(),target.z());
+    glVertex3f(continuation.x(),continuation.y(),continuation.z());
     glVertex3f(fromTranslation.x(),fromTranslation.y(),fromTranslation.z());
 
     glEnd();

@@ -40,6 +40,7 @@
 #include "edge_project_stereo_xyz_onlypose.h"
 #include "edge_project_xyz.h"
 #include "edge_project_xyz2uv.h"
+#include "edge_project_xyz2uvd.h"
 #include "edge_project_xyz2uvu.h"
 #include "edge_project_xyz_onlypose.h"
 #include "edge_se3_expmap.h"

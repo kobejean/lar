@@ -24,8 +24,8 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef G2O_SBA_EDGEPROJECTXYZ2UV_H
-#define G2O_SBA_EDGEPROJECTXYZ2UV_H
+#ifndef G2O_SBA_EDGEPROJECTXYZ2UVD_H
+#define G2O_SBA_EDGEPROJECTXYZ2UVD_H
 
 #include "g2o/core/base_binary_edge.h"
 #include "g2o/types/slam3d/vertex_pointxyz.h"
@@ -35,12 +35,12 @@
 
 namespace g2o {
 
-class G2O_TYPES_SBA_API EdgeProjectXYZ2UV
-    : public BaseBinaryEdge<2, Vector2, VertexPointXYZ, VertexSE3Expmap> {
+class G2O_TYPES_SBA_API EdgeProjectXYZ2UVD
+    : public BaseBinaryEdge<3, Vector3, VertexPointXYZ, VertexSE3Expmap> {
  public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
 
-  EdgeProjectXYZ2UV();
+  EdgeProjectXYZ2UVD();
   bool read(std::istream& is);
   bool write(std::ostream& os) const;
   void computeError();
@@ -55,9 +55,9 @@ class G2O_TYPES_SBA_API EdgeProjectXYZ2UV
   /**
    * \brief Visualize a 3D pose-pose constraint
    */
-  class G2O_TYPES_SBA_API EdgeProjectXYZ2UVDrawAction: public DrawAction{
+  class G2O_TYPES_SBA_API EdgeProjectXYZ2UVDDrawAction: public DrawAction{
   public:
-    EdgeProjectXYZ2UVDrawAction();
+    EdgeProjectXYZ2UVDDrawAction();
     virtual HyperGraphElementAction* operator()(HyperGraph::HyperGraphElement* element, 
             HyperGraphElementAction::Parameters* params_);
   private:

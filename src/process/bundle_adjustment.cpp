@@ -16,6 +16,7 @@ namespace g2o {
   G2O_REGISTER_TYPE(VERTEX_SE3:EXPMAP, VertexSE3Expmap);
   G2O_REGISTER_TYPE(EDGE_SE3:EXPMAP, EdgeSE3Expmap);
   G2O_REGISTER_TYPE(EDGE_PROJECT_XYZ2UV:EXPMAP, EdgeProjectXYZ2UV);
+  G2O_REGISTER_TYPE(EDGE_PROJECT_XYZ2UVD:EXPMAP, EdgeProjectXYZ2UVD);
 
   G2O_REGISTER_TYPE_GROUP(slam3d);
   G2O_REGISTER_TYPE(VERTEX_TRACKXYZ, VertexPointXYZ);
@@ -87,13 +88,13 @@ namespace geoar {
         Landmark &landmark = data->map.landmarkDatabase.landmarks[landmark_idx];
         if (landmark.sightings >= 3) {
           cv::KeyPoint keypoint = frame.kpts[j];
-          Vector2d kp = Vector2d(keypoint.pt.x, keypoint.pt.y);
+          Vector3d kp(keypoint.pt.x, keypoint.pt.y, frame.depth[j]);
 
-          g2o::EdgeProjectXYZ2UV * e = new g2o::EdgeProjectXYZ2UV();
+          g2o::EdgeProjectXYZ2UVD * e = new g2o::EdgeProjectXYZ2UVD();
           e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(landmark_idx)));
           e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(frame_id)));
           e->setMeasurement(kp);
-          e->information() = Matrix2d::Identity();
+          e->information() = Vector3d(1.,1.,1e-15).asDiagonal();
           e->setParameterId(0, i+1);
           // g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
           // rk->setDelta(100.0);

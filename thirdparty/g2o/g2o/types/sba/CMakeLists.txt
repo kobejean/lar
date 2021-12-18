@@ -19,7 +19,7 @@ add_library(types_sba ${G2O_LIB_TYPE}
   vertex_se3_expmap.cpp vertex_se3_expmap.h
   # six_dof_expmap edges
   edge_project_xyz2uv.cpp edge_project_xyz2uv.h
-  edge_project_xyz2uv.cpp edge_project_xyz2uv.h
+  edge_project_xyz2uvd.cpp edge_project_xyz2uvd.h
   edge_project_xyz2uvu.cpp edge_project_xyz2uvu.h
   edge_project_xyz.cpp edge_project_xyz.h
   edge_project_psi2uv.cpp edge_project_psi2uv.h
