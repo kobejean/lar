@@ -83,6 +83,12 @@ void EdgeProjectXYZ2UV::linearizeOplus() {
 
   _jacobianOplusXi = J_intr * T.rotation().toRotationMatrix();
 
+  /*
+  Translation Jacobian:
+  J_intr * [[   0,  -z,   y],
+            [   z,   0,  -x],
+            [-y*f, x*f,   0]]
+  */
   _jacobianOplusXj(0, 0) = x * y / z_2 * cam->focal_length;
   _jacobianOplusXj(0, 1) = -(1 + (x * x / z_2)) * cam->focal_length;
   _jacobianOplusXj(0, 2) = y / z * cam->focal_length;
@@ -91,6 +97,9 @@ void EdgeProjectXYZ2UV::linearizeOplus() {
   _jacobianOplusXj(1, 1) = -x * y / z_2 * cam->focal_length;
   _jacobianOplusXj(1, 2) = -x / z * cam->focal_length;
 
+  /*
+  Rotation Jacobian:
+  */
   _jacobianOplusXj.block<2,3>(0, 3) = J_intr;
 }
 

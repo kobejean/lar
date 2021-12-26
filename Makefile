@@ -8,15 +8,15 @@ endif
 
 CMAKE_ARGS=
 
-all: CMAKE_ARGS =
+all: CMAKE_ARGS = -DCMAKE_BUILD_TYPE=Release
 all: configure
 	$(MAKE) $(QUIET) -C build
 
-fast: CMAKE_ARGS =
+fast: CMAKE_ARGS = -DCMAKE_BUILD_TYPE=Release
 fast: configure
 	$(MAKE) $(QUIET) -C build -j 8
 
-tests: CMAKE_ARGS = -DGEOAR_BUILD_TESTS=ON
+tests: CMAKE_ARGS = -DGEOAR_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
 tests: configure
 	$(MAKE) $(QUIET) -C build -j 8
 

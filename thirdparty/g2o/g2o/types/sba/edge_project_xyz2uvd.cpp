@@ -93,8 +93,8 @@ void EdgeProjectXYZ2UVD::linearizeOplus() {
   /*
   Translation Jacobian:
   J_intr * [[   0,  -z,   y],
-                [   z,   0,  -x],
-                [-y*f, x*f,   0]]
+            [   z,   0,  -x],
+            [-y*f, x*f,   0]]
   */
   _jacobianOplusXj(0, 0) = x * y / z_2 * cam->focal_length;
   _jacobianOplusXj(0, 1) = -(1 + (x * x / z_2)) * cam->focal_length;

@@ -105,9 +105,20 @@
     "specialfunctions": "cpp",
     "splines": "cpp",
     "*.evaluator": "cpp",
-    "*.traits": "cpp"
+    "*.traits": "cpp",
+    "__availability": "cpp",
+    "matrixfunctions": "cpp",
+    "polynomials": "cpp",
+    "*.inc": "cpp"
   },
-  "C_Cpp.default.cppStandard": "c++14",
+  "C_Cpp.default.cppStandard": "c++17",
   "C_Cpp.default.intelliSenseMode": "gcc-arm64",
-  "editor.tabSize": 2
+  "C_Cpp.intelliSenseEngine": "Tag Parser",
+  "editor.tabSize": 2,
+  "C_Cpp.default.includePath": [
+    "${default}",
+    "${workspaceFolder}/include",
+    "${workspaceFolder}/thirdparty/include",
+    "${workspaceFolder}/thirdparty/include/eigen3"
+  ]
 }
