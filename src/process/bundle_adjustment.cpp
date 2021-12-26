@@ -35,117 +35,118 @@ namespace geoar {
 
   void BundleAdjustment::construct(std::string directory) {
 
+    // Add landmarks to graph
     size_t landmark_count = data->map.landmarkDatabase.landmarks.size();
     for (size_t i = 0; i < landmark_count; i++) {
       Landmark &landmark = data->map.landmarkDatabase.landmarks[i];
-      if (landmark.sightings >= 3) {
-        // Create feature point vertex
-        g2o::VertexPointXYZ * vertex = new g2o::VertexPointXYZ();
-        vertex->setId(i);
-        // vertex->setFixed(true);
-        vertex->setMarginalized(true);
-        vertex->setEstimate(landmark.position);
-        optimizer.addVertex(vertex);
-      }
+      _stats.total_usable_landmarks += addLandmark(landmark, i);
     }
 
+    // Use frame data to add poses and measurements
     int frame_id = landmark_count;
     for (size_t i = 0; i < data->frames.size(); i++) {
       Frame const& frame = data->frames[i];
-
-
-      g2o::VertexSE3Expmap * vertex = new g2o::VertexSE3Expmap();
-      vertex->setId(frame_id);
-      vertex->setEstimate(frame.pose);
-      vertex->setFixed(frame_id == landmark_count);
-      optimizer.addVertex(vertex);
+      addPose(frame.pose, frame_id, frame_id == landmark_count);
 
       if (frame_id > landmark_count) {
-        g2o::VertexSE3Expmap* v1 = dynamic_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(frame_id-1));
-        g2o::VertexSE3Expmap* v2 = dynamic_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(frame_id));
-        g2o::SE3Quat m = v2->estimate() * v1->estimate().inverse();
-
-        g2o::EdgeSE3Expmap * e = new g2o::EdgeSE3Expmap();
-        e->setVertex(0, v1);
-        e->setVertex(1, v2);
-        e->setMeasurement(m);
-        e->information() = Eigen::MatrixXd::Identity(6,6) * 80000000;
-        optimizer.addEdge(e);
+        addOdometry(frame_id);
       }
 
-      // Get camera intrinsics
-      double focal_length = frame.intrinsics["focalLength"];
-      Vector2d principle_point(frame.intrinsics["principlePoint"]["x"], frame.intrinsics["principlePoint"]["y"]);
-      auto * cam_params = new g2o::CameraParameters(focal_length, principle_point, 0.);
-      cam_params->setId(i+1);
-      if (!optimizer.addParameter(cam_params)) {
-        assert(false);
-      }
+      size_t params_id = i+1;
+      addIntrinsics(frame.intrinsics, params_id);
+      size_t usable_landmarks = addLandmarkMeasurements(frame, frame_id, params_id);
 
-      for (size_t j = 0; j < frame.landmarks.size(); j++) {
-        
-        size_t landmark_idx = frame.landmarks[j];
-        Landmark &landmark = data->map.landmarkDatabase.landmarks[landmark_idx];
-        if (landmark.sightings >= 3) {
-          cv::KeyPoint keypoint = frame.kpts[j];
-          Vector3d kp(keypoint.pt.x, keypoint.pt.y, frame.depth[j]);
-
-          g2o::EdgeProjectXYZ2UVD * e = new g2o::EdgeProjectXYZ2UVD();
-          e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(landmark_idx)));
-          e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(frame_id)));
-          e->setMeasurement(kp);
-          e->information() = Vector3d(1.,1.,1e-15).asDiagonal();
-          e->setParameterId(0, i+1);
-          // g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
-          // rk->setDelta(100.0);
-          // e->setRobustKernel(rk);
-          optimizer.addEdge(e);
-        }
-      }
+      // Populate stats
+      _stats.landmarks.push_back(frame.landmarks.size());
+      _stats.usable_landmarks.push_back(usable_landmarks);
 
       frame_id++;
     }
     
-    printStats();
+    _stats.print();
   }
 
   // Private methods
 
-  void BundleAdjustment::printStats() {
-    int count = 0;
-    for (size_t i = 0; i < data->map.landmarkDatabase.landmarks.size(); i++) {
-      if (data->map.landmarkDatabase.landmarks[i].sightings >= 3) {
-        count++;
-      }
+  void BundleAdjustment::Stats::print() {
+
+    for (size_t i = 0; i < landmarks.size(); i++) {
+      cout << "frame landmarks: " << landmarks[i] << endl;
+      cout << "frame usable landmarks: " << usable_landmarks[i] << endl;
     }
-    cout << "usable landmarks: " << count << endl;
 
-    for (Frame const& frame : data->frames) {
-      // Projection projection(frame.frame_data);
-      int count = 0;
-      for (size_t i = 0; i < frame.landmarks.size(); i++) {
-        size_t landmark_idx = frame.landmarks[i];
-        Landmark &landmark = data->map.landmarkDatabase.landmarks[landmark_idx];
-        if (landmark.sightings >= 3) {
-          count++;
-        }
+    cout << "total usable landmarks: " << total_usable_landmarks << endl;
+  }
 
-        // cv::Point2f pt = projection.projectToImage(landmark.position);
-        // cv::Point2f diff = frame.kpts[i].pt - pt;
-        // float dist = sqrt(diff.dot(diff));
-        // float ang_diff = angleDifference(frame.kpts[i].angle, landmark.kpt.angle);
-        // if (dist > 200.0f || ang_diff > 30.0f) {
-        //   cout << "diff: " << diff << endl;
-        //   cout << "dist: " << dist << " ang_diff: " << ang_diff << endl;
-        // }
-      }
-      cout << "frame landmarks: " << frame.landmarks.size() << endl;
-      cout << "frame usable landmarks: " << count << endl;
+  bool BundleAdjustment::addLandmark(Landmark const &landmark, size_t id) {
+    if (landmark.sightings >= 3) {
+      // Create feature point vertex
+      g2o::VertexPointXYZ * vertex = new g2o::VertexPointXYZ();
+      vertex->setId(id);
+      vertex->setMarginalized(true);
+      vertex->setEstimate(landmark.position);
+      optimizer.addVertex(vertex);
+      return true;
+    }
+    return false;
+  }
+
+  void BundleAdjustment::addPose(g2o::SE3Quat const &pose, size_t id, bool fixed) {
+    g2o::VertexSE3Expmap * vertex = new g2o::VertexSE3Expmap();
+    vertex->setId(id);
+    vertex->setEstimate(pose);
+    vertex->setFixed(fixed);
+    optimizer.addVertex(vertex);
+  }
+
+  void BundleAdjustment::addOdometry(size_t last_frame_id) {
+    g2o::VertexSE3Expmap* v1 = dynamic_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(last_frame_id-1));
+    g2o::VertexSE3Expmap* v2 = dynamic_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(last_frame_id));
+    g2o::SE3Quat m = v2->estimate() * v1->estimate().inverse();
+
+    g2o::EdgeSE3Expmap * e = new g2o::EdgeSE3Expmap();
+    e->setVertex(0, v1);
+    e->setVertex(1, v2);
+    e->setMeasurement(m);
+    e->information() = Eigen::MatrixXd::Identity(6,6) * 80000000;
+    optimizer.addEdge(e);
+  }
+
+  void BundleAdjustment::addIntrinsics(json const &intrinsics, size_t id) {
+    // Get camera intrinsics
+    double focal_length = intrinsics["focalLength"];
+    Vector2d principle_point(intrinsics["principlePoint"]["x"], intrinsics["principlePoint"]["y"]);
+    auto * cam_params = new g2o::CameraParameters(focal_length, principle_point, 0.);
+    cam_params->setId(id);
+    if (!optimizer.addParameter(cam_params)) {
+      assert(false);
     }
   }
 
-  float BundleAdjustment::angleDifference(float alpha, float beta) {
-    float phi = fmod(abs(beta - alpha), 360.f);
-    return phi > 180.f ? 360.f - phi : phi;
+  size_t BundleAdjustment::addLandmarkMeasurements(Frame const &frame, size_t frame_id, size_t params_id) {
+    size_t useable = 0;
+
+    for (size_t j = 0; j < frame.landmarks.size(); j++) {
+      size_t landmark_id = frame.landmarks[j];
+      Landmark &landmark = data->map.landmarkDatabase.landmarks[landmark_id];
+      cv::KeyPoint keypoint = frame.kpts[j];
+      Vector3d kp(keypoint.pt.x, keypoint.pt.y, frame.depth[j]);
+      
+      if (landmark.sightings >= 3) {
+        g2o::EdgeProjectXYZ2UVD * edge = new g2o::EdgeProjectXYZ2UVD();
+        edge->setVertex(0, optimizer.vertex(landmark_id));
+        edge->setVertex(1, optimizer.vertex(frame_id));
+        edge->setMeasurement(kp);
+        edge->information() = Vector3d(1.,1.,1e-15).asDiagonal();
+        edge->setParameterId(0, params_id);
+        // g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
+        // rk->setDelta(100.0);
+        // e->setRobustKernel(rk);
+        optimizer.addEdge(edge);
+        useable++;
+      }
+    }
+
+    return useable;
   }
 }
