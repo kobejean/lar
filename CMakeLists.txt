@@ -74,12 +74,7 @@ list(APPEND G2O_LIBS types_sba types_slam3d solver_dense)
 list(APPEND G2O_LIBS solver_eigen)
 
 # Setup nlohmann_json
-FetchContent_Declare(
-  json
-  GIT_REPOSITORY https://github.com/ArthurSonzogni/nlohmann_json_cmake_fetchcontent
-  GIT_TAG v3.10.2
-)
-FetchContent_MakeAvailable(json)
+add_subdirectory(thirdparty/json)
 
 # Add subdirectories
 add_subdirectory(apps)

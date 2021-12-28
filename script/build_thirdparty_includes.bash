@@ -9,6 +9,13 @@ mkdir $TMP_DIR
 cd $TMP_DIR
 
 mkdir $TMP_INSTALL_DIR
+cmake "$PROJECT_ROOT_DIR/thirdparty/json" -DCMAKE_INSTALL_PREFIX=$TMP_INSTALL_DIR
+make install -j 8
+EIGEN_STATUS=$?
+cp -R "$TMP_INSTALL_DIR/include/nlohmann" $INCLUDE_DIR
+rm -r *
+
+mkdir $TMP_INSTALL_DIR
 cmake "$PROJECT_ROOT_DIR/thirdparty/eigen3" -DCMAKE_INSTALL_PREFIX=$TMP_INSTALL_DIR
 make install -j 8
 EIGEN_STATUS=$?

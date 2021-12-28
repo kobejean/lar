@@ -6,8 +6,7 @@
                 "${workspaceFolder}/include",
                 "${workspaceFolder}/thirdparty/include",
                 "${workspaceFolder}/thirdparty/include/eigen3",
-                "${workspaceFolder}/thirdparty/include/g2o/EXTERNAL",
-                "${workspaceFolder}/build/_deps/json-src/include"
+                "${workspaceFolder}/thirdparty/include/g2o/EXTERNAL"
             ],
             "defines": [
                 "G2O_USE_VENDORED_CERES"
