@@ -51,7 +51,7 @@ namespace geoar {
       void addPose(g2o::SE3Quat const &pose, size_t id, bool fixed);
       void addOdometry(size_t last_frame_id);
       void addIntrinsics(json const &intrinsics, size_t id);
-      size_t addLandmarkMeasurements(Frame const &frame, size_t frame_id, size_t params_id);
+      void addLandmarkMeasurements(Frame const &frame, size_t frame_id, size_t params_id);
   };
 
 }

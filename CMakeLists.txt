@@ -59,6 +59,14 @@ list(APPEND OpenCV_LIBS opencv_core opencv_features2d opencv_imgcodecs)
 
 # Setup G2O
 add_definitions(-DG2O_USE_VENDORED_CERES) # TODO: Figure out why we have specify this
+add_definitions(-DG2O_BUILD_APPS=0)
+add_definitions(-DG2O_BUILD_EXAMPLES=0)
+add_definitions(-DG2O_BUILD_SLAM2D_TYPES=0)
+add_definitions(-DG2O_BUILD_SLAM2D_ADDON_TYPES=0)
+add_definitions(-DG2O_BUILD_DATA_TYPES=0)
+add_definitions(-DG2O_BUILD_SCLAM2D_TYPES=0)
+add_definitions(-DG2O_BUILD_ICP_TYPES=0)
+add_definitions(-DG2O_BUILD_SIM3_TYPES=0)
 add_subdirectory(thirdparty/g2o)
 
 # Create G2O_LIBS list
@@ -82,3 +90,38 @@ if(GEOAR_BUILD_TESTS)
   enable_testing()
   add_subdirectory(test)
 endif()
+
+set_target_properties(
+  g2o_cli_application
+  static_target
+  static_dynamic_function_fit
+  constant_velocity_target
+  ba_demo
+  bal_example
+  sclam_odom_laser
+  sclam_laser_calib
+  curve_fit
+  convert_sba_slam3d
+  sba_demo
+  ba_anchored_inverse_depth_demo
+  sclam_pure_calibration
+  optimize_sphere_by_sim3
+  gicp_sba_demo
+  g2o_hierarchical_application
+  create_sphere
+  tutorial_slam2d
+  simulator_3d_plane
+  g2o_cli_application
+  gicp_demo
+  polynomial_fit
+  simulator_3d_line
+  circle_fit
+  simple_optimize
+  g2o_cli_library
+  # g2o_anonymize_observations
+  # g2o_simulator2d
+  # g2o_simulator3d
+  # slam2d_g2o
+  
+  PROPERTIES EXCLUDE_FROM_ALL ON
+)

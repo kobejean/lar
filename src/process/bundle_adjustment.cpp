@@ -43,44 +43,33 @@ namespace geoar {
     }
 
     // Use frame data to add poses and measurements
-    int frame_id = landmark_count;
+    size_t frame_id = landmark_count;
     for (size_t i = 0; i < data->frames.size(); i++) {
+      // Add camera pose vertex
       Frame const& frame = data->frames[i];
       addPose(frame.pose, frame_id, frame_id == landmark_count);
 
+      // Add odometry measurement edge if not first frame
       if (frame_id > landmark_count) {
         addOdometry(frame_id);
       }
 
+      // Add camera intrinsics parameters
       size_t params_id = i+1;
       addIntrinsics(frame.intrinsics, params_id);
-      size_t usable_landmarks = addLandmarkMeasurements(frame, frame_id, params_id);
-
-      // Populate stats
-      _stats.landmarks.push_back(frame.landmarks.size());
-      _stats.usable_landmarks.push_back(usable_landmarks);
+      addLandmarkMeasurements(frame, frame_id, params_id);
 
       frame_id++;
     }
     
+    // Print statistics for debuging purposes
     _stats.print();
   }
 
   // Private methods
 
-  void BundleAdjustment::Stats::print() {
-
-    for (size_t i = 0; i < landmarks.size(); i++) {
-      cout << "frame landmarks: " << landmarks[i] << endl;
-      cout << "frame usable landmarks: " << usable_landmarks[i] << endl;
-    }
-
-    cout << "total usable landmarks: " << total_usable_landmarks << endl;
-  }
-
   bool BundleAdjustment::addLandmark(Landmark const &landmark, size_t id) {
     if (landmark.sightings >= 3) {
-      // Create feature point vertex
       g2o::VertexPointXYZ * vertex = new g2o::VertexPointXYZ();
       vertex->setId(id);
       vertex->setMarginalized(true);
@@ -123,8 +112,8 @@ namespace geoar {
     }
   }
 
-  size_t BundleAdjustment::addLandmarkMeasurements(Frame const &frame, size_t frame_id, size_t params_id) {
-    size_t useable = 0;
+  void BundleAdjustment::addLandmarkMeasurements(Frame const &frame, size_t frame_id, size_t params_id) {
+    size_t usable_landmarks = 0;
 
     for (size_t j = 0; j < frame.landmarks.size(); j++) {
       size_t landmark_id = frame.landmarks[j];
@@ -143,10 +132,23 @@ namespace geoar {
         // rk->setDelta(100.0);
         // e->setRobustKernel(rk);
         optimizer.addEdge(edge);
-        useable++;
+
+        usable_landmarks++;
       }
     }
 
-    return useable;
+    // Populate stats
+    _stats.landmarks.push_back(frame.landmarks.size());
+    _stats.usable_landmarks.push_back(usable_landmarks);
+  }
+
+  void BundleAdjustment::Stats::print() {
+
+    for (size_t i = 0; i < landmarks.size(); i++) {
+      cout << "frame landmarks: " << landmarks[i] << endl;
+      cout << "frame usable landmarks: " << usable_landmarks[i] << endl;
+    }
+
+    cout << "total usable landmarks: " << total_usable_landmarks << endl;
   }
 }
