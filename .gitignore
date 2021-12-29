@@ -5,6 +5,3 @@ output
 lib
 tmp
 **/.DS_Store
-
-# ignore thirdparty includes
-thirdparty/include 

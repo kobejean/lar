@@ -11,7 +11,7 @@ cd $TMP_DIR
 mkdir $TMP_INSTALL_DIR
 cmake "$PROJECT_ROOT_DIR/thirdparty/json" -DCMAKE_INSTALL_PREFIX=$TMP_INSTALL_DIR
 make install -j 8
-EIGEN_STATUS=$?
+NLOHMANN_STATUS=$?
 cp -R "$TMP_INSTALL_DIR/include/nlohmann" $INCLUDE_DIR
 rm -r *
 
@@ -60,11 +60,11 @@ G2O_STATUS=$?
 cp -R "$TMP_INSTALL_DIR/include/g2o" $INCLUDE_DIR
 rm -r *
 
-if [ $EIGEN_STATUS -eq 0 ] && [ $OPENCV_STATUS -eq 0 ] && [ $G2O_STATUS -eq 0 ]
+if [ $NLOHMANN_STATUS -eq 0 ] && [ $EIGEN_STATUS -eq 0 ] && [ $OPENCV_STATUS -eq 0 ] && [ $G2O_STATUS -eq 0 ]
 then
     echo "Third Party Includes Successfully Generated"
     rm -rf $TMP_DIR
 else
     cd $PROJECT_ROOT_DIR
-    rm -rf $INCLUDE_DIR $TMP_DIR
+    # rm -rf $INCLUDE_DIR $TMP_DIR
 fi

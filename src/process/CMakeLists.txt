@@ -16,6 +16,7 @@ add_library(geoar_process
   vision.cpp
   ${HEADER_LIST}
 )
+# add_dependencies(geoar_process OpenCV)
 target_include_directories(geoar_process PUBLIC ${PROJECT_SOURCE_DIR}/include)
 target_link_libraries(geoar_process 
   types_sba types_slam3d solver_eigen
