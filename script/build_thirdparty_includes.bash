@@ -9,6 +9,13 @@ mkdir $TMP_DIR
 cd $TMP_DIR
 
 mkdir $TMP_INSTALL_DIR
+cmake "$PROJECT_ROOT_DIR/thirdparty/json" -DCMAKE_INSTALL_PREFIX=$TMP_INSTALL_DIR
+make install -j 8
+EIGEN_STATUS=$?
+cp -R "$TMP_INSTALL_DIR/include/nlohmann" $INCLUDE_DIR
+rm -r *
+
+mkdir $TMP_INSTALL_DIR
 cmake "$PROJECT_ROOT_DIR/thirdparty/eigen3" -DCMAKE_INSTALL_PREFIX=$TMP_INSTALL_DIR
 make install -j 8
 EIGEN_STATUS=$?
@@ -32,7 +39,7 @@ cmake "$PROJECT_ROOT_DIR/thirdparty/opencv" -DCMAKE_INSTALL_PREFIX=$TMP_INSTALL_
     -DBUILD_OPENEXR=OFF \
     -DWITH_PNG=OFF \
     -DWITH_JPEG=ON \
-    -DWITH_TIFF=ON \
+    -DWITH_TIFF=OFF \
     -DWITH_WEBP=OFF \
     -DWITH_OPENJPEG=OFF \
     -DWITH_JASPER=OFF \
