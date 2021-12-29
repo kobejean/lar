@@ -5,6 +5,7 @@
 #include <opencv2/imgproc.hpp>
 
 #include "geoar/core/landmark.h"
+#include "geoar/process/depth.h"
 #include "geoar/process/projection.h"
 #include "geoar/process/map_processing_data.h"
 
@@ -40,29 +41,36 @@ namespace geoar {
     vision.extractFeatures(image, cv::noArray(), frame.kpts, desc);
     std::cout << "features: " << frame.kpts.size() << std::endl;
 
-    frame.depth = getDepthValues(frame.kpts, depth_filepath, image.size());
-    frame.landmarks = getLandmarks(frame.kpts, desc, frame.depth, frame_data);
+    // Retreive dapth values
+    SavedDepth depth(image.size(), depth_filepath);
+    depth.loadDepthMap();
+    frame.depth = depth.at(frame.kpts);
+    depth.unloadDepthMap();
+
+    // Get landmarks
+    frame.landmarks = getLandmarks(frame, desc);
 
     this->frames.push_back(frame);
   }
 
   // Private methods
 
-  std::vector<size_t> MapProcessingData::getLandmarks(std::vector<cv::KeyPoint> &kpts, cv::Mat &desc, vector<float> &depth, nlohmann::json& frame_data) {
+  std::vector<size_t> MapProcessingData::getLandmarks(Frame &frame, cv::Mat &desc) {
     // Filter out features that have been matched
     std::map<size_t, size_t> matches = getMatches(desc);
-    Projection projection(frame_data);
+    Projection projection(frame.frame_data);
 
+    size_t landmark_count = frame.kpts.size();
     std::vector<Landmark> new_landmarks;
-    new_landmarks.reserve(kpts.size());
+    new_landmarks.reserve(landmark_count);
     std::vector<size_t> landmark_ids;
-    landmark_ids.reserve(kpts.size());
+    landmark_ids.reserve(landmark_count);
 
-    for (size_t i = 0; i < kpts.size(); i++) {
+    for (size_t i = 0; i < landmark_count; i++) {
       if (matches.find(i) == matches.end()) {
         // No match so create landmark
-        Eigen::Vector3d pt3d = projection.projectToWorld(kpts[i].pt, depth[i]);
-        Landmark landmark(pt3d, kpts[i], desc.row(i));
+        Eigen::Vector3d pt3d = projection.projectToWorld(frame.kpts[i].pt, frame.depth[i]);
+        Landmark landmark(pt3d, frame.kpts[i], desc.row(i));
 
         landmark_ids.push_back(map.landmarks.size());
         new_landmarks.push_back(landmark);
@@ -75,25 +83,6 @@ namespace geoar {
 
     map.landmarks.insert(new_landmarks);
     return landmark_ids;
-  }
-
-  vector<float> MapProcessingData::getDepthValues(vector<cv::KeyPoint> &kpts, std::string depth_filepath, cv::Size img_size) {
-    // Load depth map
-    std::cout << "loading: " << depth_filepath << std::endl;
-    cv::Mat depth = cv::imread(depth_filepath, cv::IMREAD_UNCHANGED);
-    cv::resize(depth, depth, img_size, 0, 0, cv::INTER_LINEAR);
-
-    vector<float> depth_values;
-    depth_values.reserve(kpts.size());
-
-    for (cv::KeyPoint const& kpt : kpts) {
-      // Get depth value
-      int idx_x = round(kpt.pt.x), idx_y = round(kpt.pt.y);
-      float depth_value = depth.at<float>(idx_y, idx_x);
-      depth_values.push_back(depth_value);
-    }
-
-    return depth_values;
   }
 
   std::map<size_t, size_t> MapProcessingData::getMatches(cv::Mat &desc) {

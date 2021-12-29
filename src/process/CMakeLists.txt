@@ -1,5 +1,6 @@
 set(HEADER_LIST 
   "${PROJECT_SOURCE_DIR}/include/geoar/process/bundle_adjustment.h"
+  "${PROJECT_SOURCE_DIR}/include/geoar/process/depth.h"
   "${PROJECT_SOURCE_DIR}/include/geoar/process/map_processing_data.h"
   "${PROJECT_SOURCE_DIR}/include/geoar/process/map_processor.h"
   "${PROJECT_SOURCE_DIR}/include/geoar/process/projection.h"
@@ -7,8 +8,9 @@ set(HEADER_LIST
 )
 
 add_library(geoar_process
-  map_processing_data.cpp
   bundle_adjustment.cpp
+  depth.cpp
+  map_processing_data.cpp
   map_processor.cpp
   projection.cpp
   vision.cpp
@@ -22,7 +24,3 @@ target_link_libraries(geoar_process
   Eigen3::Eigen
   geoar_core
 )
-
-# Create G2O_LIBS list
-# list(APPEND G2O_LIBS types_sba types_slam3d solver_dense)
-# list(APPEND G2O_LIBS solver_eigen)

@@ -18,7 +18,7 @@ namespace geoar {
       nlohmann::json intrinsics;
       g2o::SE3Quat pose;
       vector<cv::KeyPoint> kpts;
-      vector<float> depth;
+      vector<double> depth;
       vector<size_t> landmarks;
 
       Frame(nlohmann::json& frame_data);

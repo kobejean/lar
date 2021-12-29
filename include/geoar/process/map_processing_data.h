@@ -23,8 +23,7 @@ namespace geoar {
       void loadFrameData(nlohmann::json& frame_data, std::string directory);
 
     private:
-      std::vector<size_t> getLandmarks(std::vector<cv::KeyPoint> &kpts, cv::Mat &desc, vector<float> &depth, nlohmann::json& transform);
-      std::vector<float> getDepthValues(std::vector<cv::KeyPoint> &kpts, std::string depth_filepath, cv::Size img_size);
+      std::vector<size_t> getLandmarks(Frame &frame, cv::Mat &desc);
       std::map<size_t, size_t> getMatches(cv::Mat &desc);
       std::string getPathPrefix(int id, std::string directory);
   };
