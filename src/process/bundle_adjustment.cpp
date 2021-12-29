@@ -1,21 +1,20 @@
 #include <stdint.h>
 #include <iostream>
 
+#include "g2o/core/factory.h"
+#include "g2o/core/optimization_algorithm_factory.h"
+// #include "g2o/core/robust_kernel_impl.h"
+#include "g2o/types/sba/types_six_dof_expmap.h"
+
 #include "geoar/process/bundle_adjustment.h"
 
-using namespace Eigen;
-using namespace std;
-using json = nlohmann::json;
-
 G2O_USE_OPTIMIZATION_LIBRARY(eigen);
-G2O_USE_OPTIMIZATION_LIBRARY(dense);
 
 namespace g2o {
   G2O_REGISTER_TYPE_GROUP(expmap);
   G2O_REGISTER_TYPE(PARAMS_CAMERAPARAMETERS, CameraParameters);
   G2O_REGISTER_TYPE(VERTEX_SE3:EXPMAP, VertexSE3Expmap);
   G2O_REGISTER_TYPE(EDGE_SE3:EXPMAP, EdgeSE3Expmap);
-  G2O_REGISTER_TYPE(EDGE_PROJECT_XYZ2UV:EXPMAP, EdgeProjectXYZ2UV);
   G2O_REGISTER_TYPE(EDGE_PROJECT_XYZ2UVD:EXPMAP, EdgeProjectXYZ2UVD);
 
   G2O_REGISTER_TYPE_GROUP(slam3d);
@@ -27,18 +26,18 @@ namespace geoar {
   BundleAdjustment::BundleAdjustment(MapProcessingData &data) {
     this->data = &data;
     optimizer.setVerbose(true);
-    string solver_name = "lm_fix6_3";
+    std::string solver_name = "lm_fix6_3";
     g2o::OptimizationAlgorithmProperty solver_property;
     auto algorithm = g2o::OptimizationAlgorithmFactory::instance()->construct(solver_name, solver_property);
     optimizer.setAlgorithm(algorithm);
   }
 
-  void BundleAdjustment::construct(std::string directory) {
+  void BundleAdjustment::construct() {
 
     // Add landmarks to graph
-    size_t landmark_count = data->map.landmarkDatabase.landmarks.size();
+    size_t landmark_count = data->map.landmarks.size();
     for (size_t i = 0; i < landmark_count; i++) {
-      Landmark &landmark = data->map.landmarkDatabase.landmarks[i];
+      Landmark &landmark = data->map.landmarks[i];
       _stats.total_usable_landmarks += addLandmark(landmark, i);
     }
 
@@ -91,20 +90,20 @@ namespace geoar {
   void BundleAdjustment::addOdometry(size_t last_frame_id) {
     g2o::VertexSE3Expmap* v1 = dynamic_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(last_frame_id-1));
     g2o::VertexSE3Expmap* v2 = dynamic_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(last_frame_id));
-    g2o::SE3Quat m = v2->estimate() * v1->estimate().inverse();
+    g2o::SE3Quat pose_change = v2->estimate() * v1->estimate().inverse();
 
     g2o::EdgeSE3Expmap * e = new g2o::EdgeSE3Expmap();
     e->setVertex(0, v1);
     e->setVertex(1, v2);
-    e->setMeasurement(m);
+    e->setMeasurement(pose_change);
     e->information() = Eigen::MatrixXd::Identity(6,6) * 80000000;
     optimizer.addEdge(e);
   }
 
-  void BundleAdjustment::addIntrinsics(json const &intrinsics, size_t id) {
-    // Get camera intrinsics
+  void BundleAdjustment::addIntrinsics(nlohmann::json const &intrinsics, size_t id) {
     double focal_length = intrinsics["focalLength"];
     Vector2d principle_point(intrinsics["principlePoint"]["x"], intrinsics["principlePoint"]["y"]);
+
     auto * cam_params = new g2o::CameraParameters(focal_length, principle_point, 0.);
     cam_params->setId(id);
     if (!optimizer.addParameter(cam_params)) {
@@ -117,7 +116,7 @@ namespace geoar {
 
     for (size_t j = 0; j < frame.landmarks.size(); j++) {
       size_t landmark_id = frame.landmarks[j];
-      Landmark &landmark = data->map.landmarkDatabase.landmarks[landmark_id];
+      Landmark &landmark = data->map.landmarks[landmark_id];
       cv::KeyPoint keypoint = frame.kpts[j];
       Vector3d kp(keypoint.pt.x, keypoint.pt.y, frame.depth[j]);
       
@@ -143,12 +142,11 @@ namespace geoar {
   }
 
   void BundleAdjustment::Stats::print() {
-
     for (size_t i = 0; i < landmarks.size(); i++) {
-      cout << "frame landmarks: " << landmarks[i] << endl;
-      cout << "frame usable landmarks: " << usable_landmarks[i] << endl;
+      std::cout << "frame landmarks: " << landmarks[i] << std::endl;
+      std::cout << "frame usable landmarks: " << usable_landmarks[i] << std::endl;
     }
 
-    cout << "total usable landmarks: " << total_usable_landmarks << endl;
+    std::cout << "total usable landmarks: " << total_usable_landmarks << std::endl;
   }
 }

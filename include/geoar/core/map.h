@@ -7,7 +7,7 @@ namespace geoar {
 
   class Map {
     public: 
-      LandmarkDatabase landmarkDatabase;
+      LandmarkDatabase landmarks;
 
       Map();
   };

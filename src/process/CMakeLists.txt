@@ -16,9 +16,13 @@ add_library(geoar_process
 )
 target_include_directories(geoar_process PUBLIC ${PROJECT_SOURCE_DIR}/include)
 target_link_libraries(geoar_process 
-  ${G2O_LIBS}
-  ${OpenCV_LIBS}
+  types_sba types_slam3d solver_eigen
+  opencv_core opencv_features2d opencv_imgcodecs
   nlohmann_json::nlohmann_json
-  # Eigen3::Eigen
+  Eigen3::Eigen
   geoar_core
 )
+
+# Create G2O_LIBS list
+# list(APPEND G2O_LIBS types_sba types_slam3d solver_dense)
+# list(APPEND G2O_LIBS solver_eigen)

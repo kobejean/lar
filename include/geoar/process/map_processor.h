@@ -4,9 +4,6 @@
 #include "geoar/process/bundle_adjustment.h"
 #include "geoar/process/map_processing_data.h"
 
-using namespace Eigen;
-using json = nlohmann::json;
-
 namespace geoar {
 
   class MapProcessor {

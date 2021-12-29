@@ -44,7 +44,7 @@ set(BUILD_JASPER OFF)
 set(BUILD_OPENEXR OFF)
 set(WITH_PNG OFF)
 set(WITH_JPEG ON)
-set(WITH_TIFF ON)
+set(WITH_TIFF OFF)
 set(WITH_WEBP OFF)
 set(WITH_OPENJPEG OFF)
 set(WITH_JASPER OFF)
@@ -55,7 +55,6 @@ set(WITH_IMGCODEC_PXM OFF)
 set(WITH_IMGCODEC_PFM ON)
 
 add_subdirectory(thirdparty/opencv)
-list(APPEND OpenCV_LIBS opencv_core opencv_features2d opencv_imgcodecs)
 
 # Setup G2O
 add_definitions(-DG2O_USE_VENDORED_CERES) # TODO: Figure out why we have specify this
@@ -68,10 +67,6 @@ add_definitions(-DG2O_BUILD_SCLAM2D_TYPES=0)
 add_definitions(-DG2O_BUILD_ICP_TYPES=0)
 add_definitions(-DG2O_BUILD_SIM3_TYPES=0)
 add_subdirectory(thirdparty/g2o)
-
-# Create G2O_LIBS list
-list(APPEND G2O_LIBS types_sba types_slam3d solver_dense)
-list(APPEND G2O_LIBS solver_eigen)
 
 # Setup nlohmann_json
 add_subdirectory(thirdparty/json)
@@ -113,10 +108,6 @@ set_target_properties(
   circle_fit
   simple_optimize
   g2o_cli_library
-  # g2o_anonymize_observations
-  # g2o_simulator2d
-  # g2o_simulator3d
-  # slam2d_g2o
   
   PROPERTIES EXCLUDE_FROM_ALL ON
 )

@@ -7,11 +7,14 @@ namespace geoar {
 
   class LandmarkDatabase {
     public:
-      vector<Landmark> landmarks;
-
       LandmarkDatabase();
+      
+      Landmark& operator[](size_t id);
 
-      void addLandmarks(vector<Landmark> &landmarks);
+      void insert(std::vector<Landmark> &landmarks);
+      size_t size();
+    private:
+      std::vector<Landmark> _landmarks;
   };
 }
 
