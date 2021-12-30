@@ -12,10 +12,9 @@ add_library(geoar_core
   landmark_database.cpp
   map.cpp
 )
-# add_dependencies(geoar_core OpenCV)
 target_include_directories(geoar_core PUBLIC ${PROJECT_SOURCE_DIR}/include)
 target_link_libraries(geoar_core 
-  types_sba types_slam3d solver_eigen
+  types_slam3d
   opencv_core
   Eigen3::Eigen
   nlohmann_json::nlohmann_json

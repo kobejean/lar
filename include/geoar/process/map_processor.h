@@ -13,6 +13,7 @@ namespace geoar {
 
       MapProcessor();
       void createMap(std::string directory);
+      void loadData(std::string directory);
   };
 }
 

@@ -10,17 +10,6 @@
 
 G2O_USE_OPTIMIZATION_LIBRARY(eigen);
 
-namespace g2o {
-  G2O_REGISTER_TYPE_GROUP(expmap);
-  G2O_REGISTER_TYPE(PARAMS_CAMERAPARAMETERS, CameraParameters);
-  G2O_REGISTER_TYPE(VERTEX_SE3:EXPMAP, VertexSE3Expmap);
-  G2O_REGISTER_TYPE(EDGE_SE3:EXPMAP, EdgeSE3Expmap);
-  G2O_REGISTER_TYPE(EDGE_PROJECT_XYZ2UVD:EXPMAP, EdgeProjectXYZ2UVD);
-
-  G2O_REGISTER_TYPE_GROUP(slam3d);
-  G2O_REGISTER_TYPE(VERTEX_TRACKXYZ, VertexPointXYZ);
-}
-
 namespace geoar {
 
   BundleAdjustment::BundleAdjustment(MapProcessingData &data) {
@@ -125,7 +114,7 @@ namespace geoar {
         edge->setVertex(0, optimizer.vertex(landmark_id));
         edge->setVertex(1, optimizer.vertex(frame_id));
         edge->setMeasurement(kp);
-        edge->information() = Vector3d(1.,1.,1e-15).asDiagonal();
+        edge->information() = Vector3d(1.,1.,frame.confidence[j]).asDiagonal();
         edge->setParameterId(0, params_id);
         // g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
         // rk->setDelta(100.0);

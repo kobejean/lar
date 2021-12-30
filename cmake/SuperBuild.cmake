@@ -12,7 +12,6 @@ list (APPEND DEPENDENCIES Eigen3)
 ExternalProject_Add(Eigen3
   SOURCE_DIR ${PROJECT_SOURCE_DIR}/thirdparty/eigen3
   BINARY_DIR Eigen3-build
-  # INSTALL_COMMAND ""
   CMAKE_ARGS 
     -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}/Eigen3-install
 )
@@ -29,8 +28,7 @@ ExternalProject_Add(opencv
   SOURCE_DIR ${PROJECT_SOURCE_DIR}/thirdparty/opencv
   BINARY_DIR opencv-build
   INSTALL_COMMAND ""
-  CMAKE_ARGS 
-    # -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}/thirdparty/install
+  CMAKE_ARGS
     -DBUILD_LIST=core,calib3d,features2d,imgcodecs,imgproc
     -DBUILD_SHARED_LIBS=OFF
     -DBUILD_DOCS=OFF
@@ -66,11 +64,11 @@ ExternalProject_Add(nlohmann_json
   SOURCE_DIR ${PROJECT_SOURCE_DIR}/thirdparty/json
   BINARY_DIR nlohmann_json-build
   INSTALL_COMMAND ""
-  # CMAKE_ARGS 
-  #   # -DCMAKE_INSTALL_PREFIX=${CMAKE_CURRENT_BINARY_DIR}/thirdparty/install
-  #   -DBUILD_LIST=core,calib3d,features2d,imgcodecs,imgproc
 )
 list(APPEND EXTRA_CMAKE_ARGS -Dnlohmann_json_DIR=${CMAKE_BINARY_DIR}/nlohmann_json-build)
+
+
+# Inner build
 
 ExternalProject_Add(ep_geoar
   DEPENDS ${DEPENDENCIES}
