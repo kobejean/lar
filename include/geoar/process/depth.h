@@ -9,21 +9,22 @@ namespace geoar {
     public:
       Depth(cv::Size img_size);
 
-      std::vector<double> at(std::vector<cv::KeyPoint> const &kpts);
-      void loadDepthMap();
-      void unloadDepthMap();
+      std::vector<float> depthAt(std::vector<cv::KeyPoint> const &kpts);
+      std::vector<float> confidenceAt(std::vector<cv::KeyPoint> const &kpts);
+
     protected:
       cv::Size _img_size;
-      cv::Mat _map;
+      cv::Mat _depth;
+      cv::Mat _confidence;
+
+    private:
+      std::vector<float> interpolate(cv::Mat image, std::vector<cv::KeyPoint> const &kpts, cv::InterpolationFlags interpolation);
   };
 
 
   class SavedDepth : public Depth {
     public:
-      SavedDepth(cv::Size img_size, std::string filepath);
-      void loadDepthMap();
-    private:
-      std::string _filepath;
+      SavedDepth(cv::Size img_size, std::string path_prefix);
   };
 
 }

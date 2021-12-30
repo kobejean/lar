@@ -1,6 +1,7 @@
 set(HEADER_LIST 
   "${PROJECT_SOURCE_DIR}/include/geoar/process/bundle_adjustment.h"
   "${PROJECT_SOURCE_DIR}/include/geoar/process/depth.h"
+  "${PROJECT_SOURCE_DIR}/include/geoar/process/frame_processing.h"
   "${PROJECT_SOURCE_DIR}/include/geoar/process/map_processing_data.h"
   "${PROJECT_SOURCE_DIR}/include/geoar/process/map_processor.h"
   "${PROJECT_SOURCE_DIR}/include/geoar/process/projection.h"
@@ -10,13 +11,13 @@ set(HEADER_LIST
 add_library(geoar_process
   bundle_adjustment.cpp
   depth.cpp
+  frame_processing.cpp
   map_processing_data.cpp
   map_processor.cpp
   projection.cpp
   vision.cpp
   ${HEADER_LIST}
 )
-# add_dependencies(geoar_process OpenCV)
 target_include_directories(geoar_process PUBLIC ${PROJECT_SOURCE_DIR}/include)
 target_link_libraries(geoar_process 
   types_sba types_slam3d solver_eigen
