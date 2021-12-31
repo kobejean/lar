@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.14)
 
-# MUST be done before call to 'project'
+# Get command line cmake args. MUST be done before call to 'project'
 get_cmake_property(vars CACHE_VARIABLES)
 foreach(var ${vars})
   get_property(currentHelpString CACHE "${var}" PROPERTY HELPSTRING)
@@ -15,7 +15,7 @@ option (USE_SUPERBUILD "Whether or not a superbuild should be invoked" ON)
 if (USE_SUPERBUILD)
   project(SUPERBUILD NONE)
   include(cmake/SuperBuild.cmake)
-  return()                      # stop processing this file further
+  return()
 else()
   project(geoar)
 endif()
@@ -36,21 +36,12 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/bin)
 
-set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
-
-find_package(Eigen3 REQUIRED)
-find_package(OpenCV REQUIRED core calib3d features2d imgcodecs imgproc)
-find_package(nlohmann_json REQUIRED)
-find_package(G2O REQUIRED)
-find_package(OpenGL)
+find_package(Eigen3 3.4.90 REQUIRED)
+find_package(OpenCV 4.5.4 REQUIRED core calib3d features2d imgcodecs imgproc)
+find_package(nlohmann_json 3.10.4 REQUIRED)
+find_package(g2o 1.0.0 REQUIRED)
 
 include_directories(${PROJECT_SOURCE_DIR}/include)
-
-# Setup G2O
-
-include(${G2O_DIR}/g2oTargets.cmake)
-add_definitions(-DG2O_USE_VENDORED_CERES)
-add_definitions(-DG2O_HAVE_OPENGL=OFF)
 
 # Add subdirectories
 add_subdirectory(apps)
