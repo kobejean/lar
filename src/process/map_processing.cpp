@@ -1,12 +1,12 @@
 #include "geoar/process/frame_processing.h"
-#include "geoar/process/map_processor.h"
+#include "geoar/process/map_processing.h"
 
 namespace geoar {
 
-  MapProcessor::MapProcessor() : bundle_adjustment(data) {
+  MapProcessing::MapProcessing() : bundle_adjustment(data) {
   }
 
-  void MapProcessor::createMap(std::string directory) {
+  void MapProcessing::createMap(std::string directory) {
     loadData(directory);
     bundle_adjustment.construct();
 
@@ -23,7 +23,7 @@ namespace geoar {
     bundle_adjustment.optimizer.optimize(2);
   }
 
-  void MapProcessor::loadData(std::string directory) {
+  void MapProcessing::loadData(std::string directory) {
     std::ifstream metadata_ifs(directory + "/metadata.json");
     nlohmann::json metadata = nlohmann::json::parse(metadata_ifs);
 

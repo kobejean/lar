@@ -23,7 +23,7 @@ namespace geoar {
   // Depth - Private Methods
   
   std::vector<float> Depth::interpolate(cv::Mat image, std::vector<cv::KeyPoint> const &kpts, cv::InterpolationFlags interpolation) {
-    assert(image.channels == 1);
+    assert(image.channels() == 1);
     size_t keypoint_count = kpts.size();
 
     // Calculate pixel scale factor

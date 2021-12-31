@@ -10,14 +10,11 @@ foreach(var ${vars})
   endif()
 endforeach()
 
-# Handle superbuild first
+# Super Build
 option (USE_SUPERBUILD "Whether or not a superbuild should be invoked" ON)
-
 if (USE_SUPERBUILD)
-  project (SUPERBUILD NONE)
-  # execute the superbuild (this script will be invoked again without the
-  # USE_SUPERBUILD option this time)
-  include (cmake/SuperBuild.cmake)
+  project(SUPERBUILD NONE)
+  include(cmake/SuperBuild.cmake)
   return()                      # stop processing this file further
 else()
   project(geoar)
@@ -39,29 +36,21 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/bin)
 
+set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
+
 find_package(Eigen3 REQUIRED)
 find_package(OpenCV REQUIRED core calib3d features2d imgcodecs imgproc)
 find_package(nlohmann_json REQUIRED)
+find_package(G2O REQUIRED)
+find_package(OpenGL)
 
 include_directories(${PROJECT_SOURCE_DIR}/include)
 
 # Setup G2O
 
-FetchContent_Declare(g2o
-  SOURCE_DIR ${PROJECT_SOURCE_DIR}/thirdparty/g2o
-)
-FetchContent_MakeAvailable(g2o)
-include_directories(${g2o_SOURCE_DIR} ${g2o_BINARY_DIR})
-link_directories(${g2o_SOURCE_DIR}/lib)
+include(${G2O_DIR}/g2oTargets.cmake)
 add_definitions(-DG2O_USE_VENDORED_CERES)
-add_definitions(-DG2O_BUILD_APPS=0)
-add_definitions(-DG2O_BUILD_EXAMPLES=0)
-add_definitions(-DG2O_BUILD_SLAM2D_TYPES=0)
-add_definitions(-DG2O_BUILD_SLAM2D_ADDON_TYPES=0)
-add_definitions(-DG2O_BUILD_DATA_TYPES=0)
-add_definitions(-DG2O_BUILD_SCLAM2D_TYPES=0)
-add_definitions(-DG2O_BUILD_ICP_TYPES=0)
-add_definitions(-DG2O_BUILD_SIM3_TYPES=0)
+add_definitions(-DG2O_HAVE_OPENGL=OFF)
 
 # Add subdirectories
 add_subdirectory(apps)
