@@ -50,16 +50,16 @@ build_archive() {
 rm -r $FRAMEWORK_BUILD_DIR
 cmake -S. -B$FRAMEWORK_BUILD_DIR -GXcode -DCMAKE_SYSTEM_NAME=iOS ${CMAKE_ARGS[@]}
 
-build_archive "generic/platform=iOS" "iOS" "iphoneos"
-build_archive "platform=iOS Simulator,name=iPhone 11" "iOS-simulator" "iphonesimulator"
+build_archive "generic/platform=iOS" "iphoneos" "iphoneos"
+build_archive "platform=iOS Simulator,name=iPhone 11" "iphonesimulator" "iphonesimulator"
 
 rm -r $FRAMEWORK_BUILD_DIR
 cmake -S. -B$FRAMEWORK_BUILD_DIR -GXcode -DCMAKE_SYSTEM_NAME=Darwin "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" ${CMAKE_ARGS[@]}
 
-build_archive "platform=macOS" "macOS" "macosx"
+build_archive "platform=macOS" "macos" "macosx"
 
 xcodebuild -create-xcframework \
-    -framework $FRAMEWORKS_DIR/iOS/$PROJECT_NAME.framework \
-    -framework $FRAMEWORKS_DIR/iOS-simulator/$PROJECT_NAME.framework \
-    -framework $FRAMEWORKS_DIR/macOS/$PROJECT_NAME.framework \
+    -framework $FRAMEWORKS_DIR/iphoneos/$PROJECT_NAME.framework \
+    -framework $FRAMEWORKS_DIR/iphonesimulator/$PROJECT_NAME.framework \
+    -framework $FRAMEWORKS_DIR/macos/$PROJECT_NAME.framework \
     -output $XCFRAMEWORK_PATH
