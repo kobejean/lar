@@ -40,7 +40,7 @@ libtool -static -o $FRAMEWORK_PATH/Versions/$FRAMEWORK_VERSION/$FRAMEWORK_NAME "
 cp -a $INCLUDE_DIR/. $FRAMEWORK_PATH/Versions/$FRAMEWORK_VERSION/Headers
 cp -a $RESOURCES_PATH/. $FRAMEWORK_PATH/Versions/$FRAMEWORK_VERSION/Resources
 
-ln -fs $FRAMEWORK_PATH/Versions/$FRAMEWORK_VERSION $FRAMEWORK_PATH/Versions/Current
-ln -fs $FRAMEWORK_PATH/Versions/Current/Headers $FRAMEWORK_PATH/Headers
-ln -fs $FRAMEWORK_PATH/Versions/Current/Resources $FRAMEWORK_PATH/Resources
-ln -fs $FRAMEWORK_PATH/Versions/Current/$FRAMEWORK_NAME $FRAMEWORK_PATH/$FRAMEWORK_NAME
+ln -fs ./$FRAMEWORK_VERSION $FRAMEWORK_PATH/Versions/Current
+ln -fs ./Versions/Current/Headers $FRAMEWORK_PATH/Headers
+ln -fs ./Versions/Current/Resources $FRAMEWORK_PATH/Resources
+ln -fs ./Versions/Current/$FRAMEWORK_NAME $FRAMEWORK_PATH/$FRAMEWORK_NAME

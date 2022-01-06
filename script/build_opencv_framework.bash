@@ -4,7 +4,7 @@ BUILD_ARGS=(
   --iphoneos_archs arm64
   --iphonesimulator_archs arm64,x86_64
   --macos_archs arm64,x86_64
-  --catalyst_archs 
+  --catalyst_archs arm64
   --build_only_specified_archs
   --without dnn
   --without gapi
