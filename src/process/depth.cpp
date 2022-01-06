@@ -62,7 +62,6 @@ namespace geoar {
     // Load confidence map
     std::cout << "loading: " << confidence_filepath << std::endl;
     cv::Mat confidence = cv::imread(confidence_filepath, cv::IMREAD_UNCHANGED);
-    std::cout << "confidence.size(): " << confidence.size() << std::endl;
     _confidence = cv::Mat(confidence.size(), CV_32FC1);
     _confidence.setTo(0.0f, confidence == 0);
     _confidence.setTo(1.0f, confidence == 1);
