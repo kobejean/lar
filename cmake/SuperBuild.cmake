@@ -13,11 +13,11 @@ ExternalProject_Add(Eigen3
   SOURCE_DIR ${PROJECT_SOURCE_DIR}/thirdparty/eigen3
   BINARY_DIR Eigen3-build
   CMAKE_ARGS 
-    -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/Eigen3-install
+    -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/install
 )
 list(APPEND EXTRA_CMAKE_ARGS
   -DEigen3_DIR=${CMAKE_BINARY_DIR}/Eigen3-build
-  -DEIGEN3_INCLUDE_DIR=${CMAKE_BINARY_DIR}/Eigen3-install/include/eigen3
+  -DEIGEN3_INCLUDE_DIR=${CMAKE_BINARY_DIR}/install/include/eigen3
 )
 
 
@@ -27,8 +27,8 @@ list (APPEND DEPENDENCIES opencv)
 ExternalProject_Add(opencv
   SOURCE_DIR ${PROJECT_SOURCE_DIR}/thirdparty/opencv
   BINARY_DIR opencv-build
-  INSTALL_COMMAND ""
-  CMAKE_ARGS
+  CMAKE_ARGS 
+    -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/install
     -DBUILD_LIST=core,calib3d,features2d,imgcodecs,imgproc
     -DBUILD_SHARED_LIBS=OFF
     -DBUILD_DOCS=OFF
@@ -63,7 +63,8 @@ list (APPEND DEPENDENCIES nlohmann_json)
 ExternalProject_Add(nlohmann_json
   SOURCE_DIR ${PROJECT_SOURCE_DIR}/thirdparty/json
   BINARY_DIR nlohmann_json-build
-  INSTALL_COMMAND ""
+  CMAKE_ARGS 
+    -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/install
 )
 list(APPEND EXTRA_CMAKE_ARGS -Dnlohmann_json_DIR=${CMAKE_BINARY_DIR}/nlohmann_json-build)
 
@@ -76,10 +77,11 @@ ExternalProject_Add(g2o
   SOURCE_DIR ${PROJECT_SOURCE_DIR}/thirdparty/g2o
   BINARY_DIR g2o-build
   CMAKE_ARGS 
-    -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/g2o-install
-    -DEIGEN3_INCLUDE_DIR=${CMAKE_BINARY_DIR}/Eigen3-install/include/eigen3
+    -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/install
+    -DEIGEN3_INCLUDE_DIR=${CMAKE_BINARY_DIR}/install/include/eigen3
     -DG2O_USE_VENDORED_CERES=ON
     -DG2O_USE_OPENGL=OFF
+    -DBUILD_SHARED_LIBS=OFF
     -DG2O_BUILD_APPS=OFF
     -DG2O_BUILD_EXAMPLES=OFF
     -DG2O_BUILD_SLAM2D_TYPES=OFF
@@ -91,9 +93,10 @@ ExternalProject_Add(g2o
   BUILD_ALWAYS ON
 )
 list(APPEND EXTRA_CMAKE_ARGS
-  -Dg2o_DIR=${CMAKE_BINARY_DIR}/g2o-install/lib/cmake/g2o
+  -Dg2o_DIR=${CMAKE_BINARY_DIR}/install/lib/cmake/g2o
   -DG2O_USE_VENDORED_CERES=ON
   -DG2O_USE_OPENGL=OFF
+  -DBUILD_SHARED_LIBS=OFF
 )
 
 

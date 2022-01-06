@@ -110,7 +110,8 @@
     "matrixfunctions": "cpp",
     "polynomials": "cpp",
     "*.inc": "cpp",
-    "__memory": "cpp"
+    "__memory": "cpp",
+    "memory_resource": "cpp"
   },
   "C_Cpp.default.cppStandard": "c++17",
   "C_Cpp.default.intelliSenseMode": "gcc-arm64",

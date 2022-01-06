@@ -1,0 +1,19 @@
+name: Release
+on:
+  release:
+    types: [published]
+  push:
+    branches: [ jean ]
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Update Submodules
+      run: git submodule update --init --recursive
+    - name: Build Frameworks
+      run: ./script/build_frameworks.bash
+    - name: Print Artifacts
+      run: ls build/frameworks
