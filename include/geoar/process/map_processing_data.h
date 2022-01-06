@@ -3,8 +3,6 @@
 
 #include <opencv2/features2d.hpp>
 
-#include <nlohmann/json.hpp>
-
 #include "geoar/core/frame.h"
 #include "geoar/core/map.h"
 #include "geoar/process/vision.h"

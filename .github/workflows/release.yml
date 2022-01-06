@@ -1,0 +1,20 @@
+name: Release
+on:
+  create:
+    tags:
+      - v*
+  # release:
+  #   types: [published]
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Update Submodules
+      run: git submodule update --init --recursive
+    - name: Build Frameworks
+      run: ./script/build_frameworks.bash
+    - name: Print Artifacts
+      run: ls build/frameworks

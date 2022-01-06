@@ -14,7 +14,7 @@ add_library(geoar_core
 )
 target_include_directories(geoar_core PUBLIC ${PROJECT_SOURCE_DIR}/include)
 target_link_libraries(geoar_core 
-  types_slam3d
+  g2o::types_slam3d
   opencv_core
   Eigen3::Eigen
   nlohmann_json::nlohmann_json

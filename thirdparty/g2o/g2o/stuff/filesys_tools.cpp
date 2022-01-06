@@ -44,7 +44,11 @@
 #include <winbase.h>
 #endif
 
-#if (defined (UNIX) || defined(CYGWIN)) && !defined(ANDROID)
+#if __APPLE__
+  #include <TargetConditionals.h>
+#endif
+
+#if (defined (UNIX) || defined(CYGWIN)) && !defined(ANDROID) && !defined(TARGET_OS_IPHONE)
 #include <wordexp.h>
 #endif
 
@@ -134,7 +138,7 @@ std::vector<std::string> getFilesByPattern(const char* pattern)
     FindClose(hFind);
   }
   
-#elif (defined (UNIX) || defined (CYGWIN)) && !defined(ANDROID)
+#elif (defined (UNIX) || defined (CYGWIN)) && !defined(ANDROID) && !defined(TARGET_OS_IPHONE)
 
   wordexp_t p;
   wordexp(pattern, &p, 0);
@@ -142,7 +146,7 @@ std::vector<std::string> getFilesByPattern(const char* pattern)
   // For some reason, wordexp sometimes fails on an APPLE machine to
   // return anything; therefore, run it several times until we do find
   // something - or give up
-#ifdef __APPLE__
+#ifdef __APPLE__  && !defined(TARGET_OS_IPHONE)
   for (int k = 0; (k < 100) && (p.we_wordc == 0); k++) {
     //chrono::milliseconds duration(20);
     //this_thread::sleep_for(duration);

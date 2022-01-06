@@ -37,7 +37,11 @@
 #include <iostream>
 #include <iterator>
 
-#if (defined (UNIX) || defined(CYGWIN)) && !defined(ANDROID)
+#if __APPLE__
+  #include <TargetConditionals.h>
+#endif
+
+#if (defined (UNIX) || defined(CYGWIN)) && !defined(ANDROID) && !defined(TARGET_OS_IPHONE)
 #include <wordexp.h>
 #endif
 
@@ -123,7 +127,7 @@ int strPrintf(std::string& str, const char* fmt, ...)
 
 std::string strExpandFilename(const std::string& filename)
 {
-#if (defined (UNIX) || defined(CYGWIN)) && !defined(ANDROID)
+#if (defined (UNIX) || defined(CYGWIN)) && !defined(ANDROID) && !defined(TARGET_OS_IPHONE)
   string result = filename;
   wordexp_t p;
 

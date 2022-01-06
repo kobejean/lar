@@ -1,5 +1,6 @@
 #include <iostream>
 
+#include <opencv2/core.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 
@@ -23,7 +24,7 @@ namespace geoar {
   // Depth - Private Methods
   
   std::vector<float> Depth::interpolate(cv::Mat image, std::vector<cv::KeyPoint> const &kpts, cv::InterpolationFlags interpolation) {
-    assert(image.channels == 1);
+    assert(image.channels() == 1);
     size_t keypoint_count = kpts.size();
 
     // Calculate pixel scale factor
@@ -61,10 +62,11 @@ namespace geoar {
     // Load confidence map
     std::cout << "loading: " << confidence_filepath << std::endl;
     cv::Mat confidence = cv::imread(confidence_filepath, cv::IMREAD_UNCHANGED);
+    std::cout << "confidence.size(): " << confidence.size() << std::endl;
     _confidence = cv::Mat(confidence.size(), CV_32FC1);
-    _confidence.setTo(0.0, confidence == 0);
-    _confidence.setTo(1.0, confidence == 1);
-    _confidence.setTo(10.0, confidence == 2);
+    _confidence.setTo(0.0f, confidence == 0);
+    _confidence.setTo(1.0f, confidence == 1);
+    _confidence.setTo(10.0f, confidence == 2);
   }
 
 }

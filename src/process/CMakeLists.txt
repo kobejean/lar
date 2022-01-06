@@ -3,7 +3,7 @@ set(HEADER_LIST
   "${PROJECT_SOURCE_DIR}/include/geoar/process/depth.h"
   "${PROJECT_SOURCE_DIR}/include/geoar/process/frame_processing.h"
   "${PROJECT_SOURCE_DIR}/include/geoar/process/map_processing_data.h"
-  "${PROJECT_SOURCE_DIR}/include/geoar/process/map_processor.h"
+  "${PROJECT_SOURCE_DIR}/include/geoar/process/map_processing.h"
   "${PROJECT_SOURCE_DIR}/include/geoar/process/projection.h"
   "${PROJECT_SOURCE_DIR}/include/geoar/process/vision.h"
 )
@@ -13,14 +13,14 @@ add_library(geoar_process
   depth.cpp
   frame_processing.cpp
   map_processing_data.cpp
-  map_processor.cpp
+  map_processing.cpp
   projection.cpp
   vision.cpp
   ${HEADER_LIST}
 )
 target_include_directories(geoar_process PUBLIC ${PROJECT_SOURCE_DIR}/include)
 target_link_libraries(geoar_process 
-  types_sba types_slam3d solver_eigen
+  g2o::types_sba g2o::types_slam3d g2o::solver_eigen
   opencv_core opencv_features2d opencv_imgcodecs
   nlohmann_json::nlohmann_json
   Eigen3::Eigen
