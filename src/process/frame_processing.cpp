@@ -17,7 +17,7 @@ namespace geoar {
 
   Frame FrameProcessing::process(nlohmann::json& frame_data, std::string directory) {
     int id = frame_data["id"];
-    Frame frame(frame_data, id);
+    Frame frame(frame_data);
 
     // Create filename paths
     std::string path_prefix = getPathPrefix(id, directory);

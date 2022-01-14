@@ -23,7 +23,7 @@ namespace geoar {
       std::vector<float> confidence;
       std::vector<size_t> landmarks;
 
-      Frame(nlohmann::json& frame_data, size_t id);
+      Frame(nlohmann::json& frame_data);
 
     private:
 

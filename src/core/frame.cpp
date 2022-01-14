@@ -4,8 +4,8 @@
 
 namespace geoar {
 
-  Frame::Frame(nlohmann::json& frame_data, size_t id) {
-    this->id = id;
+  Frame::Frame(nlohmann::json& frame_data) {
+    this->id = frame_data["id"];
     this->frame_data = frame_data;
     this->transform = frame_data["transform"];
     this->intrinsics = frame_data["intrinsics"];
