@@ -17,7 +17,7 @@ namespace geoar {
 
   Frame FrameProcessing::process(nlohmann::json& frame_data, std::string directory) {
     int id = frame_data["id"];
-    Frame frame(frame_data);
+    Frame frame(frame_data, id);
 
     // Create filename paths
     std::string path_prefix = getPathPrefix(id, directory);
@@ -61,7 +61,8 @@ namespace geoar {
       if (matches.find(i) == matches.end()) {
         // No match so create landmark
         Eigen::Vector3d pt3d = projection.projectToWorld(frame.kpts[i].pt, frame.depth[i]);
-        Landmark landmark(pt3d, frame.kpts[i], desc.row(i));
+        Landmark landmark(pt3d, desc.row(i), new_landmark_id);
+        landmark.recordSighting(frame.transform);
 
         landmark_ids.push_back(new_landmark_id);
         new_landmarks.push_back(landmark);
@@ -69,7 +70,7 @@ namespace geoar {
       } else {
         // We have a match so just push the match index
         landmark_ids.push_back(matches[i]);
-        data->map.landmarks[matches[i]].sightings++;
+        data->map.landmarks[matches[i]].recordSighting(frame.transform);
       }
     }
 

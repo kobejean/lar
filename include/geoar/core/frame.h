@@ -13,16 +13,17 @@ namespace geoar {
 
   class Frame {
     public:
+      size_t id;
       nlohmann::json frame_data;
       nlohmann::json transform;
       nlohmann::json intrinsics;
       g2o::SE3Quat pose;
-      vector<cv::KeyPoint> kpts;
-      vector<float> depth;
-      vector<float> confidence;
-      vector<size_t> landmarks;
+      std::vector<cv::KeyPoint> kpts;
+      std::vector<float> depth;
+      std::vector<float> confidence;
+      std::vector<size_t> landmarks;
 
-      Frame(nlohmann::json& frame_data);
+      Frame(nlohmann::json& frame_data, size_t id);
 
     private:
 
