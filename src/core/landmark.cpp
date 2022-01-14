@@ -1,7 +1,5 @@
 #include "geoar/core/landmark.h"
 
-#include <iostream>
-
 namespace geoar {
 
   Landmark::Landmark(Eigen::Vector3d &position, cv::Mat desc, size_t id) {
@@ -19,6 +17,10 @@ namespace geoar {
       index_center = cam_position2;
     }
     sightings++;
+  }
+
+  bool Landmark::isUseable() const {
+    return sightings >= 3;
   }
 
   // Static Methods

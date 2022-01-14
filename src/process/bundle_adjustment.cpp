@@ -10,6 +10,17 @@
 
 G2O_USE_OPTIMIZATION_LIBRARY(eigen);
 
+namespace g2o {
+  G2O_REGISTER_TYPE_GROUP(expmap);
+  G2O_REGISTER_TYPE(PARAMS_CAMERAPARAMETERS, CameraParameters);
+  G2O_REGISTER_TYPE(VERTEX_SE3:EXPMAP, VertexSE3Expmap);
+  G2O_REGISTER_TYPE(EDGE_SE3:EXPMAP, EdgeSE3Expmap);
+  G2O_REGISTER_TYPE(EDGE_PROJECT_XYZ2UVD:EXPMAP, EdgeProjectXYZ2UVD);
+
+  G2O_REGISTER_TYPE_GROUP(slam3d);
+  G2O_REGISTER_TYPE(VERTEX_TRACKXYZ, VertexPointXYZ);
+}
+
 namespace geoar {
 
   BundleAdjustment::BundleAdjustment(MapProcessingData &data) {
@@ -54,10 +65,22 @@ namespace geoar {
     _stats.print();
   }
 
+  void BundleAdjustment::optimize() {
+    optimizer.initializeOptimization();
+    optimizer.setVerbose(true);
+    optimizer.optimize(50);
+
+
+    size_t landmark_count = data->map.landmarks.size();
+    for (size_t i = 0; i < landmark_count; i++) {
+      updateLandmark(i);
+    }
+  }
+
   // Private methods
 
   bool BundleAdjustment::addLandmark(Landmark const &landmark, size_t id) {
-    if (landmark.sightings >= 3) {
+    if (landmark.isUseable()) {
       g2o::VertexPointXYZ * vertex = new g2o::VertexPointXYZ();
       vertex->setId(id);
       vertex->setMarginalized(true);
@@ -109,7 +132,7 @@ namespace geoar {
       cv::KeyPoint keypoint = frame.kpts[j];
       Eigen::Vector3d kp(keypoint.pt.x, keypoint.pt.y, frame.depth[j]);
       
-      if (landmark.sightings >= 3) {
+      if (landmark.isUseable()) {
         g2o::EdgeProjectXYZ2UVD * edge = new g2o::EdgeProjectXYZ2UVD();
         edge->setVertex(0, optimizer.vertex(landmark_id));
         edge->setVertex(1, optimizer.vertex(frame_id));
@@ -128,6 +151,14 @@ namespace geoar {
     // Populate stats
     _stats.landmarks.push_back(frame.landmarks.size());
     _stats.usable_landmarks.push_back(usable_landmarks);
+  }
+
+  void BundleAdjustment::updateLandmark(size_t landmark_id) {
+      Landmark &landmark = data->map.landmarks[landmark_id];
+      if (landmark.isUseable()) {
+        g2o::VertexPointXYZ* v = dynamic_cast<g2o::VertexPointXYZ*>(optimizer.vertex(landmark_id));
+        landmark.position = v->estimate();
+      }
   }
 
   void BundleAdjustment::Stats::print() {
