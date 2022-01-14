@@ -1,7 +1,5 @@
 #include "geoar/core/landmark.h"
 
-#include <iostream>
-
 namespace geoar {
 
   Landmark::Landmark(Eigen::Vector3d &position, cv::Mat desc, size_t id) {

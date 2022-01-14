@@ -25,9 +25,8 @@ namespace geoar {
 
       Frame(nlohmann::json& frame_data);
 
-    private:
-
-      void createPose(nlohmann::json& t);
+      static g2o::SE3Quat poseFromTransform(nlohmann::json& t);
+      static nlohmann::json transformFromPose(g2o::SE3Quat& pose);
   };
 }
 
