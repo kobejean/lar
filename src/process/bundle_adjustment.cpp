@@ -74,7 +74,7 @@ namespace geoar {
   // Private methods
 
   bool BundleAdjustment::addLandmark(Landmark const &landmark, size_t id) {
-    if (landmark.sightings >= 3) {
+    if (landmark.isUseable()) {
       g2o::VertexPointXYZ * vertex = new g2o::VertexPointXYZ();
       vertex->setId(id);
       vertex->setMarginalized(true);
@@ -126,7 +126,7 @@ namespace geoar {
       cv::KeyPoint keypoint = frame.kpts[j];
       Eigen::Vector3d kp(keypoint.pt.x, keypoint.pt.y, frame.depth[j]);
       
-      if (landmark.sightings >= 3) {
+      if (landmark.isUseable()) {
         g2o::EdgeProjectXYZ2UVD * edge = new g2o::EdgeProjectXYZ2UVD();
         edge->setVertex(0, optimizer.vertex(landmark_id));
         edge->setVertex(1, optimizer.vertex(frame_id));

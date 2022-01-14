@@ -21,6 +21,10 @@ namespace geoar {
     sightings++;
   }
 
+  bool Landmark::isUseable() const {
+    return sightings >= 3;
+  }
+
   // Static Methods
 
   void Landmark::concatDescriptions(std::vector<Landmark> landmarks, cv::Mat &desc) {
