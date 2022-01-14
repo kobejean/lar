@@ -40,6 +40,8 @@ namespace geoar {
       void addOdometry(size_t last_frame_id);
       void addIntrinsics(nlohmann::json const &intrinsics, size_t id);
       void addLandmarkMeasurements(Frame const &frame, size_t frame_id, size_t params_id);
+
+      void updateLandmark(size_t landmark_id);
   };
 
 }

@@ -69,6 +69,12 @@ namespace geoar {
     optimizer.initializeOptimization();
     optimizer.setVerbose(true);
     optimizer.optimize(50);
+
+
+    size_t landmark_count = data->map.landmarks.size();
+    for (size_t i = 0; i < landmark_count; i++) {
+      updateLandmark(i);
+    }
   }
 
   // Private methods
@@ -145,6 +151,14 @@ namespace geoar {
     // Populate stats
     _stats.landmarks.push_back(frame.landmarks.size());
     _stats.usable_landmarks.push_back(usable_landmarks);
+  }
+
+  void BundleAdjustment::updateLandmark(size_t landmark_id) {
+      Landmark &landmark = data->map.landmarks[landmark_id];
+      if (landmark.isUseable()) {
+        g2o::VertexPointXYZ* v = dynamic_cast<g2o::VertexPointXYZ*>(optimizer.vertex(landmark_id));
+        landmark.position = v->estimate();
+      }
   }
 
   void BundleAdjustment::Stats::print() {
