@@ -91,7 +91,7 @@ namespace geoar {
 
   void BundleAdjustment::addIntrinsics(nlohmann::json const &intrinsics, size_t id) {
     double focal_length = intrinsics["focalLength"];
-    Vector2d principle_point(intrinsics["principlePoint"]["x"], intrinsics["principlePoint"]["y"]);
+    Eigen::Vector2d principle_point(intrinsics["principlePoint"]["x"], intrinsics["principlePoint"]["y"]);
 
     auto * cam_params = new g2o::CameraParameters(focal_length, principle_point, 0.);
     cam_params->setId(id);
@@ -107,14 +107,14 @@ namespace geoar {
       size_t landmark_id = frame.landmarks[j];
       Landmark &landmark = data->map.landmarks[landmark_id];
       cv::KeyPoint keypoint = frame.kpts[j];
-      Vector3d kp(keypoint.pt.x, keypoint.pt.y, frame.depth[j]);
+      Eigen::Vector3d kp(keypoint.pt.x, keypoint.pt.y, frame.depth[j]);
       
       if (landmark.sightings >= 3) {
         g2o::EdgeProjectXYZ2UVD * edge = new g2o::EdgeProjectXYZ2UVD();
         edge->setVertex(0, optimizer.vertex(landmark_id));
         edge->setVertex(1, optimizer.vertex(frame_id));
         edge->setMeasurement(kp);
-        edge->information() = Vector3d(1.,1.,frame.confidence[j]).asDiagonal();
+        edge->information() = Eigen::Vector3d(1.,1.,frame.confidence[j]).asDiagonal();
         edge->setParameterId(0, params_id);
         // g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
         // rk->setDelta(100.0);

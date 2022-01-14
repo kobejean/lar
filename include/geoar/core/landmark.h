@@ -3,22 +3,25 @@
 
 #include <Eigen/Core>
 #include <opencv2/features2d.hpp>
-
-using namespace Eigen;
-using namespace std;
+#include <nlohmann/json.hpp>
 
 namespace geoar {
 
   class Landmark {
     public:
-      Vector3d position;
+      size_t id;
+      Eigen::Vector3d position;
       cv::Mat desc;
-      cv::KeyPoint kpt;
-      int sightings{1};
+      int sightings{0};
 
-      Landmark(Vector3d &position, cv::KeyPoint &kpt, cv::Mat desc);
+      // For r-tree indexing
+      Eigen::Vector2d index_center;
+      double index_radius;
 
-      static void concatDescriptions(vector<Landmark> landmarks, cv::Mat &desc);
+      Landmark(Eigen::Vector3d &position, cv::Mat desc, size_t id);
+      void recordSighting(nlohmann::json &cam_transform);
+
+      static void concatDescriptions(std::vector<Landmark> landmarks, cv::Mat &desc);
   };
 }
 
