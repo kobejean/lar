@@ -23,6 +23,7 @@ namespace geoar {
 
       BundleAdjustment(MapProcessingData &data);
       void construct();
+      void optimize();
 
     private:
       struct Stats {

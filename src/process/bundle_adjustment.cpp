@@ -65,6 +65,12 @@ namespace geoar {
     _stats.print();
   }
 
+  void BundleAdjustment::optimize() {
+    optimizer.initializeOptimization();
+    optimizer.setVerbose(true);
+    optimizer.optimize(50);
+  }
+
   // Private methods
 
   bool BundleAdjustment::addLandmark(Landmark const &landmark, size_t id) {

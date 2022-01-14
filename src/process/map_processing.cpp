@@ -22,11 +22,7 @@ namespace geoar {
     bundle_adjustment.optimizer.save(output.c_str());
     cout << "Saved g2o file to: " << output << endl;
 
-    bundle_adjustment.optimizer.initializeOptimization();
-    bundle_adjustment.optimizer.setVerbose(true);
-
-    cout << "Performing full Bundle Adjustment:" << endl;
-    bundle_adjustment.optimizer.optimize(2);
+    bundle_adjustment.optimize();
   }
 
   MapProcessingData loadData(std::string directory) {
