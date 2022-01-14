@@ -17,7 +17,6 @@ namespace geoar {
       double distance = (position2 - cam_position2).norm();
       index_radius = distance;
       index_center = cam_position2;
-      std::cout << "index_radius:" << index_radius << " index_center:" << index_center << std::endl;
     }
     sightings++;
   }
