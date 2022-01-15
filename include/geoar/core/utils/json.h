@@ -12,7 +12,9 @@ namespace geoar {
 
   void to_json(nlohmann::json& j, const Landmark& l) {
     std::string desc64 = base64_encode(l.desc);
-    j = nlohmann::json{ {"id", l.id}, {"desc", desc64 }, {"position", l.position}, };
+    std::vector<double> position(l.position.data(), l.position.data() + l.position.size());
+
+    j = nlohmann::json{ {"id", l.id}, {"desc", desc64}, {"position", position}, };
   }
 
   void from_json(const nlohmann::json& j, Landmark& l) {
@@ -41,20 +43,21 @@ namespace geoar {
 
 }
 
-namespace nlohmann {
+// TODO: Figure out how to serialize/deserialize eigen matrix/vector
+// namespace nlohmann {
 
-  // Eigen::Matrix
-  template <typename _Scalar, int _Rows, int _Cols>
-  struct adl_serializer<Eigen::Matrix<_Scalar, _Rows, _Cols>> {
-    static void to_json(json& j, Eigen::Matrix<_Scalar, _Rows, _Cols>& mat) {
-      j = mat.data;
-    }
+//   // Eigen::Matrix
+//   template <typename _Scalar, int _Rows, int _Cols>
+//   struct adl_serializer<Eigen::Matrix<_Scalar, _Rows, _Cols>> {
+//     static void to_json(json& j, Eigen::Matrix<_Scalar, _Rows, _Cols>& mat) {
+//       j = mat.data;
+//     }
 
-    static Eigen::Matrix<_Scalar, _Rows, _Cols> from_json(const json& j) {
-      return { j.get<std::vector<_Scalar>>().data() };
-    }
-  };
+//     static Eigen::Matrix<_Scalar, _Rows, _Cols> from_json(const json& j) {
+//       return { j.get<std::vector<_Scalar>>().data() };
+//     }
+//   };
 
-}
+// }
 
 #endif /* GEOAR_JSON_H */

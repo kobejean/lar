@@ -20,8 +20,21 @@ TEST(JsonTest, MapDeserialization) {
   for (int i = 0; i < 61; ++i) {
     EXPECT_EQ(actual_desc.at<uint8_t>(0,i), expected_desc[i]) << " index:" << i;
   }
+  EXPECT_EQ(actual_desc.rows, 1);
+  EXPECT_EQ(actual_desc.cols, expected_desc.size());
+
   EXPECT_EQ(map.landmarks[0].id, 19);
   EXPECT_NEAR(map.landmarks[0].position.x(), 28.978420115684386, 1e-10);
   EXPECT_NEAR(map.landmarks[0].position.y(), 9.0347303998687, 1e-10);
   EXPECT_NEAR(map.landmarks[0].position.z(), -17.00002901344248, 1e-10);
+}
+
+TEST(JsonTest, MapSerialization) {
+  // Given
+  std::string map_json_string = "{\"landmarks\":[{\"desc\":\"IL5sAIARAME/AICBxTH+xx0BACAABnAEAAAAPIYASPcfAPj/QhACAP47XAcANwAAAMjxGOP//8dDYHj/AA==\",\"id\":19,\"position\":[28.978420115684386,9.0347303998687,-17.00002901344248]}]}";
+  geoar::Map map = json::parse(map_json_string);
+  // When
+  json map_json = map;
+  // Then
+  EXPECT_EQ(map_json.dump(), map_json_string);
 }
