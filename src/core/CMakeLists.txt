@@ -1,4 +1,6 @@
 set(HEADER_LIST
+  "${PROJECT_SOURCE_DIR}/include/geoar/core/utils/base64.h"
+  "${PROJECT_SOURCE_DIR}/include/geoar/core/utils/json.h"
   "${PROJECT_SOURCE_DIR}/include/geoar/core/frame.h"
   "${PROJECT_SOURCE_DIR}/include/geoar/core/landmark.h"
   "${PROJECT_SOURCE_DIR}/include/geoar/core/landmark_database.h"

@@ -70,11 +70,11 @@ namespace geoar {
     optimizer.setVerbose(true);
     optimizer.optimize(50);
 
-
     size_t landmark_count = data->map.landmarks.size();
     for (size_t i = 0; i < landmark_count; i++) {
       updateLandmark(i);
     }
+    data->map.landmarks.cull();
   }
 
   // Private methods

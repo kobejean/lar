@@ -18,6 +18,7 @@ namespace geoar {
       Eigen::Vector2d index_center;
       double index_radius;
 
+      Landmark();
       Landmark(Eigen::Vector3d &position, cv::Mat desc, size_t id);
       void recordSighting(nlohmann::json &cam_transform);
       bool isUseable() const;
