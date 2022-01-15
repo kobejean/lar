@@ -2,6 +2,7 @@
 #include "geoar/process/frame_processing.h"
 #include "geoar/process/map_processing_data.h"
 #include "geoar/process/map_processing.h"
+#include "geoar/core/utils/json.h"
 
 namespace geoar {
 
@@ -23,6 +24,12 @@ namespace geoar {
     cout << "Saved g2o file to: " << output << endl;
 
     bundle_adjustment.optimize();
+
+    // Serialize
+    nlohmann::json map_json = data.map;
+    // Save
+    std::ofstream file(directory + "/map.json");
+    file << std::setw(2) << map_json << std::endl;
   }
 
   MapProcessingData loadData(std::string directory) {

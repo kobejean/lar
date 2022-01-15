@@ -2,6 +2,10 @@
 
 namespace geoar {
 
+  Landmark::Landmark() {
+    
+  }
+
   Landmark::Landmark(Eigen::Vector3d &position, cv::Mat desc, size_t id) {
     this->id = id;
     this->position = position;
@@ -9,6 +13,7 @@ namespace geoar {
   }
 
   void Landmark::recordSighting(nlohmann::json &cam_transform) {
+    // TODO: find a good way to estimate the region where the landmark can be seen for good indexing
     if (sightings == 0) {
       Eigen::Vector2d position2(position.x(), position.z());
       Eigen::Vector2d cam_position2(cam_transform[3][0], cam_transform[3][2]);

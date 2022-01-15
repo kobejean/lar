@@ -10,9 +10,11 @@ namespace geoar {
       LandmarkDatabase();
       
       Landmark& operator[](size_t id);
+      const Landmark& operator[](size_t id) const;
 
       void insert(std::vector<Landmark> &landmarks);
-      size_t size();
+      size_t size() const;
+      void cull();
     private:
       std::vector<Landmark> _landmarks;
   };
