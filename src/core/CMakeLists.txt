@@ -14,7 +14,6 @@ add_library(geoar_core
   landmark_database.cpp
   map.cpp
 )
-target_include_directories(geoar_core PUBLIC ${PROJECT_SOURCE_DIR}/include)
 target_link_libraries(geoar_core 
   g2o::types_slam3d
   opencv_core

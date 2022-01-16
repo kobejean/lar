@@ -18,7 +18,6 @@ add_library(geoar_process
   vision.cpp
   ${HEADER_LIST}
 )
-target_include_directories(geoar_process PUBLIC ${PROJECT_SOURCE_DIR}/include)
 target_link_libraries(geoar_process 
   g2o::types_sba g2o::types_slam3d g2o::solver_eigen
   opencv_core opencv_features2d opencv_imgcodecs

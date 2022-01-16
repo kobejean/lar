@@ -5,21 +5,17 @@
 #include <Eigen/Core>
 #include <opencv2/features2d.hpp>
 
-using namespace Eigen;
-using namespace std;
-using json = nlohmann::json;
-
 namespace geoar {
 
   class Projection {
     public:
-      Projection(json const& frame_data);
-      Vector3d projectToWorld(cv::Point2f pt, double depth);
-      cv::Point2f projectToImage(Vector3d pt);
+      Projection(nlohmann::json const& frame_data);
+      Eigen::Vector3d projectToWorld(cv::Point2f pt, double depth);
+      cv::Point2f projectToImage(Eigen::Vector3d pt);
 
     private:
-      Matrix3d R, RT;
-      Vector3d t;
+      Eigen::Matrix3d R, RT;
+      Eigen::Vector3d t;
       double f, cx, cy;
   };
 

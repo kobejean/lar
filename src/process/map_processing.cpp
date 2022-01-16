@@ -19,9 +19,9 @@ namespace geoar {
 
     std::string output = directory + "/map.g2o";
 
-    cout << endl;
+    std::cout << std::endl;
     bundle_adjustment.optimizer.save(output.c_str());
-    cout << "Saved g2o file to: " << output << endl;
+    std::cout << "Saved g2o file to: " << output << std::endl;
 
     bundle_adjustment.optimize();
 
