@@ -28,6 +28,12 @@ clean: CMAKE_ARGS =
 clean: configure
 	$(MAKE) $(QUIET) -C build clean
 
+artifacts: frameworks
+	./script/build_artifacts.bash
+
+frameworks:
+	./script/build_frameworks.bash
+
 configure:
 	@ echo "Running cmake to generate Makefile"; \
 	mkdir build; \
