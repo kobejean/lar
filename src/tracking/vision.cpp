@@ -1,5 +1,5 @@
 
-#include "geoar/process/vision.h"
+#include "geoar/tracking/vision.h"
 
 namespace geoar {
 
@@ -48,7 +48,7 @@ namespace geoar {
       bool ratio_test = dist1 < RATIO_TEST_THRESHOLD * dist2;
       bool margin_test = dist2 >= MARGIN_TEST_DISTANCE;
       if (ratio_test && margin_test) {
-          filtered_matches.push_back(first);
+        filtered_matches.push_back(first);
       }
     }
 

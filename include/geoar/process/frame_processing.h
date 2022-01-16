@@ -6,8 +6,8 @@
 #include <nlohmann/json.hpp>
 
 #include "geoar/core/frame.h"
-#include "geoar/process/vision.h"
 #include "geoar/process/map_processing_data.h"
+#include "geoar/tracking/vision.h"
 
 namespace geoar {
 

@@ -15,6 +15,7 @@ namespace geoar {
       void insert(std::vector<Landmark> &landmarks);
       size_t size() const;
       void cull();
+      cv::Mat getDescriptions();
     private:
       std::vector<Landmark> _landmarks;
   };

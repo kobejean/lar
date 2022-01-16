@@ -5,7 +5,6 @@
 
 #include "geoar/core/frame.h"
 #include "geoar/core/map.h"
-#include "geoar/process/vision.h"
 
 namespace geoar {
 

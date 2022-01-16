@@ -5,7 +5,6 @@ set(HEADER_LIST
   "${PROJECT_SOURCE_DIR}/include/geoar/process/map_processing_data.h"
   "${PROJECT_SOURCE_DIR}/include/geoar/process/map_processing.h"
   "${PROJECT_SOURCE_DIR}/include/geoar/process/projection.h"
-  "${PROJECT_SOURCE_DIR}/include/geoar/process/vision.h"
 )
 
 add_library(geoar_process
@@ -15,7 +14,6 @@ add_library(geoar_process
   map_processing_data.cpp
   map_processing.cpp
   projection.cpp
-  vision.cpp
   ${HEADER_LIST}
 )
 target_link_libraries(geoar_process 
@@ -24,4 +22,5 @@ target_link_libraries(geoar_process
   nlohmann_json::nlohmann_json
   Eigen3::Eigen
   geoar_core
+  geoar_tracking
 )
