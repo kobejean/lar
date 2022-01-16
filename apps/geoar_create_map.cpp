@@ -7,7 +7,6 @@
 #include "geoar/process/map_processing.h"
 
 using namespace std;
-using namespace geoar;
 
 int main(int argc, const char* argv[]){
   string input = "./input/snapshot";

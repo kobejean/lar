@@ -31,4 +31,11 @@ namespace geoar {
     }
     _landmarks = landmarks;
   }
+
+  cv::Mat LandmarkDatabase::getDescriptions() {
+    cv::Mat desc;
+    Landmark::concatDescriptions(_landmarks, desc);
+    return desc;
+  }
+
 }

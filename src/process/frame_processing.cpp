@@ -80,7 +80,7 @@ namespace geoar {
 
   std::map<size_t, size_t> FrameProcessing::getMatches(cv::Mat &desc) {
     // Get matches
-    vector<cv::DMatch> matches = vision.match(desc, data->desc);
+    std::vector<cv::DMatch> matches = vision.match(desc, data->desc);
     std::cout << "matches: " << matches.size() << std::endl;
 
     // Populate `idx_matched` map
@@ -109,7 +109,7 @@ namespace geoar {
   }
 
   std::string FrameProcessing::getPathPrefix(int id, std::string directory) {
-    std::string id_string = to_string(id);
+    std::string id_string = std::to_string(id);
     int zero_count = 8 - id_string.length();
     std::string prefix = std::string(zero_count, '0') + id_string + '_';
     return directory + '/' + prefix;

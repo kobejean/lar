@@ -1,7 +1,5 @@
 
-#include "geoar/process/vision.h"
-
-using namespace std;
+#include "geoar/tracking/vision.h"
 
 namespace geoar {
 
@@ -13,16 +11,15 @@ namespace geoar {
     matcher = cv::BFMatcher(cv::NORM_HAMMING);
   }
 
-  void Vision::extractFeatures(cv::InputArray image, cv::InputArray mask, vector<cv::KeyPoint> &kpts, cv::Mat &desc) {
-
-    vector<cv::KeyPoint> new_kpts;
+  void Vision::extractFeatures(cv::InputArray image, cv::InputArray mask, std::vector<cv::KeyPoint> &kpts, cv::Mat &desc) {
+    std::vector<cv::KeyPoint> new_kpts;
     cv::Mat new_desc;
 
     detector->detectAndCompute(image, mask, new_kpts, new_desc);
 
     // Match function uses ratio test and margin test. We can reuse it to filter features 
     // that are not distinct enough by matching the set of descriptions with each other.
-    vector<cv::DMatch> matches = match(new_desc, new_desc);
+    std::vector<cv::DMatch> matches = match(new_desc, new_desc);
 
     // Populate `desc` and `kpts` with matched key points and descriptions
     for (size_t i = 0; i < matches.size(); i++) {
@@ -34,11 +31,11 @@ namespace geoar {
     }
   }
 
-  vector<cv::DMatch> Vision::match(cv::Mat &desc1, cv::Mat &desc2) {
-    vector<cv::DMatch> filtered_matches;
+  std::vector<cv::DMatch> Vision::match(cv::Mat &desc1, cv::Mat &desc2) {
+    std::vector<cv::DMatch> filtered_matches;
     // We need at least 2 rows to perform ratio test
     if (desc1.rows <= 2 || desc2.rows <= 2) return filtered_matches;
-    vector< vector<cv::DMatch> > nn_matches;
+    std::vector< std::vector<cv::DMatch> > nn_matches;
 
     matcher.knnMatch(desc1, desc2, nn_matches, 2);
 
@@ -51,7 +48,7 @@ namespace geoar {
       bool ratio_test = dist1 < RATIO_TEST_THRESHOLD * dist2;
       bool margin_test = dist2 >= MARGIN_TEST_DISTANCE;
       if (ratio_test && margin_test) {
-          filtered_matches.push_back(first);
+        filtered_matches.push_back(first);
       }
     }
 

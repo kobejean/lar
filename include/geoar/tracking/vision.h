@@ -3,8 +3,6 @@
 
 #include <opencv2/features2d.hpp>
 
-using namespace std;
-
 namespace geoar {
 
   class Vision {
@@ -14,8 +12,8 @@ namespace geoar {
 
       Vision();
 
-      void extractFeatures(cv::InputArray image, cv::InputArray mask, vector<cv::KeyPoint> &kpts, cv::Mat &desc);
-      vector<cv::DMatch> match(cv::Mat &desc1, cv::Mat &desc2);
+      void extractFeatures(cv::InputArray image, cv::InputArray mask, std::vector<cv::KeyPoint> &kpts, cv::Mat &desc);
+      std::vector<cv::DMatch> match(cv::Mat &desc1, cv::Mat &desc2);
   };
 
 }

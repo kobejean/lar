@@ -1,4 +1,3 @@
-
 #include "geoar/core/map.h"
 
 namespace geoar {
