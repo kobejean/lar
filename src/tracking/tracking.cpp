@@ -20,14 +20,47 @@ namespace geoar {
     cv::Mat image_points = imagePoints(matches, kpts);
     cv::Mat inliers;
 
-    // std::cout << "object_points" << object_points << std::endl;
-    // std::cout << "image_points" << image_points << std::endl;
-
     cv::solvePnPRansac(object_points, image_points, intrinsics, dist_coeffs, rvec, tvec,
       false, 100, 8.0, 0.99, inliers, cv::SolvePnPMethod::SOLVEPNP_ITERATIVE);
     std::cout << "kpts.size()" << kpts.size() << std::endl;
     std::cout << "matches.size()" << matches.size() << std::endl;
     std::cout << "inliers.size()" << inliers.size() << std::endl;
+  }
+
+  void Tracking::localize(cv::InputArray image, cv::Mat intrinsics, cv::Mat &transform) {
+    cv::Mat rvec, tvec;
+    if (!transform.empty()) {
+      // OpenCV camera transform is the inverse of ARKit (transpose works because it's orthogonal)
+      // Also y,z-axis needs to be flipped hence the negative signs
+      cv::Mat rmat = (cv::Mat_<double>(3,3) <<
+         transform.at<double>(0,0),  transform.at<double>(1,0),  transform.at<double>(2,0),
+        -transform.at<double>(0,1), -transform.at<double>(1,1), -transform.at<double>(2,1),
+        -transform.at<double>(0,2), -transform.at<double>(1,2), -transform.at<double>(2,2)
+      );
+      std::cout << "rmat" << rmat << std::endl;
+      rvec = cv::Mat(3, 1, CV_64FC1);
+      cv::Rodrigues(rmat, rvec);
+
+      // To switch to OpenCV coordinates, the camera transform is inverse of ARKit
+      // so calculate inverse translation using: `-R'*t`
+      tvec = (cv::Mat_<double>(3,1) << transform.at<double>(0,3), transform.at<double>(1,3), transform.at<double>(2,3));
+      tvec = -rmat * tvec;
+    }
+
+    localize(image, intrinsics, cv::Mat(), rvec, tvec);
+
+    // Convert back to transform
+    cv::Mat rtmat(3, 3, CV_64FC1);
+    cv::Rodrigues(rvec, rtmat);
+    cv::transpose(rtmat,rtmat);
+    tvec = -rtmat * tvec;
+
+    transform = (cv::Mat_<double>(4,4) <<
+      rtmat.at<double>(0,0), -rtmat.at<double>(0,1),  -rtmat.at<double>(0,2), tvec.at<double>(0),
+      rtmat.at<double>(1,0), -rtmat.at<double>(1,1),  -rtmat.at<double>(1,2), tvec.at<double>(1),
+      rtmat.at<double>(2,0), -rtmat.at<double>(2,1),  -rtmat.at<double>(2,2), tvec.at<double>(2),
+                         0.,                     0.,                      0.,                 1.
+    );
   }
 
   // Private Methods

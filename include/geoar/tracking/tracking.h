@@ -15,6 +15,7 @@ namespace geoar {
 
       Tracking(Map map);
       void localize(cv::InputArray image, cv::Mat intrinsics, cv::Mat dist_coeffs, cv::Mat &rvec, cv::Mat &tvec);
+      void localize(cv::InputArray image, cv::Mat intrinsics, cv::Mat &transform);
 
     private:
       cv::Mat objectPoints(std::vector<cv::DMatch> matches);

@@ -35,11 +35,9 @@ int main(int argc, const char* argv[]){
   intrinsics.at<float>(0,2) = 952.7379150390625;
   intrinsics.at<float>(1,2) = 714.167236328125;
   intrinsics.at<float>(2,2) = 1.;
-  cv::Mat rvec, tvec;
+  cv::Mat transform;
 
   geoar::Tracking tracking(map);
-  tracking.localize(image, intrinsics, cv::Mat(), rvec, tvec);
-
-  std::cout << "rvec:" << rvec << std::endl; 
-  std::cout << "tvec:" << tvec << std::endl;
+  tracking.localize(image, intrinsics, transform);
+  std::cout << "transform:" << transform << std::endl;
 }
