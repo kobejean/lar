@@ -1,3 +1,5 @@
+#include <filesystem>
+
 #include "geoar/process/bundle_adjustment.h"
 #include "geoar/process/frame_processing.h"
 #include "geoar/process/map_processing_data.h"
@@ -6,18 +8,16 @@
 
 namespace geoar {
 
-  // Helper function forward declarations
-  MapProcessingData loadData(std::string directory);
-
   MapProcessing::MapProcessing() {
   }
 
-  void MapProcessing::createMap(std::string directory) {
-    MapProcessingData data = loadData(directory);
+  void MapProcessing::createMap(std::string in_dir, std::string out_dir) {
+    std::filesystem::create_directory(out_dir);
+    MapProcessingData data = loadData(in_dir);
     BundleAdjustment bundle_adjustment(data);
     bundle_adjustment.construct();
 
-    std::string output = directory + "/map.g2o";
+    std::string output = out_dir + "/map.g2o";
 
     std::cout << std::endl;
     bundle_adjustment.optimizer.save(output.c_str());
@@ -28,11 +28,11 @@ namespace geoar {
     // Serialize
     nlohmann::json map_json = data.map;
     // Save
-    std::ofstream file(directory + "/map.json");
+    std::ofstream file(out_dir + "/map.json");
     file << std::setw(2) << map_json << std::endl;
   }
 
-  MapProcessingData loadData(std::string directory) {
+  MapProcessingData MapProcessing::loadData(std::string directory) {
     std::ifstream metadata_ifs(directory + "/metadata.json");
     nlohmann::json metadata = nlohmann::json::parse(metadata_ifs);
     MapProcessingData data;

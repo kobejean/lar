@@ -15,7 +15,7 @@ namespace geoar {
     return (isalnum(c) || (c == '+') || (c == '/'));
   }
 
-  std::string base64_encode(uchar const* buf, unsigned int bufLen) {
+  static std::string base64_encode(uchar const* buf, unsigned int bufLen) {
     std::string ret;
     int i = 0;
     int j = 0;
@@ -56,7 +56,7 @@ namespace geoar {
     return ret;
   }
 
-  std::vector<uchar> base64_decode(std::string const& encoded_string) {
+  static std::vector<uchar> base64_decode(std::string const& encoded_string) {
     int in_len = encoded_string.size();
     int i = 0;
     int j = 0;
@@ -97,12 +97,12 @@ namespace geoar {
     return ret;
   }
 
-  std::string base64_encode(cv::Mat mat) {
+  static std::string base64_encode(cv::Mat mat) {
     std::vector<uchar> contiguous = mat.isContinuous()? mat : mat.clone();
     return base64_encode(&contiguous[0], contiguous.size());
   }
 
-  cv::Mat base64_decode(std::string const& encoded_string, int rows, int cols, int type) {
+  static cv::Mat base64_decode(std::string const& encoded_string, int rows, int cols, int type) {
     std::vector<uchar> data = base64_decode(encoded_string);
     return cv::Mat(rows, cols, type, &data[0]).clone();
   }

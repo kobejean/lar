@@ -10,7 +10,7 @@ using namespace std;
 
 int main(int argc, const char* argv[]){
   string input = "./input/snapshot";
-  // string output = "./output/map.g2o";
+  string output = "./output/map";
 
   struct stat st;
   int status = stat(input.c_str(), &st);
@@ -21,5 +21,5 @@ int main(int argc, const char* argv[]){
   }
 
   geoar::MapProcessing processor;
-  processor.createMap(input);
+  processor.createMap(input, output);
 }

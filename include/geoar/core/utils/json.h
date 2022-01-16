@@ -10,14 +10,14 @@
 
 namespace geoar {
 
-  void to_json(nlohmann::json& j, const Landmark& l) {
+  static void to_json(nlohmann::json& j, const Landmark& l) {
     std::string desc64 = base64_encode(l.desc);
     std::vector<double> position(l.position.data(), l.position.data() + l.position.size());
 
     j = nlohmann::json{ {"id", l.id}, {"desc", desc64}, {"position", position}, };
   }
 
-  void from_json(const nlohmann::json& j, Landmark& l) {
+  static void from_json(const nlohmann::json& j, Landmark& l) {
     std::string desc64 = j.at("desc").get<std::string>();
     std::vector<double> position = j.at("position").get<std::vector<double>>();
 
@@ -26,7 +26,7 @@ namespace geoar {
     l.position = Eigen::Vector3d(position.data());
   }
 
-  void to_json(nlohmann::json& j, const Map& m) {
+  static void to_json(nlohmann::json& j, const Map& m) {
     std::vector<Landmark> landmarks;
     for (size_t i = 0; i < m.landmarks.size(); i++) {
       landmarks.push_back(m.landmarks[i]);
@@ -35,7 +35,7 @@ namespace geoar {
     j = nlohmann::json{ {"landmarks", nlohmann::json(landmarks)}, };
   }
 
-  void from_json(const nlohmann::json& j, Map& m) {
+  static void from_json(const nlohmann::json& j, Map& m) {
     std::vector<Landmark> landmarks = j.at("landmarks").get<std::vector<Landmark>>();
 
     m.landmarks.insert(landmarks);
