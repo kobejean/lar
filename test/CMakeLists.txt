@@ -11,6 +11,15 @@ FetchContent_MakeAvailable(googletest)
 
 add_subdirectory(core)
 add_subdirectory(process)
+add_subdirectory(tracking)
+
+set(GEOAR_CORE_TEST_LIBS 
+  ${GEOAR_CORE_TEST_LIBS}
+  ${GEOAR_PROCESS_TEST_LIBS}
+  ${GEOAR_RTREE_TEST_LIBS}
+  ${GEOAR_TRACKING_TEST_LIBS}
+)
+list(REMOVE_DUPLICATES GEOAR_CORE_TEST_LIBS)
 
 add_executable(
   geoar_test
@@ -18,11 +27,10 @@ add_executable(
   ${GEOAR_CORE_TEST_SRCS}
   ${GEOAR_PROCESS_TEST_SRCS}
   ${GEOAR_RTREE_TEST_SRCS}
+  ${GEOAR_TRACKING_TEST_SRCS}
 )
 target_link_libraries(
   geoar_test
   ${GEOAR_CORE_TEST_LIBS}
-  ${GEOAR_PROCESS_TEST_LIBS}
-  ${GEOAR_RTREE_TEST_LIBS}
   gtest
 )

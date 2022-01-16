@@ -1,0 +1,1867 @@
+{
+  "landmarks": [
+    {
+      "desc": "IL5sAIARAME/AICBxTH+xx0BACAABnAEAAAAPIYASPcfAPj/QhACAP47XAcANwAAAMjxGOP//8dDYHj/AA==",
+      "id": 19,
+      "position": [
+        28.90009988205329,
+        9.006839703923555,
+        -16.950981076373935
+      ]
+    },
+    {
+      "desc": "CM8DAJYCJ/W+B88HAHj/PASAAXAQNxEAAADMJ4j/4Pf//beJ+w8AAP4HAv+MPgAAAACB/P////8nA/7MPw==",
+      "id": 20,
+      "position": [
+        28.914465325323935,
+        8.985632852864624,
+        -17.105902667498807
+      ]
+    },
+    {
+      "desc": "JRb8N4AN2AsgIXIOBADu9/99d+/uDvD3AQIA3PeOf28fAXj/IhIRAIj894H/wWdlQQgAAJAEAPz/E4QHAQ==",
+      "id": 23,
+      "position": [
+        28.75831568223851,
+        8.816423961749942,
+        -16.817362396108898
+      ]
+    },
+    {
+      "desc": "gAYgGLYAA6l1B3oDAND/Jw6AA3EwdwMAAADcaRrzgSKk2AUg8wsQdv3/Q9i7IQAAAAAAnP//94HAcv2/IQ==",
+      "id": 27,
+      "position": [
+        28.966163427262032,
+        8.84303111389509,
+        -17.15897276702056
+      ]
+    },
+    {
+      "desc": "JRZsIs2ZcALhL3ACBID/4d+3ZgSI72rGGSMifseItYgoM0IEf7+rjBDcryLwShlCBMiSCODN9wMAJMmfMA==",
+      "id": 77,
+      "position": [
+        29.173145665410544,
+        7.337600674858401,
+        -15.461062679657646
+      ]
+    },
+    {
+      "desc": "JR/8N4mZcKfzj8gHAABzwf//f+yMiHDGESMgGMcI9/aVRJSs/w9EXb8iXteI9RMGAAAAAAAYYcLAYDj3AA==",
+      "id": 80,
+      "position": [
+        29.128521296535517,
+        7.26969958648044,
+        -15.574976450955175
+      ]
+    },
+    {
+      "desc": "Nw/8N82ZeDXwh+1fJABRiP///4cM/vz/HTMgHMcA/qw1awWA/79WAjX+A/+IdRdABfgdAFAAATIAOD4AAA==",
+      "id": 83,
+      "position": [
+        29.130012428217583,
+        7.161822744470872,
+        -15.520288946695258
+      ]
+    },
+    {
+      "desc": "AOalAfYmB8C/BRuCwXj/z38fAAAAJvt9AADo95m/YQYAAPj/GwEAAP5HIM4ZcGAPgAF7+Y/9///v57h/AQ==",
+      "id": 153,
+      "position": [
+        28.87383902373815,
+        5.113237689331232,
+        -19.20820728452377
+      ]
+    },
+    {
+      "desc": "AQgcDAAQ2D5A//AABIDuhxvgB9gADGCAAQIAAAIAYAgAAGAABjCAAADA/3//NABgA0AABDCAAADA//n/OA==",
+      "id": 223,
+      "position": [
+        16.2345430502277,
+        3.446100348161258,
+        -25.67129261744663
+      ]
+    },
+    {
+      "desc": "AR7kENwLYImkB18GAADyoUyl12UA73vdAACo/IEL4eaLwTJf8x0IAP5/s65VGAAgBIAAGvV/AU4DIOj/GA==",
+      "id": 261,
+      "position": [
+        28.79365423645751,
+        3.778625100012521,
+        -16.89036707036725
+      ]
+    },
+    {
+      "desc": "AB4kEL4DAMk/BVoGAHj/5V4EA/AivzMAAAAARIAvQQYAAfj/wxEAAP7/u+4BGAAAAMDxPP//7wMAAHj/Hg==",
+      "id": 265,
+      "position": [
+        28.94229503626987,
+        3.7901174006739975,
+        -17.146199829116238
+      ]
+    },
+    {
+      "desc": "iPIAgLBmz28HORP+w/D/BwAAADkgAxIQQJDd6Tr2A3fn/b27q1MZIP7KdJg74P8/gAEwmO////fn4/5/AQ==",
+      "id": 266,
+      "position": [
+        29.389737537651076,
+        3.6813131919637,
+        -15.096679180988616
+      ]
+    },
+    {
+      "desc": "CP0AQP4jIcC/BMn/Zxn7YQQCAGAS/38dIEDIfIgzIKf5fb/v0xwAAL4/A+aIv////4cwTPP//8NA7BrzAA==",
+      "id": 278,
+      "position": [
+        29.336436854076194,
+        3.5872981922609717,
+        -15.1946690568608
+      ]
+    },
+    {
+      "desc": "IQZ+E4YAPMFtAvQMAgD4//8cL+CFf/zDAAAAAELgf4cOAfj/QxQAAPz96Tp0yw/3QwwAABAAACD++/+PNA==",
+      "id": 294,
+      "position": [
+        28.961897985692243,
+        3.6007321275231354,
+        -17.116637254801663
+      ]
+    },
+    {
+      "desc": "IHYDAIYAOMA/A7/MA/j/fwQAAHAABxAAAAAQ/3fAHwDA/f//AQAA//6D7TJ2yxF/hAcACO/////D//3/PA==",
+      "id": 371,
+      "position": [
+        29.669422734516644,
+        2.8554092247683047,
+        -14.594470537335726
+      ]
+    },
+    {
+      "desc": "YRBsJIAd2AJAeKCMxwHu3xlpBogACHD/2QMA/P9E380kAkAAJjCbAADc7QDwgQHmgw8AADC44MDM43n/AQ==",
+      "id": 646,
+      "position": [
+        29.51100615573989,
+        1.0903565374256834,
+        -14.914576137212674
+      ]
+    },
+    {
+      "desc": "/g1i/N8bsP+fEI25//fuP87f////9x9NFGn+/4UJPHf53b/rAMAFl/8vEIQPHxwAB+AAD3GAAQAA8P//MA==",
+      "id": 835,
+      "position": [
+        29.39254614764647,
+        0.11612152223964749,
+        -15.150173162479321
+      ]
+    },
+    {
+      "desc": "IQb+A4wFGIDpT7CcBwD+9/8fB+AADnCiAQAAnCJEXwQSAbj/859/AP7/c92f8AP+AAAAAQAA+P/z////MA==",
+      "id": 1089,
+      "position": [
+        29.317863009398817,
+        -0.746343259942512,
+        -15.919121033154733
+      ]
+    },
+    {
+      "desc": "JRZ8MYwBGMA/B38T6H/w3/0fcWAO5vB/CDg4HAIAT0YEETCzMxsRBP7vRoC7ITyAj/fxH/+AAQAAAP7/NA==",
+      "id": 1114,
+      "position": [
+        37.49932971050441,
+        -1.1236506552201933,
+        -19.973802808022775
+      ]
+    },
+    {
+      "desc": "A479AJwDwA2AMRueAgLwt33knwEAPvKRAAAIBID/QRQLAbj/yl1uAP4DuO8N2HcYDICBGMhhh/8DAGD/Pw==",
+      "id": 1120,
+      "position": [
+        28.905736382434725,
+        -0.8746502527276432,
+        -17.901466037143642
+      ]
+    },
+    {
+      "desc": "GgK+2/YAD9AsQ7eEAnr75e+eu3t3d7czAADdyzL0C0fulTtyIxcAAP7L5Zh3wQ//w38wBwMAAMDw////IA==",
+      "id": 1129,
+      "position": [
+        34.562880381271526,
+        -1.1390148905759239,
+        -19.878809764557964
+      ]
+    },
+    {
+      "desc": "GIY0GP4AD8htYzaEwXj/R66MA3Fl/w8AAAD8wzr2QwAGgPn/MxMZYP7PZRh3QAAGgAEwhH/88cHh+///AQ==",
+      "id": 1436,
+      "position": [
+        37.82193434765471,
+        -3.014674352806914,
+        -21.070635809875117
+      ]
+    },
+    {
+      "desc": "CP4BQH7/h+SXtEvf7wvxAAAAACEwvx8YYOzuYtw/YRfRRfz/CFBEEf8DfN8LNPFBfIj/+PD///8fAAAAIQ==",
+      "id": 2066,
+      "position": [
+        38.168798319633254,
+        -6.075634932708018,
+        -20.207306664166534
+      ]
+    },
+    {
+      "desc": "IA4PAAAAIAJh7/ABAPD//wfgAAAAAAAAAAAACAIAfoAAAABEcK/77t3/73vwGgAAAAAAAC79/+nv9/3/Hw==",
+      "id": 2163,
+      "position": [
+        28.805024615858642,
+        -5.039503868128221,
+        -17.222407415372302
+      ]
+    },
+    {
+      "desc": "IXYEAIABOIH/B0+PBwD+RwAAAAAAAHCAAQIAHAAAN3aD3fT//x8AAG4LBIAP+AF+AAgAAPB/8v//4///AQ==",
+      "id": 2164,
+      "position": [
+        28.998355641793708,
+        -5.046449146999938,
+        -17.028663881521314
+      ]
+    },
+    {
+      "desc": "AB8CAAAQOL3+B48PBID/BwAAAAAACHAAAQIAAIQAPrqR//f//w+A/yUkAP4I/gFgAAgAAAB//////3//AA==",
+      "id": 2169,
+      "position": [
+        29.056671015648494,
+        -5.070734603760079,
+        -16.825567161756428
+      ]
+    },
+    {
+      "desc": "oBcAAIAROL3/Bw8MBIDuNxAAB/AAD3CAAQIAHIAAPz7f////348Ak6cnA/4P/wEgAAAAAPB/4cPD4H//IA==",
+      "id": 2181,
+      "position": [
+        28.862401769128837,
+        -5.112832526694187,
+        -16.885455641780556
+      ]
+    },
+    {
+      "desc": "ARh8AAIQAMB3AFAfDAIA/v0ACMADPvCDBwQEAAAAIADg7//9FQiACwUEAn7I/0FgEAAAIICBzw8PBADsHw==",
+      "id": 2678,
+      "position": [
+        23.899061508348357,
+        -10.720155717381529,
+        -37.538877673697364
+      ]
+    },
+    {
+      "desc": "iAYyWBYAR62gBw8DQPz/IUaAEXASdwMAAEj8JwDzIGCg2AYLv49t9+9vB4AP+B6/g3AQnx8AAEBg8/8fOA==",
+      "id": 10550,
+      "position": [
+        28.71499612144061,
+        8.849341545121716,
+        -16.930359091036948
+      ]
+    },
+    {
+      "desc": "AAb0Ob4ACMm2BR8CAID/3/++n/MTfzcAAAAABAD3SCYDCPjdk4kIInZnAu4deB4ABPAAD0SAAQIAwHr2Dw==",
+      "id": 10570,
+      "position": [
+        29.45562870648311,
+        7.512921467049879,
+        -15.488864878293946
+      ]
+    },
+    {
+      "desc": "uAb+Ow4ACImsAz8AAPD/5///f3AP/wABBDw8HAAAR2YGCDAz858ZZv7/A4A3wB62h/QQDw8AAAAA/P//MA==",
+      "id": 10578,
+      "position": [
+        29.031178004486158,
+        7.416889143884127,
+        -17.02754702456921
+      ]
+    },
+    {
+      "desc": "pwL+v+8BWBtgI3KcBgCg9///f+dG//6jAQAAjALgn06mkyEiPx8RRMjMZpH/4Q6hQ3AAjwkAAAAg/v8PPA==",
+      "id": 10581,
+      "position": [
+        29.455929027075992,
+        7.220256100152382,
+        -15.455880918273895
+      ]
+    },
+    {
+      "desc": "GAZ2GB4AAIC+B/8HAGrx+O6he3AP9xEAADh8H4AAeCAACLj/048A+v/3A/4d+B+YB/AADwgAAAAA8P//Pw==",
+      "id": 10583,
+      "position": [
+        29.49877158154654,
+        7.098479411718096,
+        -15.35882921308598
+      ]
+    },
+    {
+      "desc": "IFYDAOYAv9AfQLaEA/j/fwaAAXBE1x8AAAD8i3/wH4PIpLr/AAQg6f4T6Tp0yhK/wAeAjQ/8/ePj////Nw==",
+      "id": 10587,
+      "position": [
+        29.197406314536156,
+        6.428468695832834,
+        -15.432128955490443
+      ]
+    },
+    {
+      "desc": "JwJ+B4AB+D/A+6Cch2Hsv//pf0YADPCnHwAACAIA3/UfASAiutt/AP7LdIE/4R/cB//gAx5ggIOD4/n/Hw==",
+      "id": 10590,
+      "position": [
+        29.264707486273934,
+        6.288157884587421,
+        -15.328253460704554
+      ]
+    },
+    {
+      "desc": "2A9yeB4AwHwS+M8D8P9vC+6D+3Af9wEABjz8AAAAwHFbQAyJgPh///9vE80NfB6eh/fwDw8AAAAA+P//Jw==",
+      "id": 10592,
+      "position": [
+        28.736998099507485,
+        6.2789570839866204,
+        -16.934392872462517
+      ]
+    },
+    {
+      "desc": "4B0AOA4RoOSflI+LRtHvJxKABfAP/0sAASIAGIYAMHLx/5//uU/F//8DFMUPvhl2hs2wAHDYYUFC5nn/MA==",
+      "id": 10622,
+      "position": [
+        29.23466029155625,
+        5.343322804193568,
+        -15.343229287185135
+      ]
+    },
+    {
+      "desc": "If5tAIAPOMB/B/6NBwD+//8fB+AADvD/AAAAqH/dWgYAAfj/sx0AAHx/s+2d+CN+AAgAAID4/v3/4///Nw==",
+      "id": 10649,
+      "position": [
+        34.05628183471383,
+        6.728588684768424,
+        -29.940682459105375
+      ]
+    },
+    {
+      "desc": "IP4EAIARGMC/BRsOBAD+Rx6AB/AAD3AAAAIA/PHuJwLg////2w4Am78zGvcI/wFgAAgAAOD/////43n/AA==",
+      "id": 10650,
+      "position": [
+        34.26547252293314,
+        6.726334945005149,
+        -29.622549678895172
+      ]
+    },
+    {
+      "desc": "4O0DBAAA+H8EaHYAAIDvPx6AB/gADwCAAAAA+H//+P9/tg9GQPT/7RnZ/yPwygFgAAAAAIB//v3/////Hw==",
+      "id": 10651,
+      "position": [
+        34.61541060295253,
+        6.72926791181027,
+        -29.300542201120052
+      ]
+    },
+    {
+      "desc": "ABhyPA4AsP2eEI//BwD8P3aAHfgP/xAAAA4MAAAAP1f/3b/7i1AEEf4D9P0Pnp//5//wDxAAAAAA+P//Bw==",
+      "id": 10674,
+      "position": [
+        34.748434248013794,
+        5.805721297071313,
+        -22.37415766660812
+      ]
+    },
+    {
+      "desc": "gH8HAHYAv36f///7/4n/cAAAAAAA/w8AAADcAwDwdFQfAej/6v9/AP7r/4GPP9/////+iHB/+fMj/P8PAA==",
+      "id": 10701,
+      "position": [
+        27.832108305289537,
+        5.732697072881181,
+        -37.539035011390546
+      ]
+    },
+    {
+      "desc": "tQL+E64BCIEkBX4GAkD+9/+/c2EO5zIHCBC4/AMAZ2QGmbmzM5MZBP7PRoC/4Q//g3yABxAAAADg8///NA==",
+      "id": 10728,
+      "position": [
+        28.801650091632254,
+        3.6932705183181724,
+        -16.970956969592677
+      ]
+    },
+    {
+      "desc": "IPYvAIQJPMAfALfcA3j/9/0fAGAARvB/AAAQ32fAXwUAAPj/AlAgAP4DiTp0irP/7AcA2Q/U///nUv+PNQ==",
+      "id": 10755,
+      "position": [
+        29.21210543415683,
+        2.8673653903311975,
+        -15.481369331477593
+      ]
+    },
+    {
+      "desc": "gAYCGAYAuP2+Rq8BAID/Hw6AA3ACdwAAAAAcBAAAXnVdXa/rqt51RP6L14HvBwAAAAAAAHB8AODj+/8PCA==",
+      "id": 10759,
+      "position": [
+        29.170509178402817,
+        2.7230767168828383,
+        -15.667955564085274
+      ]
+    },
+    {
+      "desc": "CAYyGAYAsP0eAO/Px0H/P26AG3AHfxAAAAwcAACQeHefFbz7KxoAAP4L9IHvt5//5//4BxcAAADg+///AQ==",
+      "id": 10773,
+      "position": [
+        28.761131286583282,
+        2.7192565060745504,
+        -19.35420069240103
+      ]
+    },
+    {
+      "desc": "NxZsMYwFGNJ/b/DcA3r/D+lJekpP5PDvnhB8nwYA3lVv1SMCqtd9AP6L9YF/yxweBsAAH3/44QEA4Pn/Cg==",
+      "id": 10811,
+      "position": [
+        28.960606598735772,
+        2.1142955713639413,
+        -17.06384823654628
+      ]
+    },
+    {
+      "desc": "IRBsNIwRwENBCDAMBADu399Bd/gO7nCHAQIAHAYACF3AF/hzLnABAAoIRAD3wx1gBkgAAHD4AQAA4Hn/Bw==",
+      "id": 10905,
+      "position": [
+        29.272797380732207,
+        1.300887345359435,
+        -15.689156384238453
+      ]
+    },
+    {
+      "desc": "mgKw2X4ig8EwAEuDwLD/x+6v+3N3/w8AIMD87xhzQGEAGAiDMMBFF/8PBoCLNQ6Gg/N4jzcYYMDA+f9/AA==",
+      "id": 10924,
+      "position": [
+        28.939349728911726,
+        1.3319208518382886,
+        -19.22572097139556
+      ]
+    },
+    {
+      "desc": "4AczGAYA2D9M+3YMBIDuNx6gB/AADwCAAQAAiHr03/1/1+26oPt/dOnqdt2LNQ63x3f4zw8AAADg//+vJQ==",
+      "id": 11132,
+      "position": [
+        29.36743041254658,
+        -0.725215603088736,
+        -15.279651771412775
+      ]
+    },
+    {
+      "desc": "/g/y+3/5+D+a3o0DBAHMP/qf//f//w+A/28iFsWL9PV9Xa2rqtp3Ub6DVNUqJwAgBIQACPhbCd8CDEP4NA==",
+      "id": 11459,
+      "position": [
+        28.769555339779323,
+        -3.4228653911354243,
+        -18.450860177904836
+      ]
+    },
+    {
+      "desc": "YRh+v48ReBfoWqQcBwDo///5Z/7Mj3yAAQIAnOcM3//sN/tmSFYyyZoBzDJww5/+p//wDwQAAQIA/Hv/Hg==",
+      "id": 14767,
+      "position": [
+        29.005779388596608,
+        7.876063423727585,
+        -16.850870208265416
+      ]
+    },
+    {
+      "desc": "tAb0Et4JdLE4B/5PAAAzoNwz9+Se/31PABh4PAMAePaeib73e58AAv7HA3j//AVDwSgYgrEOEGB0OJ4BIA==",
+      "id": 14769,
+      "position": [
+        30.222205499388746,
+        7.52769094546094,
+        -13.693872618402995
+      ]
+    },
+    {
+      "desc": "AwL0uf4BCItlJXIeBADg9/6Nf/Nv//eXCQAADAIgQ0aCkfjzPxsBAMzMZoD/IB6AB/CgD2+AAQAA5Pn/Nw==",
+      "id": 14777,
+      "position": [
+        28.9795348138161,
+        7.341992522132983,
+        -16.94441638546199
+      ]
+    },
+    {
+      "desc": "IPInAKQEn8AfQLeEA3H//48IAWBABzQgAACQ/X/0DwPArLv/AQAA6/4DyD52w4A/4Afg1S/+//H/+///Bw==",
+      "id": 14780,
+      "position": [
+        29.1805887362568,
+        6.453527684591533,
+        -15.468143196508112
+      ]
+    },
+    {
+      "desc": "pxJ+N4wNeB/ga7QMhwHuv/v9f8cADOzn3wEAgGPM3/0PASEytvd/AMj8dZA3gQf8AQcAABxggIOD4/n/Hw==",
+      "id": 14781,
+      "position": [
+        29.29864373498248,
+        6.274659122522135,
+        -15.36657456834221
+      ]
+    },
+    {
+      "desc": "Jz78I4gfcDLgz+CfAwD+9/1/5sQADPD/uQEA/O8A/E4dAWCK9z91AAj+38GO/z9+jgYADOD44wMAoPn/OA==",
+      "id": 14783,
+      "position": [
+        29.02918933647822,
+        6.2609058985523225,
+        -15.927351488938672
+      ]
+    },
+    {
+      "desc": "Jx78B4GZfALg//CMA1D+9///78+ADGDggQEAoH///kQcASDC5z9/AMj//0H//wP+gAcAAAno4cPD5/n/OA==",
+      "id": 14789,
+      "position": [
+        29.523276655175398,
+        5.619367135313761,
+        -14.757097808963746
+      ]
+    },
+    {
+      "desc": "oRZsJIAReDth73APBADu9x/gB9gADGCAAQIAXIcA92QyESAC9v9/AMz/JwH/OABgAAgAAPD548PB4Xn/AQ==",
+      "id": 14793,
+      "position": [
+        29.163253866023418,
+        5.644346407698918,
+        -15.936402011996904
+      ]
+    },
+    {
+      "desc": "+B1Q+n+xsO2ftEuLRIHuJx6S//X//08AAQMCIM+ZNMv6/t7fRC3r/wF8v2vcHhAShsXwDH/44UMC5nn/NA==",
+      "id": 14800,
+      "position": [
+        29.231434973697286,
+        5.314254190493366,
+        -15.343717375954567
+      ]
+    },
+    {
+      "desc": "Je7/B4DP/z5A+PCFA3Duxx//h88ABHD4wQEA8P3///0fASggAvB/APz//3/ypwA+gAcA4Q98/v3/////AA==",
+      "id": 14813,
+      "position": [
+        31.472760253236203,
+        6.805960538778527,
+        -32.766457797191016
+      ]
+    },
+    {
+      "desc": "4Q14PI4R+D7B/MADgHv+v//hf/gP3SCAGwAAEIYA5c1/USQAovh/ALj6/8WINRiAh//zP3+AAQAA5Pn/Hg==",
+      "id": 14814,
+      "position": [
+        29.714899819983046,
+        4.913521740433459,
+        -14.575924388003529
+      ]
+    },
+    {
+      "desc": "Ie79A4APeADg/4CPBwD+x/9/B+AADvD/AQAA+H////0fAej/gv1/AP738/8P2gN+gAcQAAF4/v3/4/3/AA==",
+      "id": 14824,
+      "position": [
+        34.02763464224668,
+        6.758532541163157,
+        -29.95839253954213
+      ]
+    },
+    {
+      "desc": "NxZ8E+4FGKE0BX9HAv3/9P0dM+DP/v73DBgYjALAX3YEEbj7O1sRAP6LRID/5R1qB+IADnCoAAAA4P3/Gg==",
+      "id": 14891,
+      "position": [
+        28.975547635273035,
+        3.6931985029253225,
+        -17.019876041212886
+      ]
+    },
+    {
+      "desc": "Ie5vA4APvMAfQKSUy3P+z90fAAgAAPD/AAAA/H/EX5VMAPj/AFAyAP4DzDJ0iwL/+Afg8Q/4//3/8///Hw==",
+      "id": 14906,
+      "position": [
+        29.201009146201162,
+        2.895449392370659,
+        -15.512154179086211
+      ]
+    },
+    {
+      "desc": "IRJsNIwRiMNBCPALzQHu398hJ8AE7nCHCQIAHAYAS14AEfj/L3ABAAgIZID/IByAn//zP3/4AQAA4Hn/Hw==",
+      "id": 14990,
+      "position": [
+        29.233988373593128,
+        1.3291198855958488,
+        -15.649224349952563
+      ]
+    },
+    {
+      "desc": "IQL8B4AdGMA/AA+IxwHu//9fBegACnB/AQIA/AFATwYAAPj/PxMAAAwMBIA/wQ/egT/wAAx44MHH43v/Pw==",
+      "id": 15210,
+      "position": [
+        29.916718832583246,
+        -2.3478028337304635,
+        -14.48276289405029
+      ]
+    },
+    {
+      "desc": "9Q9+O88J/GyWvEsPBkHu//+9f/SO/y7DDAEYHkOId3QXFLy7uttdBe8DVsGPNR/wB/yADwgAAAAA/P3/Pw==",
+      "id": 16704,
+      "position": [
+        29.249720252226965,
+        7.3529249676575965,
+        -15.254288811798272
+      ]
+    },
+    {
+      "desc": "/wD+v4UAvOkVoHoDi3/M//9/f+/vYPD3DBi8DwKgd0dWETyzABBZBM/OZkH/NR6QB/bAD3+AAAAA5Pn/Pg==",
+      "id": 16705,
+      "position": [
+        28.729695333080503,
+        7.262673022402467,
+        -16.9018381504974
+      ]
+    },
+    {
+      "desc": "Jej9B4APj8AbQKWNAgDq5/9fBepUAPB/AAIB7Xv1ShVIAbjvAlAgAP4D3DBmz6NXAAgVAIDe/vX+A16wMA==",
+      "id": 16706,
+      "position": [
+        29.160179313608925,
+        6.512719363855439,
+        -15.5396613907559
+      ]
+    },
+    {
+      "desc": "Hxb8//+OdxJBa7CcAyD0j////////v//4gHUg37/2s+rgyJQZzUoAED9/ypVyh+/xxMQjweIoEDg9f1/CA==",
+      "id": 16712,
+      "position": [
+        37.46052270680211,
+        7.131555301054224,
+        -17.727252841120112
+      ]
+    },
+    {
+      "desc": "IR0QKA4Q8D5B//D/PwIAGCBgaAAB0KCGHzU0AIYA/t8/s2fi739/AAH7/3H+/1/+BhIACQCAgQIA5PH/Hw==",
+      "id": 16722,
+      "position": [
+        29.61426907936987,
+        4.868870465547777,
+        -14.67726994442902
+      ]
+    },
+    {
+      "desc": "JxD8//8R+DpB+HCcBQDmz///////3//++wMAAH7gv1VulaNSKnd/AMpL/IH/yB/+h99wDWeA4QAA5Pn/AQ==",
+      "id": 16730,
+      "position": [
+        33.910276516843005,
+        6.435649614454389,
+        -30.060708326961198
+      ]
+    },
+    {
+      "desc": "gAYCCA4AsMQfEI/vw/n/RwAAABAAdwAAABwcBAAANAFBXPj/gMBl9+8nEIQP/h6eATAADw8AAAIA+P//NQ==",
+      "id": 16760,
+      "position": [
+        29.250113497148494,
+        2.6471843125148165,
+        -15.551675177057069
+      ]
+    },
+    {
+      "desc": "Ae4vAIABGIDgB/6Eg3D+3x0gB2AADnCAAAAAgCD/DwaAATCB9x8AAPT/A/6ZNCbe/////x94oOX/4/3/Hg==",
+      "id": 16780,
+      "position": [
+        29.078620617536263,
+        1.8529434719316074,
+        -15.876650997989953
+      ]
+    },
+    {
+      "desc": "YA1bLkuZ9DZZ3uRFACj/CB/xR/yIjwiAEAEiEv+N/ok9IgZERHz22BGx33fgHwPlYBksgQKE+PD5/b4CAQ==",
+      "id": 16955,
+      "position": [
+        28.81659029522565,
+        -4.87029277915107,
+        -19.907222437826793
+      ]
+    },
+    {
+      "desc": "ChIAULwnwZdgAqD1+39yAwAioAAU5PH/vFj8vQoRCADg///fM5ABBExMBIAdGDycj/fx///4AQIAAPj/Dw==",
+      "id": 17270,
+      "position": [
+        28.72814957303663,
+        7.192889301529028,
+        -16.912551985948355
+      ]
+    },
+    {
+      "desc": "2B9weJ4RIMF9BXoOAAAAPP6B//D//38HFCg4HIAAIKrg6l/VVY2C+xX0A37QfEAAAAACIODnvz8fBgCAPg==",
+      "id": 17274,
+      "position": [
+        29.442933521607625,
+        5.242509094881617,
+        -14.935451025694295
+      ]
+    },
+    {
+      "desc": "AAYGAIYAMMG+AI+MBwDufwYAAXACLxAAAAAIHIAAPxLA3b/7uQAAl/4DEIQPygAAAAAAAwwAgOPD+///Hw==",
+      "id": 17292,
+      "position": [
+        29.241938611367722,
+        2.6009698213694765,
+        -15.53795405966034
+      ]
+    },
+    {
+      "desc": "IRZsAIABeAJhD/CNA2D+/51gJsAADHCHCQAAHAYA3m4eESAC9z8xAAj8xwD/xxF6AAAAAED448MD4Pn/Pg==",
+      "id": 17311,
+      "position": [
+        29.333403769434536,
+        1.42024532940758,
+        -15.590646690418632
+      ]
+    },
+    {
+      "desc": "GAY2GP4APME/B3+HABAzQe4AEXAH/x8BABg8DwCAPwLA3b/7sQ8A9//vA8D/9AAAAAAAgQAAEeIg+P8PIQ==",
+      "id": 17312,
+      "position": [
+        29.70816997061383,
+        1.3977650855477564,
+        -14.793696161030615
+      ]
+    },
+    {
+      "desc": "IPYHAIABOMA/AB8OBAD/zx0AAAAABnAAAAAAnMUIPwDAzf//AQAAM/8DAPwPOGHg/A+PAIDv////AwAAPg==",
+      "id": 17337,
+      "position": [
+        29.726846371832128,
+        -1.6460275755380656,
+        -14.84914163486095
+      ]
+    },
+    {
+      "desc": "gAcCAAYAAOG/B38DAID/BwKAADAAbwAAAAAIDAAAIGLQ3b//MYgB9//PB4D/PAAAAAAAABAQAMKD+P//AQ==",
+      "id": 17345,
+      "position": [
+        29.13133171717878,
+        -2.114773846042295,
+        -15.806904154773253
+      ]
+    },
+    {
+      "desc": "NQZ+G04AOJAsQ7YAgKD/yv/5f/bP/xwAAAAwnKYAX2YOCDB7s5cwAv7/A7h/SwoJAFhIhQSg0QCh+f9HCw==",
+      "id": 17459,
+      "position": [
+        29.132903540907503,
+        6.031440112460342,
+        -15.657582788246042
+      ]
+    },
+    {
+      "desc": "GB8weP4AAMG/Bu0NAAAxAMSA+/B//z8DBBh8HAAACKTou39nc5QjCJz9CyLwzz/BR/gIj3CAAQAAELwHCA==",
+      "id": 17463,
+      "position": [
+        29.485780637686002,
+        5.265080442751327,
+        -14.988152530412393
+      ]
+    },
+    {
+      "desc": "JR78A4Ab8D/A/sAXASL0z/9zZkAABPDPGQAAOM8A9PcfAajqolh1AP4r/sWPtyqsCgMAHaew44CFwfj/Cw==",
+      "id": 17474,
+      "position": [
+        29.059414324622374,
+        1.8483890774381282,
+        -25.55844828355232
+      ]
+    },
+    {
+      "desc": "AA4EAAYAQBLh//AAoHr/yAAgAAAAByCAAAAcAAIwQEQMESBy/x9/APj7/4H/AwAAQkF4rS+89QHo9/0PAw==",
+      "id": 17540,
+      "position": [
+        27.821536180011236,
+        1.5480406083434572,
+        -27.4214900373951
+      ]
+    },
+    {
+      "desc": "gfIJBIAFWKWwBM+Dx/HvHwAgBAAACHCAAQIA/IFvBwT1/6Wq/1tVUKqqVtUr5eF+AAgAAIB/////o3n/Gg==",
+      "id": 17553,
+      "position": [
+        31.83105525783841,
+        7.461580416558554,
+        -4.462207547199868
+      ]
+    },
+    {
+      "desc": "AQ4+AIQAIABA7PCPBwD+zxwAAkAAH3CAAAAAAAAQcAYAAPj/wx8AAPLz+///vgf/wxcAAwAAAODj////Jw==",
+      "id": 17559,
+      "position": [
+        29.235086170574696,
+        8.939400305622716,
+        -18.8951554422157
+      ]
+    },
+    {
+      "desc": "IAYmAO4AHoD5B/SBx3H/384IA2AA/z8jAAD8jyPwHwKAAPj/8w8ARvz/R5Dv5x4fA+fwj394gICD8///Dw==",
+      "id": 17705,
+      "position": [
+        29.26330011445996,
+        5.033862767603719,
+        -18.373755019449604
+      ]
+    },
+    {
+      "desc": "2BcCWH4gw/+/BM8DBID/PwCAAHD//w8AANz8ZwBzgP3//4//kPF///9vAswfOABAD+yBHvh/AAAEAv7fPg==",
+      "id": 17829,
+      "position": [
+        29.21555797579318,
+        3.5306865396358815,
+        -19.108500496667226
+      ]
+    },
+    {
+      "desc": "IP4HAO4AHsC/B78AACD/2g4AACAAzzwAAAAg//dMHwDARPz/iQgA//8jVtWPdQAAAIhAAMT///8D8f//Cg==",
+      "id": 17867,
+      "position": [
+        29.188806592421976,
+        2.877454830221869,
+        -19.204865577087222
+      ]
+    },
+    {
+      "desc": "wAMSCA4AwD+0t18OBQDuDwiAF/Af/2OABQAABAAA4P9fy2/7EvB/AgTuA/yf9Bc/AAAAgQ4Q8ePj8/9vBw==",
+      "id": 18146,
+      "position": [
+        29.36114643855798,
+        -0.32559976819305564,
+        -16.87368486408503
+      ]
+    },
+    {
+      "desc": "wE0DAAAAcD/g//QNh4H/HwKgA1AABwCAAAAAAErQvMq/+wcA/y/3/gH8//dEDwA4gAbAAF988ePj////Hg==",
+      "id": 18159,
+      "position": [
+        28.941387794734172,
+        0.0008919416763074611,
+        -24.33868916901526
+      ]
+    },
+    {
+      "desc": "GHYHAP4AN8B/a7T8/yv0WgAAAGCB/79DAAD8A0L4PgAAufr/c5crgP79qSp1Svvf/v//DOz8/wMAgP/vPw==",
+      "id": 18221,
+      "position": [
+        30.244672899486147,
+        -0.5254454588641503,
+        -22.864316344446866
+      ]
+    },
+    {
+      "desc": "IE4nAIYAnt8PerYEAAD/9w4AAXAABzQAAAAQiWbEX/cfAPj/QtZ/AP7b7Tp0ywKgAAAAAQuA/fvj////NQ==",
+      "id": 18228,
+      "position": [
+        29.638859143196346,
+        -0.9198004574503134,
+        -16.084596156929315
+      ]
+    },
+    {
+      "desc": "QQ1+Po8R+H8AsE8PBIDut3/1//+rr0qAAQIAVMGv9719Zs7IjPz3mSMjm/eMvwfgAQgAAAAAAMLD//3/Pg==",
+      "id": 18232,
+      "position": [
+        29.195705177950188,
+        -0.7767580274086074,
+        -18.81496533346673
+      ]
+    },
+    {
+      "desc": "P/71+//Pv/Abxuz/+3//9+g/+gf//v////3/n8eIflQZAfj/ql51AP4r1+HO/x/+h/fwD3944cPD4/3/Aw==",
+      "id": 18312,
+      "position": [
+        29.504013896963986,
+        -1.3245955050832647,
+        -18.851447714362838
+      ]
+    },
+    {
+      "desc": "wBcCOA4AwP+f8A8L5IH/HgKAAXAD/wAAAAA8BAAAIALh/5//gQCA//8jFIQPIRxwh+/wDnh4AAAA+P//Nw==",
+      "id": 18361,
+      "position": [
+        29.639713501156333,
+        -1.7484312590442852,
+        -15.986211165739038
+      ]
+    },
+    {
+      "desc": "wOIDAABixxJJSqAAAJDvpwbgARAAAwAAAAAA6Hv/yNAMMAJGaEazz5qZzSB0C+BB+A2/8IJ//v3/HwYAIQ==",
+      "id": 18517,
+      "position": [
+        26.359739453737067,
+        -2.249045741167408,
+        -27.418318270946664
+      ]
+    },
+    {
+      "desc": "QO0BADJih/Qf+I2DwXn/RwIAAHBQBwUAAEDF4X53CJFVZP3/AEBWXfsD/NcKNQAMgAfwwO/+//fz+3//Aw==",
+      "id": 18574,
+      "position": [
+        29.513432240046303,
+        -3.1608165443626213,
+        -18.618497714675254
+      ]
+    },
+    {
+      "desc": "AOYHADL2B4DkJzYAg3H+3y8sAAAABrYwAADEwfz/AwCiqlJV/w+IqlT1I35xCCCdSBf5kY90///3w//vDw==",
+      "id": 18575,
+      "position": [
+        29.511071163039304,
+        -3.1819246476443026,
+        -18.463543471228128
+      ]
+    },
+    {
+      "desc": "ZxlK/gH7dAAA2I2r3/HuNxH+/5/5CED4//8D4P//PALg/hcA7Q2A/wFQvW/VGh/+h//wDz9YAEHC73v/NA==",
+      "id": 18592,
+      "position": [
+        29.502497543007102,
+        -3.2477226261493035,
+        -18.698472250984203
+      ]
+    },
+    {
+      "desc": "WF0DKFuwtOSb1I1HIkj9OACACHCbvwsAEmxuAswPNBHhfZ/siEBE2/8D2PcKtxDpZIZIyUwknf8DnedMHw==",
+      "id": 18600,
+      "position": [
+        28.978571044133414,
+        -3.0845475470293326,
+        -24.37893716151191
+      ]
+    },
+    {
+      "desc": "GH1Do//f/m8XuAOOhyD+HxiUBvf7/2/wwwGAwPHvZxVVQfn/gnB/ELqi/tUKpxA8BIfgKN5/xf+D5fH/Dw==",
+      "id": 18616,
+      "position": [
+        29.519215343107422,
+        -3.3567595208663388,
+        -18.61461023472342
+      ]
+    },
+    {
+      "desc": "H3738///nskmAROehwD8334fl/f7///9wYGA5PH/JwCBQfj/gwAEEObmEP4LoBC8BIfgGU9w488DwXn/Hw==",
+      "id": 18624,
+      "position": [
+        29.575044063269562,
+        -3.3694974300312706,
+        -19.456157770489572
+      ]
+    },
+    {
+      "desc": "4OcDAADu3z/oQ7eA0/3vPwDgABIAAQAAgAHb/3v/3/+/+gcA9Y+0/qX9U/wPB8B9+Af+8I9//v///1OgNw==",
+      "id": 18639,
+      "position": [
+        29.043647881074826,
+        -3.2780248571261663,
+        -24.248439617915498
+      ]
+    },
+    {
+      "desc": "/xGC+X9mzz/gT+T1g/7MHgro/1dQ/w+g/gH95/n/2v8/ewcA/7/31gH8V5Aup3y4v+ZBf/1hAAYBACDcHg==",
+      "id": 18671,
+      "position": [
+        29.49052511569639,
+        -3.611546638203276,
+        -18.75130880909196
+      ]
+    },
+    {
+      "desc": "AI2UABIwIaXylEmHw3P+HwQCgXARFzEIAEBEIIgb8Kub4FTd1Q3GunV3u2+I/B6egFfwDw/44MHD4/3/Jw==",
+      "id": 18767,
+      "position": [
+        28.262769275404448,
+        -3.673340110505217,
+        -25.18516072563125
+      ]
+    },
+    {
+      "desc": "OF4DAH4ANZF9B/RMp2n/HgQAAXCB/x8AAAD8A0GYfKaKqPr3U40qqlTfg2r1mhF9RAdgiF500aOj8/9vDw==",
+      "id": 18769,
+      "position": [
+        29.519637316328016,
+        -3.972347849402884,
+        -18.364513341090436
+      ]
+    },
+    {
+      "desc": "5Ql+NoGZ8H2a9I8Hgf7/Dx/xT/yIAHDEESMCEMcI/l971I6IiEjttWsj9MUPfh6MA/Pgnz8wwICB8f//Dw==",
+      "id": 18788,
+      "position": [
+        27.664246571662137,
+        -3.677496628005916,
+        -25.873842767754397
+      ]
+    },
+    {
+      "desc": "QP0DQBLyoWSb/I2PxyH/DwKCiLARGwkAI2ZGIPyfMJFJ5t7dyODuuzMhuP8AHgFMAIt5AMa8///n4fx/Cw==",
+      "id": 18798,
+      "position": [
+        28.327818030499426,
+        -3.837105523125015,
+        -25.101795458856987
+      ]
+    },
+    {
+      "desc": "QO2dQBCypeSSlEuXg3v8Xy1Si2yRELFIIkRmIsyfMIHZY37dgADmmDF3u+8M3jIfCIPh/8989/+Hwfz/Dw==",
+      "id": 18827,
+      "position": [
+        28.3163138999944,
+        -4.010589011113596,
+        -25.09852164937897
+      ]
+    },
+    {
+      "desc": "wA0ACAIw4G7X/VsDRIA3AQKACfgBHwAAAgQEAJ4jodv39oec7GnP/XNy/k+YNAAAIBgcQAGOffr4fA4QAA==",
+      "id": 18863,
+      "position": [
+        28.589035553721,
+        -4.276777400275424,
+        -24.81051172906501
+      ]
+    },
+    {
+      "desc": "4e8PBgHu/z9A//aAw/3/vwHghg8AAADA8YHD//////8fACj+ov9/8Pz///1/COAf+A//8J9//v///3fuHw==",
+      "id": 18954,
+      "position": [
+        29.489315278336218,
+        -4.964621627152663,
+        -18.996997979967762
+      ]
+    },
+    {
+      "desc": "wOcDAAAAD8A/A34AAJD/wQeAATgAAwAAAACIbBDzAQDg/g9BEIDr//3/A2rVGgFgAAgAAJB//v3/8/9/CA==",
+      "id": 28571,
+      "position": [
+        29.354130981050975,
+        7.612612747066211,
+        -17.317954088513435
+      ]
+    },
+    {
+      "desc": "ARZkIIwRQK/lBxAOBADu516gF/AC/3eAAQAAZAAzQEaEEfj/vxsAAIjsRoAvJQAAAAAAAPD/788DQHn/Nw==",
+      "id": 28588,
+      "position": [
+        29.444718436341308,
+        7.32506438758127,
+        -16.78851978854691
+      ]
+    },
+    {
+      "desc": "A4z/B4ARYAHgBoUVAkLw//1/3wAAAPD/AQAAAIwR8P8dADAB3x4AACS0A/YEzycYABDBEQwAgv/HA3r/Pw==",
+      "id": 28604,
+      "position": [
+        36.108792913783574,
+        7.22865379118691,
+        -8.59325364934251
+      ]
+    },
+    {
+      "desc": "2A0AeB4wofW7lM0DQNj/IQaC4fgf/wEAIH58PI4RMLP5fp/NmQiA/zcHAueMPwAABOCQDv34AQIA4H//OA==",
+      "id": 28651,
+      "position": [
+        30.283909069534612,
+        6.714602624251277,
+        -22.175423128281516
+      ]
+    },
+    {
+      "desc": "ngJyOH4AeBBI//T9/3+ZOP6pf/JP/40DHjw8AAIAHkAMEANiIHZ/xMnL/xH/xx/+h/+wDwsAAAAA/P//NQ==",
+      "id": 28661,
+      "position": [
+        29.388673970152457,
+        5.703000199451205,
+        -17.014681318883948
+      ]
+    },
+    {
+      "desc": "QQh8JIAR4DaA2IkTjSLg3/9hXwgAAPCHFwIAAIQA2JU5RaAAytBmAbYDmPcAPwfABf7hAwAAAAIDgXn/Hw==",
+      "id": 28674,
+      "position": [
+        37.482373262766316,
+        7.545339594087442,
+        -27.845989395493486
+      ]
+    },
+    {
+      "desc": "Ie6nA/SPfzrg7/CNx3H/9446AgIA/z/ggAH4/3/8XuQfAOj/9v9/APz/i3bkj4H/5AfcwE1+///z///dPA==",
+      "id": 28682,
+      "position": [
+        29.220486991972336,
+        5.129663185962584,
+        -18.492036703247113
+      ]
+    },
+    {
+      "desc": "AA52OA4AsOSe0I8DAID/C/6Bf/gP/xAAAAAcAAAAflfb1b77i1AEEf4j9OUP/h6AAfAADwcAAAAA+P//Cg==",
+      "id": 28693,
+      "position": [
+        29.359939713279598,
+        5.001461359011216,
+        -19.475630043688515
+      ]
+    },
+    {
+      "desc": "oTJ8tawFSgvgD3AAAJAvx9/tJ2IATzSCAAAQ3TZgz0omAgEg/y+QfoD8ZxAzoRhgn8EADPCZRwIABAD7IQ==",
+      "id": 28785,
+      "position": [
+        29.51122244051827,
+        3.5895928655447795,
+        -20.712276172304083
+      ]
+    },
+    {
+      "desc": "WP0BeH+q5feblM0DQNG/NQCAifT//w8IIEz+IsiZsP/9f4/NmPjmmzcDEueMPwAAiISRHPn//0dGInv/PA==",
+      "id": 28786,
+      "position": [
+        29.209220322433932,
+        3.3944645481931275,
+        -18.989548948939763
+      ]
+    },
+    {
+      "desc": "IH4DAIQJNID/B/zfA0H4fgwAAWAABvB/AAAACEOINADg/ycA+x9AAP7fC2P4//8fAFj5AKD8/wH+E/2PPw==",
+      "id": 28789,
+      "position": [
+        30.17120794421649,
+        3.649230160220405,
+        -22.026425559510816
+      ]
+    },
+    {
+      "desc": "IeaPx/HvP8g9IXoOBwDu/x6+h/fwD3/gAAAA4P//PwLi/7/cAQkAqP9zu2/Z+AEcAAngAI5//v3/////Bw==",
+      "id": 28832,
+      "position": [
+        29.230356009906817,
+        2.2647490283474627,
+        -19.02496740138093
+      ]
+    },
+    {
+      "desc": "gOaBwfbuT4vkAzIEADD/Dx6+h/fwDy+AAADA4Xn/w+4PCWA797cfAuT8A5wjAQAOgANwAMd/////////Cw==",
+      "id": 28859,
+      "position": [
+        29.227719070390055,
+        1.6426777305306106,
+        -19.03189552797387
+      ]
+    },
+    {
+      "desc": "AaB9BYAFSANgDVACyHPu3/9/BggAAHCVAQAAXIAi4fcfACAAYxYDAP7/7wPwBwFAABjxAAAA/v3/43n/Pw==",
+      "id": 28863,
+      "position": [
+        29.836189174334088,
+        2.0525402238440846,
+        -25.289639628459287
+      ]
+    },
+    {
+      "desc": "CPaBwL5mA4v3BRICADD/Bw6Gg3NwHzcYIMDA4bh/wOeH+TA/8wMAAP7/HgIAIAAAAAAwEPf////P4Tj/AQ==",
+      "id": 28876,
+      "position": [
+        29.2696760942203,
+        1.3768066048295218,
+        -19.030399738913694
+      ]
+    },
+    {
+      "desc": "WvmBx/H/x+eSkInv5/n/DwBegA/wAB944MPD5/n/gN/1d4+IiEBFFTsi3MUI9///////fv//793f43n/Aw==",
+      "id": 29128,
+      "position": [
+        29.48954545040928,
+        -1.4510226657018863,
+        -18.974321803751288
+      ]
+    },
+    {
+      "desc": "QYgNBAAwwCZA+ECfBwHqtxngjwgAAGCAAQIAAAjz4J09ASAATnh/AAAQ/nfA/yFYAAyAAIh66v/fg3v/Pw==",
+      "id": 29159,
+      "position": [
+        29.06357160668556,
+        -1.5811295427923968,
+        -24.050623740410174
+      ]
+    },
+    {
+      "desc": "AQAMBIABAMAgAO0NAADu/x8AB+gADnAAAAAAAAAAAALgXT5CIQAABC4rlYFP3gEYAAAAAABgoMHD4/n/Hg==",
+      "id": 29169,
+      "position": [
+        29.420225623346838,
+        -1.743924106205161,
+        -23.773873872386133
+      ]
+    },
+    {
+      "desc": "CI4DADYgB8AfsE8DAGD/fgaAAHAAdwcAAADcIxj3AABARLz/CFhEEf8DfMWLNQAAAAAAgOD//////aQHCw==",
+      "id": 29225,
+      "position": [
+        29.275997393254343,
+        -2.4154056683620118,
+        -24.030286216276817
+      ]
+    },
+    {
+      "desc": "CBakAbZGC8C3JVueg3D+3/0fASGgAvp/AO6D9tGvZ9cXAbi+qltdAP6DfNWr5f8fANihAALQQ4GCQn//JQ==",
+      "id": 29271,
+      "position": [
+        29.506895532541016,
+        -3.0416291682448198,
+        -19.059907836588913
+      ]
+    },
+    {
+      "desc": "YP2B/B8z4X8b2MmLz3HuHwDC7/7dEQGIu0dEIO4VWP9fAPz/APhXEb8iXsWKNaB9/+///v9/+v3/A37uJw==",
+      "id": 29319,
+      "position": [
+        29.490641111964408,
+        -3.4796188257621483,
+        -18.84762393974413
+      ]
+    },
+    {
+      "desc": "eB0AbFOw5XYb3MmLxbH/BwKCjJ7dGQ2A//9Do+/dePVVBa2vCth/Af8DXFeqNQDC9/geBGGIIUBA/I0RCA==",
+      "id": 29323,
+      "position": [
+        29.527063100984655,
+        -3.507366674341864,
+        -19.069452461793546
+      ]
+    },
+    {
+      "desc": "wPkD/AHuh/4f+B/8A3LsPwDAj///AHC4YYIA4Hn/gQ3i/wcAAPB/AEDw/X93wOA/eAAA8I///v3/HwYAPw==",
+      "id": 29329,
+      "position": [
+        23.781254262507463,
+        -2.6010950489901474,
+        -30.487883111739027
+      ]
+    },
+    {
+      "desc": "9P9Ho+n/PpfrXqV9Kk+R+AAbwAbYj01ssWNj///NXvwdfvvv//7335i9zTJix/E5fAaP+Mzvv38/DgIAPg==",
+      "id": 29335,
+      "position": [
+        23.58004626561765,
+        -2.594293723381191,
+        -30.67855000072867
+      ]
+    },
+    {
+      "desc": "ZxD8N4AdeBbA2qANgSDsn////88ADOD+/wMAuP8Ans3l/wcA5jIXAAC8XhEipT/0DwUABvAAAAAAAHj/Jw==",
+      "id": 29338,
+      "position": [
+        26.434706124594133,
+        -3.0315435819558822,
+        -27.321038587717936
+      ]
+    },
+    {
+      "desc": "GvaVyXZmTwrhazDc73v+jywuiwNg/7+4wID9wzr3AwCgqxEl3w+CatT0C34wAf//////6x8TDP77/wHwAw==",
+      "id": 29354,
+      "position": [
+        29.58217278711725,
+        -3.6858047190245533,
+        -19.42771995560948
+      ]
+    },
+    {
+      "desc": "IPYPAAB0i8gfITLEA3j/4R0EAGggAHA2AICA2P5mByLC7Pr9EYEIu/dXIH4R2OFz8AQO4IHP/33+PgEAMA==",
+      "id": 29364,
+      "position": [
+        29.523187252490757,
+        -3.829462538100486,
+        -19.17605157881902
+      ]
+    },
+    {
+      "desc": "J6b9A4DffInkJxeQSDLyw/9/VwcABPD/0QAA/LVPT6YKAHBd/58oonT9I35VSOICsDgf84ELPv5/LAIQMA==",
+      "id": 29368,
+      "position": [
+        29.584482210882193,
+        -3.8336125205353064,
+        -19.42995935811497
+      ]
+    },
+    {
+      "desc": "JxJut8Hf/D9JyuSNh0Huvxn6/s7QDGzq/wMDvGvd/v8fgSFxGvd7AMbF4Tr3gUX4lw4AABBhgElLp2HdPg==",
+      "id": 29388,
+      "position": [
+        29.50565452700521,
+        -4.00446309570328,
+        -19.056649965098025
+      ]
+    },
+    {
+      "desc": "wP0DCEv4/D+S/48L52H/HwCAABTImQyA8+cjk/2Pvp1/58f8zP//+TGw+P8ABwBo9I/uQNR//f8b/SPkHw==",
+      "id": 29413,
+      "position": [
+        28.497963421578984,
+        -4.011402845022715,
+        -25.004248767967802
+      ]
+    },
+    {
+      "desc": "wO8FAADuJ6DwhsiHQtH/JwCAABgAAQCAIEBA/Pn/4Gw9SASA9773Fi3+A8WO/8E38AQe4Iv//v3/f48RMA==",
+      "id": 29414,
+      "position": [
+        29.083980182603664,
+        -4.123051193423712,
+        -24.275621190606774
+      ]
+    },
+    {
+      "desc": "JeZvg+zPHoDlJzIEAP4L9N09AAEgRn53wICR/3fuBwCguhE3/weAbtz8IRpzwOARcACP+c//////HwEANw==",
+      "id": 29427,
+      "position": [
+        29.5096047670866,
+        -4.4214480501216125,
+        -18.85967716591979
+      ]
+    },
+    {
+      "desc": "SA0SfAOg5X8QnEkDAN6bMCLA+/yfE4AAAgR+As6Z9Pv5bg7AAAzivxEzm2fMXh6RA/CIzxoAAAAAeN+KNQ==",
+      "id": 29435,
+      "position": [
+        28.678603210018924,
+        -4.316577613657053,
+        -24.692550965300672
+      ]
+    },
+    {
+      "desc": "QIkJTAAwAQCA2IkHAnLufyPCiLgRAIAII0ZEAIg/oADg7wcA3QyAuycEAP4AngLgiAcAAQgA7v3/g3v/Pg==",
+      "id": 29481,
+      "position": [
+        29.315058687121674,
+        -4.893505374637414,
+        -19.882548405301172
+      ]
+    },
+    {
+      "desc": "ARZ8AI4BWDrg/3AOBAD+37+gLkAAXeCACwAAAAYAx8wfAWCy979/AMj+/wH/pRjgBsAADGCA4QMA5Pn/Cw==",
+      "id": 32936,
+      "position": [
+        29.298491959464876,
+        6.341191075058792,
+        -18.51150269710029
+      ]
+    },
+    {
+      "desc": "mAd2GH4AABDd//75//8/4OaBeBAP9wUAHjz8AwIAGAAAEOv/ov9/1On/94HvDx//5//8DwsAAAAA/P//MA==",
+      "id": 32945,
+      "position": [
+        29.385868213425027,
+        5.694235463346757,
+        -17.012928161989947
+      ]
+    },
+    {
+      "desc": "CA6CSH4iIcS/FAsHAnH/dw6Wg/C7/x8AAEDodtm7IALhfb/vuwgAF/8jEMUOfwAQAACQCE/46cPD+n//NA==",
+      "id": 32952,
+      "position": [
+        29.321802605895495,
+        5.688658936559466,
+        -19.196512513319163
+      ]
+    },
+    {
+      "desc": "QRl8JAAR4DNgzugfDwDgvzlhXoAACPCFFwIAEIQA8L8/AQAA33xmAAAAmH8A/z/8AQgAAAAAAIYDAnH/Pw==",
+      "id": 32958,
+      "position": [
+        37.461171798377734,
+        7.5231928023331545,
+        -27.8487807054083
+      ]
+    },
+    {
+      "desc": "uA8yOn8AtO2elA8DgPj/C06Re3T//w8AAAj8F4EINXHV3b/7qMhVd/8jFsWPNQaAATHwjx8AAMDD+///AQ==",
+      "id": 32989,
+      "position": [
+        36.675177763879745,
+        6.645215827118887,
+        -28.75831840153027
+      ]
+    },
+    {
+      "desc": "NRZslYQNGhJpa7TUg37/j8lpe0pMRLTnnhA8nyZAn2Ti3ScCM5UJAP7vJ4D/CBgIBuLxHv/44QEA4fn/Cw==",
+      "id": 33065,
+      "position": [
+        29.330253336854707,
+        2.111590644376599,
+        -17.062276784263588
+      ]
+    },
+    {
+      "desc": "AQhsBIABAMAgAIkPAADu3x9gB+gADnCAAAAAAAgRwFeVATgIgxAAAKqq3oUO9wMcAAAAAARw4MHH4/3/Dw==",
+      "id": 33252,
+      "position": [
+        29.438600821060547,
+        -1.7417139442226812,
+        -23.774790126205158
+      ]
+    },
+    {
+      "desc": "IHYEAP4CZwLhz/DNxwH/5wggAkAA/y+AAADc73vxWAQAAXD39x8BAAj8jwD0nx//zw/wAGD88ePD8/3/AA==",
+      "id": 33278,
+      "position": [
+        29.11944753666335,
+        -2.2356960456850183,
+        -24.08709533841095
+      ]
+    },
+    {
+      "desc": "NxL+9/3fOME+AR8MBACQ9P8fV+f+7v9/AKID//XOPwLg/xcR+w8Ad/7PIIg7ID7AL/gFX/AAAQIAAH7wPA==",
+      "id": 33298,
+      "position": [
+        29.514350817635293,
+        -2.776525643972129,
+        -19.079295114267733
+      ]
+    },
+    {
+      "desc": "mgKy2X5ATxtga3AAAIA/4e6Oq3N3/y+46gDc4zr3gwiguwMA96+A6gD8Azp3AA7g1/waBwCAAAAA/I0fMA==",
+      "id": 33299,
+      "position": [
+        29.49887167382832,
+        -2.7829032388532475,
+        -18.636024446731284
+      ]
+    },
+    {
+      "desc": "Nx78//9PmlZL+qQFAID/x////////2+mmQAB+X9ETzfJRbjbilAEEf4DkKwP2gFgAAAAAKCj3w0cBQDAHw==",
+      "id": 33311,
+      "position": [
+        29.5024180642471,
+        -2.990248786425192,
+        -18.629914826232696
+      ]
+    },
+    {
+      "desc": "APYBALYESxpha/CEQfD/BwqgI3EAdyeAAADcbRpwQaQKqXJVd7cqiFT9qyrwigAquAdQ+P9/////5zj3CA==",
+      "id": 33328,
+      "position": [
+        29.506651215858184,
+        -3.2862972325154782,
+        -19.20171351558138
+      ]
+    },
+    {
+      "desc": "ARAKLAARgMWCEI+Ix8HuPxPgBJgACUCAAQIAFIQACBLg/J8pGQAA//8DAJQP5RY+BAAAD18AAcID7Hv/Pg==",
+      "id": 33337,
+      "position": [
+        29.490021167559487,
+        -3.503579194021695,
+        -18.22812655445703
+      ]
+    },
+    {
+      "desc": "Ph/S/3v6peyXtEsDBIBvA/7f/////w8AP/8DOM+ZuLPz7JydmQlIO39DIs+ZeAFAAAgAAACA//vb/Tt2Cw==",
+      "id": 33338,
+      "position": [
+        29.528891736965683,
+        -3.5084908802602537,
+        -19.08063674022306
+      ]
+    },
+    {
+      "desc": "CPYFAP5GTxvgT7TM43n/DwCgAgAA9y+AAAD8ryr0Sq4KKHJ1/48qqlT9ATpwyvEfqIf92P9////3o373CA==",
+      "id": 33362,
+      "position": [
+        29.542888419063864,
+        -3.7624357740285643,
+        -18.532859211351173
+      ]
+    },
+    {
+      "desc": "mgLy+39mB+m2JVsCAADMP/6f//f//x8YAN7KZBizISLinbgTOwEAJ/5HIAi7YAAAAAAAABAGGP7/GBYAIQ==",
+      "id": 33375,
+      "position": [
+        29.51636580613965,
+        -4.030623332491607,
+        -18.64782363693817
+      ]
+    },
+    {
+      "desc": "IAYSCH7Afzvg7/AAQJD/gwqgAlYA/y+AgAH0g3//XyqMClN19w+Q6oT9Q3r2AwAgwAAAgGGccWJg/P0fAA==",
+      "id": 33406,
+      "position": [
+        29.51154317867195,
+        -4.769150534837527,
+        -19.074695853516697
+      ]
+    },
+    {
+      "desc": "YR16Pk+Z8HJZ/uwDAsH/PL/xb/yNHwhAAQMCAseIvpl4JwbESHzyiRMT/3P8PxyQB/SAD3jAAQEA4P3/Pw==",
+      "id": 33441,
+      "position": [
+        29.071272628527506,
+        -5.268761597071046,
+        -20.01322468517684
+      ]
+    },
+    {
+      "desc": "wAkSCAIQwD/A/wECMPwfoALgDxAAAwAAAAYAAAIAwPsfAIAE/W///xMA/APwPwCAB/CA738AAAAA/H//Pg==",
+      "id": 34991,
+      "position": [
+        35.79963041802243,
+        7.666540180150511,
+        -8.344829206450111
+      ]
+    },
+    {
+      "desc": "J4D9F4APShHgA7QUAHLgz/9//88AAPD//QAA/CFVyi6qiwIAd5UAAAT8Ayp1yqaqKQIAc50AAP7/AyrUGg==",
+      "id": 34996,
+      "position": [
+        36.16193059900323,
+        7.308534017957966,
+        -8.408225450802146
+      ]
+    },
+    {
+      "desc": "uAc2Gv8ItP0+A38EAEj/fE6RAfz//x9AAAB6PsWJ/PUfEaj7ItB/AP4vBoCPfAQAACAAgvh8AKDj8/8PPw==",
+      "id": 35011,
+      "position": [
+        29.286659917409473,
+        6.3144726020634545,
+        -17.94559183437459
+      ]
+    },
+    {
+      "desc": "2AcCeH4AgP2+EA8DwPH/HwaAAfB//w8AAGj8/YQHgHP/3Z8LuMAF9/8jFIQPCAAAAODwD3944MPD+///Bw==",
+      "id": 35041,
+      "position": [
+        20.02686313357634,
+        5.018717399949992,
+        -32.77009805989181
+      ]
+    },
+    {
+      "desc": "CBY2GL4AC8E0BX8GAICZMP/P//t//zMAAAB8BAAAACPRyTybkQgAMv/vAswP9OAgMAAGcMBHHz8eDgKANA==",
+      "id": 35071,
+      "position": [
+        29.223134645735012,
+        2.390394914907979,
+        -18.897285051498788
+      ]
+    },
+    {
+      "desc": "gAYSCDYAB8C+B38CQPD/JwKAADAA/w8AABj8DwDwAAAA2P//uN999+/vB4D/8B+/ATAABxEAAEDg+///GA==",
+      "id": 35085,
+      "position": [
+        29.430631546058237,
+        1.3987634762352932,
+        -18.45092443040528
+      ]
+    },
+    {
+      "desc": "AR1sJIAR4DdAnMgPAAD2jx3gD+gADHCAAQIAAIwR8N0ZQSSIgnhnACAi3sWM/z90A2gABnAAAAAAAPz/Nw==",
+      "id": 35142,
+      "position": [
+        29.47148477208727,
+        -1.7947472904589836,
+        -23.791433133358176
+      ]
+    },
+    {
+      "desc": "AQYsAIQAAIDtB3IEAAD+//8BAWAAZvADAAAYDAAACwKgqlIR9w+ArkT8Ayrx2AMIAAAAAACg4cHD4/3/Hw==",
+      "id": 35151,
+      "position": [
+        29.4267997048981,
+        -2.2361862472412524,
+        -18.892377873498454
+      ]
+    },
+    {
+      "desc": "vwL8+/8FColtA3YMAAB2w/8f/////v9/DBgY/AFgB6aCqTJVU4UIKlTdISrxyAEEAAAAAACQa9aAQH5yAQ==",
+      "id": 35162,
+      "position": [
+        29.526247530002486,
+        -2.654077253861164,
+        -18.854258137983088
+      ]
+    },
+    {
+      "desc": "mga02bYGC4llJ3IEACB2y+6Ou3N3d7c7CBDczRJwAyKimxUzdw+AZsz8Axj74AAAAAAAACCA4ADk8fx/AQ==",
+      "id": 35170,
+      "position": [
+        29.495299584792292,
+        -2.889836398325263,
+        -19.14004895001072
+      ]
+    },
+    {
+      "desc": "QBhOJAgRCMA/AA8OBIDvdxcABPgKC0AAASIAFIQABxPBxPj/AECEt2ogNIwFyAFQAAgAAEBAgcMD6nv/Pg==",
+      "id": 35177,
+      "position": [
+        29.48855122667964,
+        -3.258902844949881,
+        -18.44173437470686
+      ]
+    },
+    {
+      "desc": "4AASLAIQyB/gS6QAgCDuHwDgBJgACQCAAQIAAAYAiwrk+kUg9SuQfwH8Ql4iJQAAAvrwD2+w4QEB/fn/Cw==",
+      "id": 35186,
+      "position": [
+        29.560769229183304,
+        -3.5099536896037864,
+        -19.522203915019368
+      ]
+    },
+    {
+      "desc": "wR0ABAAQQCJB73AHAAD8PwDgD1gABSCAAwAAAIYAgIigqwcA96+C6gH8C3rwMABgAAAAAFBggYMD5Hn/Pw==",
+      "id": 35198,
+      "position": [
+        29.501208935120722,
+        -3.7574279130280965,
+        -18.460348288196133
+      ]
+    },
+    {
+      "desc": "dP0D/ln79H4b+I3/w3j/CwDAz/7/mYnEs2dmEv+PvNX9da/ugFB3Ebsj/PcM////9Qd4iEc+/f/j/f93Cw==",
+      "id": 35200,
+      "position": [
+        29.5311904572651,
+        -3.9206300224610184,
+        -20.70068447931273
+      ]
+    },
+    {
+      "desc": "dO1DKkv5sOWelI/D+f53AAFRQJyIgAhEEe8jMt0PNLHYbt7NQMjm+zcXCn/AP9CH9LP//08f//4T/B4wAA==",
+      "id": 35204,
+      "position": [
+        28.397298702741836,
+        -3.8372476603575167,
+        -25.016109183948505
+      ]
+    },
+    {
+      "desc": "4R0yPIYA8D9R/PgHAACZNK7gf3AFVyCCCBAcCAIA9P9fESyGAHh7ABka7kH4vwAgAAAAABBAAICC9v3/Nw==",
+      "id": 35207,
+      "position": [
+        29.526754990458116,
+        -4.098782967235834,
+        -18.584958093386962
+      ]
+    },
+    {
+      "desc": "wAciGI4AiP2eEI8NAADuP0QAE/AP/zcBAAg4HIAAyvffVb37qUAEVf4D9IUP5wAAAAAAAAAAAcID+P//Hw==",
+      "id": 35652,
+      "position": [
+        29.421613668253634,
+        4.005229179756265,
+        -18.417100492822538
+      ]
+    },
+    {
+      "desc": "AxZ8PI4BYDpB//AAAID/v//j/90FXeCAGwAAAAYA4EwKESACZj9/AEj5/wH/2AFgAAAAAECY4cMD4Pn/AA==",
+      "id": 35658,
+      "position": [
+        29.260051043827538,
+        2.6064340367189582,
+        -18.43701096295935
+      ]
+    },
+    {
+      "desc": "CAY2GH4AB8G+B38HAHj/f06AAXAG/x8AAAD8DwDwAQLA3b/7sw0ANv/vA4Cf/AAAAAAAiw8AAOLj+///Gg==",
+      "id": 35663,
+      "position": [
+        29.37141873264425,
+        1.4457334633705607,
+        -18.452109515830593
+      ]
+    },
+    {
+      "desc": "JRZsAIAPSANgD/CNAgD+591hd8gETHD/CQAA/AcA2m4cESAC978xAAj8xwD/zxNmAAAAAECY48dD4Pn/IA==",
+      "id": 35664,
+      "position": [
+        29.36644237344468,
+        1.4320169034822856,
+        -19.3200704962355
+      ]
+    },
+    {
+      "desc": "AYYPAAAAQALhb/AEAAD8/w9gAwAABjAAAAAAAAJwwI4EABAE9w8CSJD87xPw4QEgAAAAAICH3r3/F4QANw==",
+      "id": 35689,
+      "position": [
+        30.07049167676942,
+        -1.5620037056395852,
+        -23.25208260825196
+      ]
+    },
+    {
+      "desc": "IeZtAIAPeADgB/CdAwDy5x1gAgAABHD/AAAA/AOAfE4MAHDn/x8BAAj8zwD2x/cfSAgN0IAO/v//A44AMA==",
+      "id": 35690,
+      "position": [
+        29.451831953750983,
+        -1.6910976722706788,
+        -19.29224151037568
+      ]
+    },
+    {
+      "desc": "IRYkAIQAGIHkB3IMAAD+98wgA2AAbnS3AAAY3ABgT+YOADB3958AANz9AwD3CwBAj+/xBvn8AABA4/3/OA==",
+      "id": 35697,
+      "position": [
+        29.341367005697894,
+        -2.2216203753600574,
+        -18.90671699053131
+      ]
+    },
+    {
+      "desc": "AAY2GA4ASCpgr3ICAID//66gC3AA/wKAAACcAAIgQUQWASC29797ANj+7wH7JQAgAAAAAECIoUNB/P3/GA==",
+      "id": 35707,
+      "position": [
+        29.421682322094505,
+        -2.905820209308446,
+        -19.484422269430876
+      ]
+    },
+    {
+      "desc": "NA3yft8L8GSS3MkHAAD/D/7//////38IAABAMM+Z+NVZVa7Kqlx3ALsj/sWMPwAAAAAAAPB8QIDl0/5vBw==",
+      "id": 35728,
+      "position": [
+        28.55208198844554,
+        -4.727594722422777,
+        -24.88858259159718
+      ]
+    },
+    {
+      "desc": "AA4HAAYAQRLgzuAFAED8vwwgA0AAFzCAAAAEAABwwA40ASAA9z4QAID8y3PqJwAgAAAAgQ0A8P////3fPA==",
+      "id": 35840,
+      "position": [
+        29.857587367626863,
+        -1.4403663427019873,
+        -23.373834048093965
+      ]
+    },
+    {
+      "desc": "ARYEAAYAQRNgD/AFABKgpxvgD0AABGCAAQAAAAARwO4qAkAAd7+iAAD8iyLwihyij+AQH3GIAABAIMj/OA==",
+      "id": 35842,
+      "position": [
+        29.48394773700136,
+        -2.0114637712983936,
+        -23.879936199001058
+      ]
+    },
+    {
+      "desc": "IfYHAIDdOIjuJxeEw/D/zx0AA2AADnAAAAAA/P2PPwKi+hZf9w+A/n39t4wV2AEegANwAPf88+fD8///Cw==",
+      "id": 35847,
+      "position": [
+        29.770666025184287,
+        -3.8584171620849506,
+        -21.532096473224044
+      ]
+    },
+    {
+      "desc": "Ghbg+P8jAcg/IRKMh2H+H36Gn/H//3+YAAAAZJgzAQDi/zdVUwUIIn51IS5RmB3+j+/wDn/4wQMD43n/Pw==",
+      "id": 35851,
+      "position": [
+        29.477762792303835,
+        -4.378042013287049,
+        -19.35791390682994
+      ]
+    },
+    {
+      "desc": "JQ5+PsmZfBHoR7SAwbD/w///f/6MjziAAAAgnueIv6KouQNAfwcgqt7diTp0CgSGg/v4jxcYYMDB/f9/AQ==",
+      "id": 35852,
+      "position": [
+        29.422357147699753,
+        -4.395895903855562,
+        -18.386760694530555
+      ]
+    },
+    {
+      "desc": "QI1cLAqwMO22pVsPAAD+R1/VV/2qr0qBRYoIVIGrJSDz7tyZkYnMO2dmEv+J/AFgAAAAAAA99f/r/Zk/AQ==",
+      "id": 35856,
+      "position": [
+        29.29973729064632,
+        -4.786412766718997,
+        -17.676320710404003
+      ]
+    },
+    {
+      "desc": "ITYMAIAJeDpB/3Dfw3P+3wlgAkAABHCCCQAAGHcA/8weEWDi5j9/AAj8/wH/Dxg+nsfwPP/55wGA5vn/Jw==",
+      "id": 35877,
+      "position": [
+        28.172587904213575,
+        1.7889395640898658,
+        -27.788433307015957
+      ]
+    },
+    {
+      "desc": "CO4HADZiRwjgZzeMg2H+nwCgAgAANweAIgDMITj/gAgp6gIA/7+uugD8u/5EigB8AAdAAM5/////w/H/Hw==",
+      "id": 35880,
+      "position": [
+        27.20183769689935,
+        0.43002215963434287,
+        -28.392421824612292
+      ]
+    },
+    {
+      "desc": "muKR2XZix22GsAuC53n/Dwamu3NzdwcYYMzdYxj3wPeXEJiaqQEAdf9qfIEbMD7f7///nz84QIDB8///Aw==",
+      "id": 35882,
+      "position": [
+        29.35065190762055,
+        -2.3852791786865164,
+        -19.339940409311172
+      ]
+    },
+    {
+      "desc": "Jf5vN8GfvFZb+qSZ/3Pu/515Bs6ADPj/mQMC/OfMf0VdUfr/gnR9AKir/6UPD37e////P3/4gQED4/n/Hw==",
+      "id": 35883,
+      "position": [
+        29.106942579721256,
+        -2.3610133836851213,
+        -18.41190726006921
+      ]
+    },
+    {
+      "desc": "J/btp+n/HoplK3KAwbD/x5//52dgjn5+wICB///vh4KiuBAUdwMILtzcKArxYEAGAIj/cOf/////ZwDzAQ==",
+      "id": 35887,
+      "position": [
+        29.36320743245919,
+        -4.636524147852985,
+        -17.557767857352516
+      ]
+    },
+    {
+      "desc": "AcIPBIAAWKmgB3+eA3P8/wFgAAgAAHABAAAADAAgx2UWESASMtt9AP7vZ4C/4CV/SS/BErh+AuT/A/7vPw==",
+      "id": 35890,
+      "position": [
+        29.494741846820475,
+        1.5347351932982594,
+        -26.11266298552788
+      ]
+    },
+    {
+      "desc": "ID8EAIgZOLP7z+wJBID/5QgAAkAAj3CEAAAAnOcAPkQYcXb/959vAPz/n2HMHgBgxAgAAPD/c+NgcP4bIA==",
+      "id": 35894,
+      "position": [
+        29.699843322299234,
+        -2.4511404863511377,
+        -22.256398920826555
+      ]
+    },
+    {
+      "desc": "ZQ1fJgGZuP0f8I/7/z93SzfRRbyLAEBEET8iEMUIfndfRLz/iNB9Ef8D9MUPPh6Px/v8jx8AAADg+f9vCw==",
+      "id": 48309,
+      "position": [
+        30.699375497591802,
+        -0.9109586048247555,
+        -14.452268153410934
+      ]
+    },
+    {
+      "desc": "IRYOAIABOMDvA6eMh0Hu/x0AAOAADnAAAAIAnAMAHwLA/bt/uwcAhv4NgaBnywF6AAZAAAx44MHD4///Hg==",
+      "id": 49764,
+      "position": [
+        30.071778134959843,
+        -2.8832338243999263,
+        -21.85671882294772
+      ]
+    }
+  ]
+}

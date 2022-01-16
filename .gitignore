@@ -1,7 +1,7 @@
-bin
-build
-input
-output
-lib
-tmp
+/bin
+/build
+/input
+/output
+/test/_fixture/output
+/lib
 **/.DS_Store
