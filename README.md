@@ -8,7 +8,7 @@
 
 様々な角度から写真を撮ってスキャンする。
 
-![Scan Images](/docs/media/scan_images.jpg)
+![Scan Images](/docs/media/scan_images.jpeg)
 
 **STEP　２**
 
@@ -18,11 +18,11 @@
 
 特徴点のマッチングを使ってグラフを作る。
 
-![Graph Before Optimization](/docs/media/before_optimization.png)
+![Graph Before Optimization](/docs/media/construct_graph.jpeg)
 
 **STEP　４**
 
 グラフの最適化
 
-![Graph After Optimization](/docs/media/after_optimization.png)
+![Graph After Optimization](/docs/media/optimize_graph.jpeg)
 
