@@ -7,6 +7,7 @@
 **STEP　１**
 
 様々な角度から写真を撮ってスキャンする。
+
 ![Scan Images](/docs/media/scan_images.jpg)
 
 **STEP　２**
@@ -16,6 +17,7 @@
 **STEP　３**
 
 特徴点のマッチングを使ってグラフを作る。
+
 ![Graph Before Optimization](/docs/media/before_optimization.png)
 
 **STEP　４**
