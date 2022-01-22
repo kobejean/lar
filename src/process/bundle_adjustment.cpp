@@ -108,6 +108,7 @@ namespace geoar {
     e->setVertex(0, v1);
     e->setVertex(1, v2);
     e->setMeasurement(pose_change);
+    // TODO: Find a better estimate
     e->information() = Eigen::MatrixXd::Identity(6,6) * 80000000;
     optimizer.addEdge(e);
   }
@@ -140,8 +141,8 @@ namespace geoar {
         edge->information() = Eigen::Vector3d(1.,1.,frame.confidence[j]).asDiagonal();
         edge->setParameterId(0, params_id);
         // g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
-        // rk->setDelta(100.0);
-        // e->setRobustKernel(rk);
+        // rk->setDelta(2.5);
+        // edge->setRobustKernel(rk);
         optimizer.addEdge(edge);
 
         usable_landmarks++;
