@@ -7,6 +7,8 @@
 #include <nlohmann/json.hpp>
 #include <opencv2/core.hpp>
 
+#include "geoar/core/utils/json.h"
+
 namespace fs = std::filesystem;
 
 namespace geoar {
