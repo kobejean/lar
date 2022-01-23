@@ -4,7 +4,7 @@
 #include <sys/stat.h>
 #include <unordered_set>
 
-#include "geoar/process/map_processing.h"
+#include "geoar/processing/map_processing.h"
 
 using namespace std;
 

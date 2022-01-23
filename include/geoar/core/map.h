@@ -1,5 +1,5 @@
-#ifndef GEOAR_MAP_H
-#define GEOAR_MAP_H
+#ifndef GEOAR_CORE_MAP_H
+#define GEOAR_CORE_MAP_H
 
 #include "geoar/core/landmark_database.h"
 
@@ -13,4 +13,4 @@ namespace geoar {
   };
 }
 
-#endif /* GEOAR_MAP_H */
+#endif /* GEOAR_CORE_MAP_H */

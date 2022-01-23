@@ -6,7 +6,7 @@
 // #include "g2o/core/robust_kernel_impl.h"
 #include "g2o/types/sba/types_six_dof_expmap.h"
 
-#include "geoar/process/bundle_adjustment.h"
+#include "geoar/processing/bundle_adjustment.h"
 
 G2O_USE_OPTIMIZATION_LIBRARY(eigen);
 

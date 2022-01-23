@@ -1,5 +1,5 @@
-#ifndef GEOAR_BASE64_H
-#define GEOAR_BASE64_H
+#ifndef GEOAR_CORE_UTILS_BASE64_H
+#define GEOAR_CORE_UTILS_BASE64_H
 
 #include <opencv2/features2d.hpp>
 
@@ -109,4 +109,4 @@ namespace geoar {
 
 }
 
-#endif /* GEOAR_BASE64_H */
+#endif /* GEOAR_CORE_UTILS_BASE64_H */

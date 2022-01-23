@@ -1,5 +1,5 @@
-#ifndef GEOAR_PROJECTION_H
-#define GEOAR_PROJECTION_H
+#ifndef GEOAR_PROCESSING_PROJECTION_H
+#define GEOAR_PROCESSING_PROJECTION_H
 
 #include <nlohmann/json.hpp>
 #include <Eigen/Core>
@@ -21,4 +21,4 @@ namespace geoar {
 
 }
 
-#endif /* GEOAR_PROJECTION_H */
+#endif /* GEOAR_PROCESSING_PROJECTION_H */

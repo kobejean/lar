@@ -1,5 +1,5 @@
-#ifndef GEOAR_BUNDLE_ADJUSTMENT_H
-#define GEOAR_BUNDLE_ADJUSTMENT_H
+#ifndef GEOAR_PROCESSING_BUNDLE_ADJUSTMENT_H
+#define GEOAR_PROCESSING_BUNDLE_ADJUSTMENT_H
 
 #include <opencv2/features2d.hpp>
 #include <opencv2/imgcodecs.hpp>
@@ -12,7 +12,7 @@
 
 #include "geoar/core/landmark.h"
 #include "geoar/core/frame.h"
-#include "geoar/process/map_processing_data.h"
+#include "geoar/processing/map_processing_data.h"
 
 namespace geoar {
 
@@ -46,4 +46,4 @@ namespace geoar {
 
 }
 
-#endif /* GEOAR_BUNDLE_ADJUSTMENT_H */
+#endif /* GEOAR_PROCESSING_BUNDLE_ADJUSTMENT_H */

@@ -4,7 +4,7 @@
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 
-#include "geoar/process/depth.h"
+#include "geoar/processing/depth.h"
 
 namespace geoar {
 

@@ -1,5 +1,5 @@
-#ifndef GEOAR_VISION_H
-#define GEOAR_VISION_H
+#ifndef GEOAR_TRACKING_VISION_H
+#define GEOAR_TRACKING_VISION_H
 
 #include <opencv2/features2d.hpp>
 
@@ -18,4 +18,4 @@ namespace geoar {
 
 }
 
-#endif /* GEOAR_VISION_H */
+#endif /* GEOAR_TRACKING_VISION_H */

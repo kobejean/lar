@@ -6,35 +6,35 @@ namespace geoar {
   }
 
   Landmark& LandmarkDatabase::operator[](size_t id) {
-    return _landmarks[id];
+    return all[id];
   }
   const Landmark& LandmarkDatabase::operator[](size_t id) const {
-    return _landmarks[id];
+    return all[id];
   }
 
   void LandmarkDatabase::insert(std::vector<Landmark> &landmarks) {
-    _landmarks.reserve(_landmarks.size() + std::distance(landmarks.begin(), landmarks.end()));
-    _landmarks.insert(_landmarks.end(), landmarks.begin(), landmarks.end());
+    all.reserve(all.size() + std::distance(landmarks.begin(), landmarks.end()));
+    all.insert(all.end(), landmarks.begin(), landmarks.end());
   }
 
   size_t LandmarkDatabase::size() const {
-    return _landmarks.size();
+    return all.size();
   }
 
   void LandmarkDatabase::cull() {
     std::vector<Landmark> landmarks;
-    for (size_t i = 0; i < _landmarks.size(); i++) {
-      Landmark& landmark = _landmarks[i];
+    for (size_t i = 0; i < all.size(); i++) {
+      Landmark& landmark = all[i];
       if (landmark.isUseable()) {
         landmarks.push_back(landmark);
       }
     }
-    _landmarks = landmarks;
+    all = landmarks;
   }
 
   cv::Mat LandmarkDatabase::getDescriptions() {
     cv::Mat desc;
-    Landmark::concatDescriptions(_landmarks, desc);
+    Landmark::concatDescriptions(all, desc);
     return desc;
   }
 

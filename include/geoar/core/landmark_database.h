@@ -1,5 +1,5 @@
-#ifndef GEOAR_LANDMARK_DATABASE_H
-#define GEOAR_LANDMARK_DATABASE_H
+#ifndef GEOAR_CORE_LANDMARK_DATABASE_H
+#define GEOAR_CORE_LANDMARK_DATABASE_H
 
 #include "geoar/core/landmark.h"
 
@@ -7,6 +7,8 @@ namespace geoar {
 
   class LandmarkDatabase {
     public:
+      std::vector<Landmark> all;
+
       LandmarkDatabase();
       
       Landmark& operator[](size_t id);
@@ -16,9 +18,7 @@ namespace geoar {
       size_t size() const;
       void cull();
       cv::Mat getDescriptions();
-    private:
-      std::vector<Landmark> _landmarks;
   };
 }
 
-#endif /* GEOAR_LANDMARK_DATABASE_H */
+#endif /* GEOAR_CORE_LANDMARK_DATABASE_H */
