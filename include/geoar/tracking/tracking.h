@@ -1,5 +1,5 @@
-#ifndef GEOAR_TRACKING_H
-#define GEOAR_TRACKING_H
+#ifndef GEOAR_TRACKING_TRACKING_H
+#define GEOAR_TRACKING_TRACKING_H
 
 #include <opencv2/core.hpp>
 
@@ -26,4 +26,4 @@ namespace geoar {
 
 }
 
-#endif /* GEOAR_TRACKING_H */
+#endif /* GEOAR_TRACKING_TRACKING_H */

@@ -5,9 +5,9 @@
 #include <opencv2/imgproc.hpp>
 
 #include "geoar/core/landmark.h"
-#include "geoar/process/depth.h"
-#include "geoar/process/projection.h"
-#include "geoar/process/frame_processing.h"
+#include "geoar/processing/depth.h"
+#include "geoar/processing/projection.h"
+#include "geoar/processing/frame_processing.h"
 
 namespace geoar {
 

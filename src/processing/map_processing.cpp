@@ -1,9 +1,9 @@
 #include <filesystem>
 
-#include "geoar/process/bundle_adjustment.h"
-#include "geoar/process/frame_processing.h"
-#include "geoar/process/map_processing_data.h"
-#include "geoar/process/map_processing.h"
+#include "geoar/processing/bundle_adjustment.h"
+#include "geoar/processing/frame_processing.h"
+#include "geoar/processing/map_processing_data.h"
+#include "geoar/processing/map_processing.h"
 #include "geoar/core/utils/json.h"
 
 namespace geoar {

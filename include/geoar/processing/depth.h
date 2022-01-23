@@ -1,5 +1,5 @@
-#ifndef GEOAR_DEPTH_H
-#define GEOAR_DEPTH_H
+#ifndef GEOAR_PROCESSING_DEPTH_H
+#define GEOAR_PROCESSING_DEPTH_H
 
 #include <opencv2/core.hpp>
 
@@ -29,4 +29,4 @@ namespace geoar {
 
 }
 
-#endif /* GEOAR_DEPTH_H */
+#endif /* GEOAR_PROCESSING_DEPTH_H */

@@ -7,6 +7,16 @@ using json = nlohmann::json;
 using namespace geoar;
 
 
+TEST(JsonTest, MapSerialization) {
+  // Given
+  std::string json_string = "{\"landmarks\":[{\"desc\":\"IL5sAIARAME/AICBxTH+xx0BACAABnAEAAAAPIYASPcfAPj/QhACAP47XAcANwAAAMjxGOP//8dDYHj/AA==\",\"id\":19,\"position\":[28.978420115684386,9.0347303998687,-17.00002901344248]}]}";
+  geoar::Map map = json::parse(json_string);
+  // When
+  json map_json = map;
+  // Then
+  EXPECT_EQ(map_json.dump(), json_string);
+}
+
 TEST(JsonTest, MapDeserialization) {
   // Given
   json map_json = json::parse("{\"landmarks\":[{\"desc\":\"IL5sAIARAME/AICBxTH+xx0BACAABnAEAAAAPIYASPcfAPj/QhACAP47XAcANwAAAMjxGOP//8dDYHj/AA==\",\"id\":19,\"position\":[28.978420115684386,9.0347303998687,-17.00002901344248]}]}");
@@ -29,12 +39,31 @@ TEST(JsonTest, MapDeserialization) {
   EXPECT_NEAR(map.landmarks[0].position.z(), -17.00002901344248, 1e-10);
 }
 
-TEST(JsonTest, MapSerialization) {
+TEST(JsonTest, MatrixSerialization) {
   // Given
-  std::string map_json_string = "{\"landmarks\":[{\"desc\":\"IL5sAIARAME/AICBxTH+xx0BACAABnAEAAAAPIYASPcfAPj/QhACAP47XAcANwAAAMjxGOP//8dDYHj/AA==\",\"id\":19,\"position\":[28.978420115684386,9.0347303998687,-17.00002901344248]}]}";
-  geoar::Map map = json::parse(map_json_string);
+  Eigen::Matrix3d mat;
+  mat << 0.1,0.4,0.7,
+         0.2,0.5,0.8,
+         0.3,0.6,0.9;
   // When
-  json map_json = map;
+  json mat_json = mat;
   // Then
-  EXPECT_EQ(map_json.dump(), map_json_string);
+  EXPECT_EQ(mat_json.dump(), "[0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9]");
+}
+
+TEST(JsonTest, MatrixDeserialization) {
+  // Given
+  json mat_json = json::parse("[0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9]");
+  // When
+  Eigen::Matrix3d mat = mat_json;
+  // Then
+  EXPECT_NEAR(mat(0,0), 0.1, 1e-10);
+  EXPECT_NEAR(mat(1,0), 0.2, 1e-10);
+  EXPECT_NEAR(mat(2,0), 0.3, 1e-10);
+  EXPECT_NEAR(mat(0,1), 0.4, 1e-10);
+  EXPECT_NEAR(mat(1,1), 0.5, 1e-10);
+  EXPECT_NEAR(mat(2,1), 0.6, 1e-10);
+  EXPECT_NEAR(mat(0,2), 0.7, 1e-10);
+  EXPECT_NEAR(mat(1,2), 0.8, 1e-10);
+  EXPECT_NEAR(mat(2,2), 0.9, 1e-10);
 }

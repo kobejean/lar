@@ -1,4 +1,4 @@
-#include "geoar/process/map_processing_data.h"
+#include "geoar/processing/map_processing_data.h"
 
 namespace geoar {
 

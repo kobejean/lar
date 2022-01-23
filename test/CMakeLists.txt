@@ -9,13 +9,15 @@ FetchContent_Declare(
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
+add_subdirectory(collection)
 add_subdirectory(core)
-add_subdirectory(process)
+add_subdirectory(processing)
 add_subdirectory(tracking)
 
 set(GEOAR_CORE_TEST_LIBS 
+  ${GEOAR_COLLECTION_TEST_LIBS}
   ${GEOAR_CORE_TEST_LIBS}
-  ${GEOAR_PROCESS_TEST_LIBS}
+  ${GEOAR_PROCESSING_TEST_LIBS}
   ${GEOAR_RTREE_TEST_LIBS}
   ${GEOAR_TRACKING_TEST_LIBS}
 )
@@ -24,8 +26,9 @@ list(REMOVE_DUPLICATES GEOAR_CORE_TEST_LIBS)
 add_executable(
   geoar_test
   all_tests.cpp
+  ${GEOAR_COLLECTION_TEST_SRCS}
   ${GEOAR_CORE_TEST_SRCS}
-  ${GEOAR_PROCESS_TEST_SRCS}
+  ${GEOAR_PROCESSING_TEST_SRCS}
   ${GEOAR_RTREE_TEST_SRCS}
   ${GEOAR_TRACKING_TEST_SRCS}
 )

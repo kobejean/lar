@@ -1,8 +1,8 @@
-#ifndef GEOAR_MAP_PROCESSING_H
-#define GEOAR_MAP_PROCESSING_H
+#ifndef GEOAR_PROCESSING_MAP_PROCESSING_H
+#define GEOAR_PROCESSING_MAP_PROCESSING_H
 
 #include <string>
-#include "geoar/process/map_processing_data.h"
+#include "geoar/processing/map_processing_data.h"
 
 namespace geoar {
 
@@ -14,4 +14,4 @@ namespace geoar {
   };
 }
 
-#endif /* GEOAR_MAP_PROCESSING_H */
+#endif /* GEOAR_PROCESSING_MAP_PROCESSING_H */
