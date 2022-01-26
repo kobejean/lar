@@ -37,6 +37,7 @@ namespace geoar {
 
       void addFrame(cv::InputArray image, cv::InputArray depth, cv::InputArray confidence, FrameMetadata metadata);
       void addGPSObservation(GPSObservation observation);
+      void writeMetadata();
 
     private:
       fs::path getPathPrefix(int id);
