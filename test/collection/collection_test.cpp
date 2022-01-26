@@ -30,6 +30,7 @@ TEST(CollectionTest, AddFrame) {
   Collection collection("./test/_fixture/output");
   // When
   collection.addFrame(image, depth, confidence, metadata);
+  collection.writeMetadata();
   // Then
   std::ifstream ifs("./test/_fixture/output/frames.json");
   std::vector<Collection::FrameMetadata> frames = nlohmann::json::parse(ifs);
@@ -75,6 +76,7 @@ TEST(CollectionTest, AddGPSObservation) {
   Collection collection("./test/_fixture/output");
   // When
   collection.addGPSObservation(observation);
+  collection.writeMetadata();
   // Then
   std::ifstream ifs("./test/_fixture/output/gps_observations.json");
   std::vector<Collection::GPSObservation> gps_observations = nlohmann::json::parse(ifs);
