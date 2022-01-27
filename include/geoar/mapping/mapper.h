@@ -8,6 +8,7 @@
 #include <opencv2/core.hpp>
 
 #include "geoar/core/utils/json.h"
+#include "geoar/mapping/location_matcher.h"
 
 namespace fs = std::filesystem;
 
@@ -17,26 +18,21 @@ namespace geoar {
     public:
       struct FrameMetadata {
         int id;
-        long int timestamp;
+        long long timestamp;
         Eigen::Matrix3d intrinsics;
         Eigen::Matrix4d extrinsics;
       };
 
-      struct GPSObservation {
-        long int timestamp;
-        Eigen::Vector3d relative;
-        Eigen::Vector3d global;
-        Eigen::Vector3d accuracy;
-      };
-
       fs::path directory;
+      LocationMatcher location_matcher;
       std::vector<FrameMetadata> frames;
       std::vector<GPSObservation> gps_observations;
 
       Mapper(fs::path directory);
 
       void addFrame(cv::InputArray image, cv::InputArray depth, cv::InputArray confidence, FrameMetadata metadata);
-      void addGPSObservation(GPSObservation observation);
+      void addPosition(Eigen::Vector3d position, long long timestamp);
+      void addLocation(Eigen::Vector3d location, Eigen::Vector3d accuracy, long long timestamp);
       void writeMetadata();
 
     private:
@@ -44,7 +40,6 @@ namespace geoar {
   };
 
   NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Mapper::FrameMetadata, id, timestamp, intrinsics, extrinsics)
-  NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Mapper::GPSObservation, timestamp, relative, global, accuracy)
 
 }
 

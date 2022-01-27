@@ -26,8 +26,15 @@ namespace geoar {
     frames.push_back(metadata);
   }
 
-  void Mapper::addGPSObservation(GPSObservation observation) {
-    gps_observations.push_back(observation);
+
+  void Mapper::addPosition(Eigen::Vector3d position, long long timestamp) {
+    location_matcher.recordPosition(timestamp, position);
+    gps_observations = location_matcher.matches;
+  }
+
+  void Mapper::addLocation(Eigen::Vector3d location, Eigen::Vector3d accuracy, long long timestamp) {
+    location_matcher.recordLocation(timestamp, location, accuracy);
+    gps_observations = location_matcher.matches;
   }
 
   fs::path Mapper::getPathPrefix(int id) {

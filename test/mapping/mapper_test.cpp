@@ -8,7 +8,7 @@
 
 using namespace geoar;
 
-TEST(MapperTest, AddFrame) {
+TEST(MapperTest, WriteFrame) {
   // Given
   cv::Mat image = cv::imread("./test/_fixture/raw_map_data/00000004_image.jpeg", cv::IMREAD_GRAYSCALE);
   cv::Mat depth = cv::imread("./test/_fixture/raw_map_data/00000004_depth.pfm", cv::IMREAD_UNCHANGED);
@@ -62,12 +62,12 @@ TEST(MapperTest, AddFrame) {
   EXPECT_NEAR(frames[0].extrinsics(3,3), 1.6, 1e-10);
 }
 
-TEST(MapperTest, AddGPSObservation) {
+TEST(MapperTest, WriteGPSObservation) {
   // Given
   Eigen::Vector3d relative(0.1,0.2,0.3);
   Eigen::Vector3d global(100.0,-50.0,500.0);
   Eigen::Vector3d accuracy(10.0,10.0,30.0);
-  Mapper::GPSObservation observation{
+  GPSObservation observation{
     .timestamp=987654321987654321,
     .relative=relative,
     .global=global,
@@ -75,11 +75,11 @@ TEST(MapperTest, AddGPSObservation) {
   };
   Mapper mapper("./test/_fixture/output");
   // When
-  mapper.addGPSObservation(observation);
+  mapper.gps_observations.push_back(observation);
   mapper.writeMetadata();
   // Then
   std::ifstream ifs("./test/_fixture/output/gps_observations.json");
-  std::vector<Mapper::GPSObservation> gps_observations = nlohmann::json::parse(ifs);
+  std::vector<GPSObservation> gps_observations = nlohmann::json::parse(ifs);
   EXPECT_EQ(gps_observations[0].timestamp, 987654321987654321);
   EXPECT_NEAR(gps_observations[0].relative.x(), 0.1, 1e-10);
   EXPECT_NEAR(gps_observations[0].relative.y(), 0.2, 1e-10);
