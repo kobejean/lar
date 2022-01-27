@@ -23,7 +23,7 @@ namespace g2o {
 
 namespace geoar {
 
-  BundleAdjustment::BundleAdjustment(MapProcessor::Data &data) {
+  BundleAdjustment::BundleAdjustment(Mapper::Data& data) {
     this->data = &data;
     optimizer.setVerbose(true);
     std::string solver_name = "lm_fix6_3";
@@ -46,7 +46,7 @@ namespace geoar {
     for (size_t i = 0; i < data->frames.size(); i++) {
       // Add camera pose vertex
       Frame const& frame = data->frames[i];
-      addPose(frame.pose, frame_id, frame_id == landmark_count);
+      addPose(frame.extrinsics, frame_id, frame_id == landmark_count);
 
       // Add odometry measurement edge if not first frame
       if (frame_id > landmark_count) {
@@ -91,7 +91,13 @@ namespace geoar {
     return false;
   }
 
-  void BundleAdjustment::addPose(g2o::SE3Quat const &pose, size_t id, bool fixed) {
+  void BundleAdjustment::addPose(Eigen::Matrix4d const &extrinsics, size_t id, bool fixed) {
+    Eigen::Matrix3d rot = extrinsics.block<3,3>(0,0);
+    // Flipping y and z axis to align with image coordinates and depth direction
+    rot(Eigen::indexing::all, 1) = -rot(Eigen::indexing::all, 1);
+    rot(Eigen::indexing::all, 2) = -rot(Eigen::indexing::all, 2);
+    g2o::SE3Quat pose = g2o::SE3Quat(rot, extrinsics.block<3,1>(0,3)).inverse();
+
     g2o::VertexSE3Expmap * vertex = new g2o::VertexSE3Expmap();
     vertex->setId(id);
     vertex->setEstimate(pose);
@@ -113,11 +119,9 @@ namespace geoar {
     optimizer.addEdge(e);
   }
 
-  void BundleAdjustment::addIntrinsics(nlohmann::json const &intrinsics, size_t id) {
-    double focal_length = intrinsics["focalLength"];
-    Eigen::Vector2d principle_point(intrinsics["principlePoint"]["x"], intrinsics["principlePoint"]["y"]);
-
-    auto * cam_params = new g2o::CameraParameters(focal_length, principle_point, 0.);
+  void BundleAdjustment::addIntrinsics(Eigen::Matrix3d const &intrinsics, size_t id) {
+    Eigen::Vector2d principle_point(intrinsics.block<2,1>(0,2));
+    auto * cam_params = new g2o::CameraParameters(intrinsics(0,0), principle_point, 0.);
     cam_params->setId(id);
     if (!optimizer.addParameter(cam_params)) {
       assert(false);
@@ -127,8 +131,8 @@ namespace geoar {
   void BundleAdjustment::addLandmarkMeasurements(Frame const &frame, size_t frame_id, size_t params_id) {
     size_t usable_landmarks = 0;
 
-    for (size_t j = 0; j < frame.landmarks.size(); j++) {
-      size_t landmark_id = frame.landmarks[j];
+    for (size_t j = 0; j < frame.landmark_ids.size(); j++) {
+      size_t landmark_id = frame.landmark_ids[j];
       Landmark &landmark = data->map.landmarks[landmark_id];
       cv::KeyPoint keypoint = frame.kpts[j];
       Eigen::Vector3d kp(keypoint.pt.x, keypoint.pt.y, frame.depth[j]);
@@ -150,7 +154,7 @@ namespace geoar {
     }
 
     // Populate stats
-    _stats.landmarks.push_back(frame.landmarks.size());
+    _stats.landmarks.push_back(frame.landmark_ids.size());
     _stats.usable_landmarks.push_back(usable_landmarks);
   }
 

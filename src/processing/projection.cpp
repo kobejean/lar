@@ -2,21 +2,11 @@
 
 namespace geoar {
 
-  Projection::Projection(nlohmann::json const& frame_data) {
-    // Variables used for projection
-    nlohmann::json T = frame_data["transform"];
-    R << T[0][0], T[1][0], T[2][0],
-        T[0][1], T[1][1], T[2][1],
-        T[0][2], T[1][2], T[2][2]; 
-    RT = R.transpose();
-    t = Eigen::Vector3d(T[3][0], T[3][1], T[3][2]);
-
-    // Intrinsics properties
-    nlohmann::json in = frame_data["intrinsics"];
-    nlohmann::json pp = in["principlePoint"];
-    f = in["focalLength"];
-    cx = pp["x"];
-    cy = pp["y"];
+  Projection::Projection(Eigen::Matrix3d intrinsics, Eigen::Matrix4d extrinsics) : 
+    R(extrinsics.block<3,3>(0,0)), RT(extrinsics.block<3,3>(0,0).transpose()), t(extrinsics.block<3,1>(0,3)) {
+    f = intrinsics(0,0);
+    cx = intrinsics(0,2);
+    cy = intrinsics(1,2);
   }
 
   Eigen::Vector3d Projection::projectToWorld(cv::Point2f pt, double depth) {

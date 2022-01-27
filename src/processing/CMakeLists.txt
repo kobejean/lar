@@ -20,5 +20,6 @@ target_link_libraries(geoar_processing
   nlohmann_json::nlohmann_json
   Eigen3::Eigen
   geoar_core
+  geoar_mapping
   geoar_tracking
 )

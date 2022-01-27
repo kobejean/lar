@@ -20,7 +20,7 @@ namespace geoar {
 
       Landmark();
       Landmark(Eigen::Vector3d &position, cv::Mat desc, size_t id);
-      void recordSighting(nlohmann::json &cam_transform);
+      void recordSighting(Eigen::Vector3d &cam_position);
       bool isUseable() const;
 
       static void concatDescriptions(std::vector<Landmark> landmarks, cv::Mat &desc);
