@@ -11,17 +11,17 @@
 #include "g2o/core/sparse_optimizer.h"
 
 #include "geoar/core/landmark.h"
-#include "geoar/core/frame.h"
-#include "geoar/processing/map_processor.h"
+#include "geoar/mapping/frame.h"
+#include "geoar/mapping/mapper.h"
 
 namespace geoar {
 
   class BundleAdjustment {
     public:
       g2o::SparseOptimizer optimizer;
-      MapProcessor::Data* data;
+      Mapper::Data* data;
 
-      BundleAdjustment(MapProcessor::Data &data);
+      BundleAdjustment(Mapper::Data &data);
       void construct();
       void optimize();
 
@@ -36,9 +36,9 @@ namespace geoar {
       Stats _stats;
       
       bool addLandmark(Landmark const &landmark, size_t id);
-      void addPose(g2o::SE3Quat const &pose, size_t id, bool fixed);
+      void addPose(Eigen::Matrix4d const &extrinsics, size_t id, bool fixed);
       void addOdometry(size_t last_frame_id);
-      void addIntrinsics(nlohmann::json const &intrinsics, size_t id);
+      void addIntrinsics(Eigen::Matrix3d const &intrinsics, size_t id);
       void addLandmarkMeasurements(Frame const &frame, size_t frame_id, size_t params_id);
 
       void updateLandmark(size_t landmark_id);

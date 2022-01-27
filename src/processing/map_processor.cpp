@@ -7,13 +7,21 @@
 
 namespace geoar {
 
-  MapProcessor::MapProcessor() {
+  MapProcessor::MapProcessor(Mapper::Data& data) {
+    this->data = &data;
   }
 
-  void MapProcessor::createMap(std::string in_dir, std::string out_dir) {
+  void MapProcessor::createMap(std::string out_dir) {
     std::filesystem::create_directory(out_dir);
-    Data data = loadData(in_dir);
-    BundleAdjustment bundle_adjustment(data);
+    
+    // Process frames
+    FrameProcessor frame_processor(*data);
+    for (Frame& frame : data->frames) {
+      frame_processor.process(frame);
+    }
+
+    // Optimize
+    BundleAdjustment bundle_adjustment(*data);
     bundle_adjustment.construct();
 
     std::string output = out_dir + "/map.g2o";
@@ -25,23 +33,10 @@ namespace geoar {
     bundle_adjustment.optimize();
 
     // Serialize
-    nlohmann::json map_json = data.map;
+    nlohmann::json map_json = data->map;
     // Save
     std::ofstream file(out_dir + "/map.json");
     file << std::setw(2) << map_json << std::endl;
-  }
-
-  MapProcessor::Data MapProcessor::loadData(std::string directory) {
-    std::ifstream metadata_ifs(directory + "/metadata.json");
-    nlohmann::json metadata = nlohmann::json::parse(metadata_ifs);
-    Data data;
-
-    FrameProcessor frame_processor(data);
-    for (nlohmann::json frame_data : metadata["frames"]) {
-      Frame frame = frame_processor.process(frame_data, directory);
-      data.frames.push_back(frame);
-    }
-    return data;
   }
 
 }

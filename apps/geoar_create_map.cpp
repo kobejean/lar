@@ -20,6 +20,8 @@ int main(int argc, const char* argv[]){
     return 0;
   }
 
-  geoar::MapProcessor processor;
-  processor.createMap(input, output);
+  geoar::Mapper mapper(input);
+  mapper.readMetadata();
+  geoar::MapProcessor processor(mapper.data);
+  processor.createMap(output);
 }

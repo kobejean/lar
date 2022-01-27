@@ -9,7 +9,7 @@ namespace geoar {
 
   class Projection {
     public:
-      Projection(nlohmann::json const& frame_data);
+      Projection(Eigen::Matrix3d intrinsics, Eigen::Matrix4d extrinsics);
       Eigen::Vector3d projectToWorld(cv::Point2f pt, double depth);
       cv::Point2f projectToImage(Eigen::Vector3d pt);
 

@@ -5,7 +5,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include "geoar/core/frame.h"
+#include "geoar/mapping/frame.h"
 #include "geoar/processing/map_processor.h"
 #include "geoar/tracking/vision.h"
 
@@ -13,11 +13,11 @@ namespace geoar {
 
   class FrameProcessor {
     public:
-      MapProcessor::Data* data;
+      Mapper::Data* data;
       Vision vision;
 
-      FrameProcessor(MapProcessor::Data &data);
-      Frame process(nlohmann::json& frame_data, std::string directory);
+      FrameProcessor(Mapper::Data &data);
+      void process(Frame& frame);
 
     private:
       std::vector<size_t> getLandmarks(Frame &frame, cv::Mat &desc);

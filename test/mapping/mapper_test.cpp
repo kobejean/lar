@@ -22,11 +22,10 @@ TEST(MapperTest, WriteMetadata) {
                  .5, .6, .7, .8,
                  .9,1.0,1.1,1.2,
                 1.3,1.4,1.5,1.6;
-  Mapper::FrameMetadata metadata{
-    .timestamp=123456789123456789,
-    .intrinsics=intrinsics,
-    .extrinsics=extrinsics
-  };
+  Frame frame;
+  frame.timestamp=123456789123456789;
+  frame.intrinsics=intrinsics;
+  frame.extrinsics=extrinsics;
   Mapper mapper("./test/_fixture/output");
   Eigen::Vector3d relative(0.1,0.2,0.3);
   Eigen::Vector3d global(100.0,-50.0,500.0);
@@ -37,13 +36,13 @@ TEST(MapperTest, WriteMetadata) {
     .global=global,
     .accuracy=accuracy
   };
-  mapper.gps_observations.push_back(observation);
-  mapper.addFrame(image, depth, confidence, metadata);
+  mapper.data.gps_observations.push_back(observation);
+  mapper.addFrame(frame, image, depth, confidence);
   // When
   mapper.writeMetadata();
   // Then
   std::ifstream frames_ifs("./test/_fixture/output/frames.json");
-  std::vector<Mapper::FrameMetadata> frames = nlohmann::json::parse(frames_ifs);
+  std::vector<Frame> frames = nlohmann::json::parse(frames_ifs);
   EXPECT_EQ(frames[0].timestamp, 123456789123456789);
   EXPECT_NEAR(frames[0].intrinsics(0,0), 1, 1e-10);
   EXPECT_NEAR(frames[0].intrinsics(1,0), 2, 1e-10);
@@ -83,4 +82,22 @@ TEST(MapperTest, WriteMetadata) {
   EXPECT_NEAR(gps_observations[0].accuracy.x(), 10.0, 1e-10);
   EXPECT_NEAR(gps_observations[0].accuracy.y(), 10.0, 1e-10);
   EXPECT_NEAR(gps_observations[0].accuracy.z(), 30.0, 1e-10);
+}
+
+TEST(MapperTest, ReadMetadata) {
+  // Given
+  Mapper mapper("./test/_fixture/raw_map_data");
+  // When
+  mapper.readMetadata();
+  // Then
+  EXPECT_EQ(mapper.data.frames[0].timestamp, 136463350);
+  EXPECT_NEAR(mapper.data.frames[0].intrinsics(0,0), 1594.7247314453125, 1e-10);
+  EXPECT_NEAR(mapper.data.frames[0].intrinsics(0,1), 0, 1e-10);
+  EXPECT_NEAR(mapper.data.frames[0].intrinsics(0,2), 952.86053466796875, 1e-10);
+  EXPECT_NEAR(mapper.data.frames[0].intrinsics(1,0), 0, 1e-10);
+  EXPECT_NEAR(mapper.data.frames[0].intrinsics(1,1), 1594.7247314453125, 1e-10);
+  EXPECT_NEAR(mapper.data.frames[0].intrinsics(1,2), 714.1676025390625, 1e-10);
+  EXPECT_NEAR(mapper.data.frames[0].intrinsics(2,0), 0, 1e-10);
+  EXPECT_NEAR(mapper.data.frames[0].intrinsics(2,1), 0, 1e-10);
+  EXPECT_NEAR(mapper.data.frames[0].intrinsics(2,2), 1, 1e-10);
 }

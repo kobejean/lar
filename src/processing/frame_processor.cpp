@@ -11,16 +11,14 @@
 
 namespace geoar {
 
-  FrameProcessor::FrameProcessor(MapProcessor::Data &data) {
+  FrameProcessor::FrameProcessor(Mapper::Data& data) {
     this->data = &data;
   }
 
-  Frame FrameProcessor::process(nlohmann::json& frame_data, std::string directory) {
-    int id = frame_data["id"];
-    Frame frame(frame_data);
+  void FrameProcessor::process(Frame& frame) {
 
     // Create filename paths
-    std::string path_prefix = getPathPrefix(id, directory);
+    std::string path_prefix = data->getPathPrefix(frame.id).string();
     std::string img_filepath = path_prefix + "image.jpeg";
 
     // Load image
@@ -38,9 +36,7 @@ namespace geoar {
     frame.confidence = depth.confidenceAt(frame.kpts);
 
     // Get landmarks
-    frame.landmarks = getLandmarks(frame, desc);
-
-    return frame;
+    frame.landmark_ids = getLandmarks(frame, desc);
   }
 
   // Private methods
@@ -48,7 +44,7 @@ namespace geoar {
   std::vector<size_t> FrameProcessor::getLandmarks(Frame &frame, cv::Mat &desc) {
     // Filter out features that have been matched
     std::map<size_t, size_t> matches = getMatches(desc);
-    Projection projection(frame.frame_data);
+    Projection projection(frame.intrinsics, frame.extrinsics);
 
     size_t landmark_count = frame.kpts.size();
     std::vector<Landmark> new_landmarks;
@@ -62,7 +58,8 @@ namespace geoar {
         // No match so create landmark
         Eigen::Vector3d pt3d = projection.projectToWorld(frame.kpts[i].pt, frame.depth[i]);
         Landmark landmark(pt3d, desc.row(i), new_landmark_id);
-        landmark.recordSighting(frame.transform);
+        Eigen::Vector3d cam_position = (frame.extrinsics.block<3,1>(0,3));
+        landmark.recordSighting(cam_position);
 
         landmark_ids.push_back(new_landmark_id);
         new_landmarks.push_back(landmark);
@@ -70,7 +67,8 @@ namespace geoar {
       } else {
         // We have a match so just push the match index
         landmark_ids.push_back(matches[i]);
-        data->map.landmarks[matches[i]].recordSighting(frame.transform);
+        Eigen::Vector3d cam_position = (frame.extrinsics.block<3,1>(0,3));
+        data->map.landmarks[matches[i]].recordSighting(cam_position);
       }
     }
 
@@ -106,13 +104,6 @@ namespace geoar {
     }
 
     return idx_matched;
-  }
-
-  std::string FrameProcessor::getPathPrefix(int id, std::string directory) {
-    std::string id_string = std::to_string(id);
-    int zero_count = 8 - id_string.length();
-    std::string prefix = std::string(zero_count, '0') + id_string + '_';
-    return directory + '/' + prefix;
   }
 
 }
