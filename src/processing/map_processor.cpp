@@ -1,19 +1,18 @@
 #include <filesystem>
 
 #include "geoar/processing/bundle_adjustment.h"
-#include "geoar/processing/frame_processing.h"
-#include "geoar/processing/map_processing_data.h"
-#include "geoar/processing/map_processing.h"
+#include "geoar/processing/frame_processor.h"
+#include "geoar/processing/map_processor.h"
 #include "geoar/core/utils/json.h"
 
 namespace geoar {
 
-  MapProcessing::MapProcessing() {
+  MapProcessor::MapProcessor() {
   }
 
-  void MapProcessing::createMap(std::string in_dir, std::string out_dir) {
+  void MapProcessor::createMap(std::string in_dir, std::string out_dir) {
     std::filesystem::create_directory(out_dir);
-    MapProcessingData data = loadData(in_dir);
+    Data data = loadData(in_dir);
     BundleAdjustment bundle_adjustment(data);
     bundle_adjustment.construct();
 
@@ -32,14 +31,14 @@ namespace geoar {
     file << std::setw(2) << map_json << std::endl;
   }
 
-  MapProcessingData MapProcessing::loadData(std::string directory) {
+  MapProcessor::Data MapProcessor::loadData(std::string directory) {
     std::ifstream metadata_ifs(directory + "/metadata.json");
     nlohmann::json metadata = nlohmann::json::parse(metadata_ifs);
-    MapProcessingData data;
+    Data data;
 
-    FrameProcessing frame_processing(data);
+    FrameProcessor frame_processor(data);
     for (nlohmann::json frame_data : metadata["frames"]) {
-      Frame frame = frame_processing.process(frame_data, directory);
+      Frame frame = frame_processor.process(frame_data, directory);
       data.frames.push_back(frame);
     }
     return data;

@@ -1,18 +1,16 @@
 set(HEADER_LIST 
   "${PROJECT_SOURCE_DIR}/include/geoar/processing/bundle_adjustment.h"
   "${PROJECT_SOURCE_DIR}/include/geoar/processing/depth.h"
-  "${PROJECT_SOURCE_DIR}/include/geoar/processing/frame_processing.h"
-  "${PROJECT_SOURCE_DIR}/include/geoar/processing/map_processing_data.h"
-  "${PROJECT_SOURCE_DIR}/include/geoar/processing/map_processing.h"
+  "${PROJECT_SOURCE_DIR}/include/geoar/processing/frame_processor.h"
+  "${PROJECT_SOURCE_DIR}/include/geoar/processing/map_processor.h"
   "${PROJECT_SOURCE_DIR}/include/geoar/processing/projection.h"
 )
 
 add_library(geoar_processing
   bundle_adjustment.cpp
   depth.cpp
-  frame_processing.cpp
-  map_processing_data.cpp
-  map_processing.cpp
+  frame_processor.cpp
+  map_processor.cpp
   projection.cpp
   ${HEADER_LIST}
 )

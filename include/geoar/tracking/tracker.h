@@ -1,5 +1,5 @@
-#ifndef GEOAR_TRACKING_TRACKING_H
-#define GEOAR_TRACKING_TRACKING_H
+#ifndef GEOAR_TRACKING_TRACKER_H
+#define GEOAR_TRACKING_TRACKER_H
 
 #include <opencv2/core.hpp>
 
@@ -8,12 +8,12 @@
 
 namespace geoar {
 
-  class Tracking {
+  class Tracker {
     public:
       Vision vision;
       Map map;
 
-      Tracking(Map map);
+      Tracker(Map map);
       void localize(cv::InputArray image, cv::Mat intrinsics, cv::Mat &transform);
       void localize(cv::InputArray image, cv::Mat intrinsics, cv::Mat dist_coeffs, cv::Mat &rvec, cv::Mat &tvec, bool use_extrinsic_guess);
 
@@ -26,4 +26,4 @@ namespace geoar {
 
 }
 
-#endif /* GEOAR_TRACKING_TRACKING_H */
+#endif /* GEOAR_TRACKING_TRACKER_H */

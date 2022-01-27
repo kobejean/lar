@@ -23,7 +23,7 @@ namespace g2o {
 
 namespace geoar {
 
-  BundleAdjustment::BundleAdjustment(MapProcessingData &data) {
+  BundleAdjustment::BundleAdjustment(MapProcessor::Data &data) {
     this->data = &data;
     optimizer.setVerbose(true);
     std::string solver_name = "lm_fix6_3";

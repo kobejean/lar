@@ -1,5 +1,5 @@
-add_subdirectory(collection)
 add_subdirectory(core)
+add_subdirectory(mapping)
 add_subdirectory(processing)
 add_subdirectory(rtree)
 add_subdirectory(tracking)

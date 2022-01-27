@@ -4,7 +4,7 @@
 #include <sys/stat.h>
 #include <unordered_set>
 
-#include "geoar/processing/map_processing.h"
+#include "geoar/processing/map_processor.h"
 
 using namespace std;
 
@@ -20,6 +20,6 @@ int main(int argc, const char* argv[]){
     return 0;
   }
 
-  geoar::MapProcessing processor;
+  geoar::MapProcessor processor;
   processor.createMap(input, output);
 }

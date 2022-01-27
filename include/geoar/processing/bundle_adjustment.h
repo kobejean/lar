@@ -12,16 +12,16 @@
 
 #include "geoar/core/landmark.h"
 #include "geoar/core/frame.h"
-#include "geoar/processing/map_processing_data.h"
+#include "geoar/processing/map_processor.h"
 
 namespace geoar {
 
   class BundleAdjustment {
     public:
       g2o::SparseOptimizer optimizer;
-      MapProcessingData* data;
+      MapProcessor::Data* data;
 
-      BundleAdjustment(MapProcessingData &data);
+      BundleAdjustment(MapProcessor::Data &data);
       void construct();
       void optimize();
 

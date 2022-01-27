@@ -1,10 +1,10 @@
 set(HEADER_LIST 
-  "${PROJECT_SOURCE_DIR}/include/geoar/tracking/tracking.h"
+  "${PROJECT_SOURCE_DIR}/include/geoar/tracking/tracker.h"
   "${PROJECT_SOURCE_DIR}/include/geoar/tracking/vision.h"
 )
 
 add_library(geoar_tracking
-  tracking.cpp
+  tracker.cpp
   vision.cpp
   ${HEADER_LIST}
 )

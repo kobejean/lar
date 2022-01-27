@@ -8,7 +8,7 @@
 #include <opencv2/opencv.hpp>
 
 #include "geoar/core/utils/json.h"
-#include "geoar/tracking/tracking.h"
+#include "geoar/tracking/tracker.h"
 
 using namespace std;
 
@@ -37,7 +37,7 @@ int main(int argc, const char* argv[]){
   intrinsics.at<float>(2,2) = 1.;
   cv::Mat transform;
 
-  geoar::Tracking tracking(map);
-  tracking.localize(image, intrinsics, transform);
+  geoar::Tracker tracker(map);
+  tracker.localize(image, intrinsics, transform);
   std::cout << "transform:" << transform << std::endl;
 }

@@ -1,15 +1,15 @@
 #include <iostream>
 #include <opencv2/calib3d.hpp>
 
-#include "geoar/tracking/tracking.h"
+#include "geoar/tracking/tracker.h"
 
 namespace geoar {
 
-  Tracking::Tracking(Map map) {
+  Tracker::Tracker(Map map) {
     this->map = map;
   }
 
-  void Tracking::localize(cv::InputArray image, cv::Mat intrinsics, cv::Mat &transform) {
+  void Tracker::localize(cv::InputArray image, cv::Mat intrinsics, cv::Mat &transform) {
     cv::Mat rvec, tvec;
     if (!transform.empty()) {
       fromTransform(transform, rvec, tvec);
@@ -19,7 +19,7 @@ namespace geoar {
     toTransform(rvec, tvec, transform);
   }
 
-  void Tracking::localize(cv::InputArray image, cv::Mat intrinsics, cv::Mat dist_coeffs, cv::Mat &rvec, cv::Mat &tvec, bool use_extrinsic_guess) {
+  void Tracker::localize(cv::InputArray image, cv::Mat intrinsics, cv::Mat dist_coeffs, cv::Mat &rvec, cv::Mat &tvec, bool use_extrinsic_guess) {
     // Extract Features
     std::vector<cv::KeyPoint> kpts;
     cv::Mat desc;
@@ -39,7 +39,7 @@ namespace geoar {
 
   // Private Methods
 
-  cv::Mat Tracking::objectPoints(std::vector<cv::DMatch> matches) {
+  cv::Mat Tracker::objectPoints(std::vector<cv::DMatch> matches) {
     cv::Mat object_points(matches.size(), 3, CV_32FC1);
     for (size_t i = 0; i < matches.size(); i++) {
       cv::DMatch match = matches[i];
@@ -51,7 +51,7 @@ namespace geoar {
     return object_points;
   }
 
-  cv::Mat Tracking::imagePoints(std::vector<cv::DMatch> matches, std::vector<cv::KeyPoint> kpts) {
+  cv::Mat Tracker::imagePoints(std::vector<cv::DMatch> matches, std::vector<cv::KeyPoint> kpts) {
     cv::Mat image_points(matches.size(), 2, CV_32FC1);
     for (size_t i = 0; i < matches.size(); i++) {
       cv::DMatch match = matches[i];
@@ -62,7 +62,7 @@ namespace geoar {
     return image_points;
   }
 
-  void Tracking::toTransform(const cv::Mat &rvec, const cv::Mat &tvec, cv::Mat &transform) {
+  void Tracker::toTransform(const cv::Mat &rvec, const cv::Mat &tvec, cv::Mat &transform) {
     // Convert back to transform
     cv::Mat rtmat(3, 3, CV_64FC1);
     cv::Rodrigues(rvec, rtmat);
@@ -77,7 +77,7 @@ namespace geoar {
     );
   }
 
-  void Tracking::fromTransform(const cv::Mat &transform, cv::Mat &rvec, cv::Mat &tvec) {
+  void Tracker::fromTransform(const cv::Mat &transform, cv::Mat &rvec, cv::Mat &tvec) {
     // OpenCV camera transform is the inverse of ARKit (transpose works because it's orthogonal)
     // Also y,z-axis needs to be flipped hence the negative signs
     cv::Mat rmat = (cv::Mat_<double>(3,3) <<

@@ -1,5 +1,5 @@
-#ifndef GEOAR_COLLECTION_COLLECTION_H
-#define GEOAR_COLLECTION_COLLECTION_H
+#ifndef GEOAR_MAPPING_MAPPER_H
+#define GEOAR_MAPPING_MAPPER_H
 
 #include <filesystem>
 
@@ -13,7 +13,7 @@ namespace fs = std::filesystem;
 
 namespace geoar {
 
-  class Collection {
+  class Mapper {
     public:
       struct FrameMetadata {
         int id;
@@ -33,7 +33,7 @@ namespace geoar {
       std::vector<FrameMetadata> frames;
       std::vector<GPSObservation> gps_observations;
 
-      Collection(fs::path directory);
+      Mapper(fs::path directory);
 
       void addFrame(cv::InputArray image, cv::InputArray depth, cv::InputArray confidence, FrameMetadata metadata);
       void addGPSObservation(GPSObservation observation);
@@ -43,9 +43,9 @@ namespace geoar {
       fs::path getPathPrefix(int id);
   };
 
-  NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Collection::FrameMetadata, id, timestamp, intrinsics, extrinsics)
-  NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Collection::GPSObservation, timestamp, relative, global, accuracy)
+  NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Mapper::FrameMetadata, id, timestamp, intrinsics, extrinsics)
+  NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Mapper::GPSObservation, timestamp, relative, global, accuracy)
 
 }
 
-#endif /* GEOAR_COLLECTION_COLLECTION_H */
+#endif /* GEOAR_MAPPING_MAPPER_H */

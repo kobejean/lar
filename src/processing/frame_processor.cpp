@@ -7,15 +7,15 @@
 #include "geoar/core/landmark.h"
 #include "geoar/processing/depth.h"
 #include "geoar/processing/projection.h"
-#include "geoar/processing/frame_processing.h"
+#include "geoar/processing/frame_processor.h"
 
 namespace geoar {
 
-  FrameProcessing::FrameProcessing(MapProcessingData &data) {
+  FrameProcessor::FrameProcessor(MapProcessor::Data &data) {
     this->data = &data;
   }
 
-  Frame FrameProcessing::process(nlohmann::json& frame_data, std::string directory) {
+  Frame FrameProcessor::process(nlohmann::json& frame_data, std::string directory) {
     int id = frame_data["id"];
     Frame frame(frame_data);
 
@@ -45,7 +45,7 @@ namespace geoar {
 
   // Private methods
 
-  std::vector<size_t> FrameProcessing::getLandmarks(Frame &frame, cv::Mat &desc) {
+  std::vector<size_t> FrameProcessor::getLandmarks(Frame &frame, cv::Mat &desc) {
     // Filter out features that have been matched
     std::map<size_t, size_t> matches = getMatches(desc);
     Projection projection(frame.frame_data);
@@ -78,7 +78,7 @@ namespace geoar {
     return landmark_ids;
   }
 
-  std::map<size_t, size_t> FrameProcessing::getMatches(cv::Mat &desc) {
+  std::map<size_t, size_t> FrameProcessor::getMatches(cv::Mat &desc) {
     // Get matches
     std::vector<cv::DMatch> matches = vision.match(desc, data->desc);
     std::cout << "matches: " << matches.size() << std::endl;
@@ -108,7 +108,7 @@ namespace geoar {
     return idx_matched;
   }
 
-  std::string FrameProcessing::getPathPrefix(int id, std::string directory) {
+  std::string FrameProcessor::getPathPrefix(int id, std::string directory) {
     std::string id_string = std::to_string(id);
     int zero_count = 8 - id_string.length();
     std::string prefix = std::string(zero_count, '0') + id_string + '_';

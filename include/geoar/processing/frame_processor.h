@@ -1,22 +1,22 @@
-#ifndef GEOAR_PROCESSING_FRAME_PROCESSING_H
-#define GEOAR_PROCESSING_FRAME_PROCESSING_H
+#ifndef GEOAR_PROCESSING_FRAME_PROCESSOR_H
+#define GEOAR_PROCESSING_FRAME_PROCESSOR_H
 
 #include <opencv2/features2d.hpp>
 
 #include <nlohmann/json.hpp>
 
 #include "geoar/core/frame.h"
-#include "geoar/processing/map_processing_data.h"
+#include "geoar/processing/map_processor.h"
 #include "geoar/tracking/vision.h"
 
 namespace geoar {
 
-  class FrameProcessing {
+  class FrameProcessor {
     public:
-      MapProcessingData* data;
+      MapProcessor::Data* data;
       Vision vision;
 
-      FrameProcessing(MapProcessingData &data);
+      FrameProcessor(MapProcessor::Data &data);
       Frame process(nlohmann::json& frame_data, std::string directory);
 
     private:
@@ -27,4 +27,4 @@ namespace geoar {
 
 }
 
-#endif /* GEOAR_PROCESSING_FRAME_PROCESSING_H */
+#endif /* GEOAR_PROCESSING_FRAME_PROCESSOR_H */
