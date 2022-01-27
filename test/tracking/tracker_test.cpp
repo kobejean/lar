@@ -3,11 +3,11 @@
 #include <opencv2/opencv.hpp>
 
 #include "geoar/core/utils/json.h"
-#include "geoar/tracking/tracking.h"
+#include "geoar/tracking/tracker.h"
 
 using namespace geoar;
 
-TEST(TrackingTest, LocalizeWithTransform) {
+TEST(TrackerTest, LocalizeWithTransform) {
   // Given
   std::ifstream map_data_ifs("./test/_fixture/processed_map_data/map.json");
   geoar::Map map = nlohmann::json::parse(map_data_ifs);
@@ -18,10 +18,10 @@ TEST(TrackingTest, LocalizeWithTransform) {
   intrinsics.at<float>(0,2) = 952.8714599609375;
   intrinsics.at<float>(1,2) = 714.1612548828125;
   intrinsics.at<float>(2,2) = 1.;
-  Tracking tracking(map);
+  Tracker tracker(map);
   // When
   cv::Mat transform;
-  tracking.localize(image, intrinsics, transform);
+  tracker.localize(image, intrinsics, transform);
   // Then
   EXPECT_NEAR(transform.at<double>(0,0), -0.27073314785957336, 1e-2);
   EXPECT_NEAR(transform.at<double>(0,1), 0.05986318364739418, 1e-2);

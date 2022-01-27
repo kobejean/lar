@@ -4,11 +4,11 @@
 #include <Eigen/Core>
 
 #include "geoar/core/utils/json.h"
-#include "geoar/collection/collection.h"
+#include "geoar/mapping/mapper.h"
 
 using namespace geoar;
 
-TEST(CollectionTest, AddFrame) {
+TEST(MapperTest, WriteMetadata) {
   // Given
   cv::Mat image = cv::imread("./test/_fixture/raw_map_data/00000004_image.jpeg", cv::IMREAD_GRAYSCALE);
   cv::Mat depth = cv::imread("./test/_fixture/raw_map_data/00000004_depth.pfm", cv::IMREAD_UNCHANGED);
@@ -22,18 +22,28 @@ TEST(CollectionTest, AddFrame) {
                  .5, .6, .7, .8,
                  .9,1.0,1.1,1.2,
                 1.3,1.4,1.5,1.6;
-  Collection::FrameMetadata metadata{
+  Mapper::FrameMetadata metadata{
     .timestamp=123456789123456789,
     .intrinsics=intrinsics,
     .extrinsics=extrinsics
   };
-  Collection collection("./test/_fixture/output");
+  Mapper mapper("./test/_fixture/output");
+  Eigen::Vector3d relative(0.1,0.2,0.3);
+  Eigen::Vector3d global(100.0,-50.0,500.0);
+  Eigen::Vector3d accuracy(10.0,10.0,30.0);
+  GPSObservation observation{
+    .timestamp=987654321987654321,
+    .relative=relative,
+    .global=global,
+    .accuracy=accuracy
+  };
+  mapper.gps_observations.push_back(observation);
+  mapper.addFrame(image, depth, confidence, metadata);
   // When
-  collection.addFrame(image, depth, confidence, metadata);
-  collection.writeMetadata();
+  mapper.writeMetadata();
   // Then
-  std::ifstream ifs("./test/_fixture/output/frames.json");
-  std::vector<Collection::FrameMetadata> frames = nlohmann::json::parse(ifs);
+  std::ifstream frames_ifs("./test/_fixture/output/frames.json");
+  std::vector<Mapper::FrameMetadata> frames = nlohmann::json::parse(frames_ifs);
   EXPECT_EQ(frames[0].timestamp, 123456789123456789);
   EXPECT_NEAR(frames[0].intrinsics(0,0), 1, 1e-10);
   EXPECT_NEAR(frames[0].intrinsics(1,0), 2, 1e-10);
@@ -60,26 +70,9 @@ TEST(CollectionTest, AddFrame) {
   EXPECT_NEAR(frames[0].extrinsics(3,1), 1.4, 1e-10);
   EXPECT_NEAR(frames[0].extrinsics(3,2), 1.5, 1e-10);
   EXPECT_NEAR(frames[0].extrinsics(3,3), 1.6, 1e-10);
-}
 
-TEST(CollectionTest, AddGPSObservation) {
-  // Given
-  Eigen::Vector3d relative(0.1,0.2,0.3);
-  Eigen::Vector3d global(100.0,-50.0,500.0);
-  Eigen::Vector3d accuracy(10.0,10.0,30.0);
-  Collection::GPSObservation observation{
-    .timestamp=987654321987654321,
-    .relative=relative,
-    .global=global,
-    .accuracy=accuracy
-  };
-  Collection collection("./test/_fixture/output");
-  // When
-  collection.addGPSObservation(observation);
-  collection.writeMetadata();
-  // Then
-  std::ifstream ifs("./test/_fixture/output/gps_observations.json");
-  std::vector<Collection::GPSObservation> gps_observations = nlohmann::json::parse(ifs);
+  std::ifstream gps_observations_ifs("./test/_fixture/output/gps_observations.json");
+  std::vector<GPSObservation> gps_observations = nlohmann::json::parse(gps_observations_ifs);
   EXPECT_EQ(gps_observations[0].timestamp, 987654321987654321);
   EXPECT_NEAR(gps_observations[0].relative.x(), 0.1, 1e-10);
   EXPECT_NEAR(gps_observations[0].relative.y(), 0.2, 1e-10);

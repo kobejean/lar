@@ -6,18 +6,18 @@
 #include <nlohmann/json.hpp>
 
 #include "geoar/core/utils/json.h"
-#include "geoar/collection/collection.h"
+#include "geoar/mapping/mapper.h"
 
 namespace fs = std::filesystem;
 
 namespace geoar {
 
-  Collection::Collection(fs::path directory) {
+  Mapper::Mapper(fs::path directory) {
     this->directory = directory;
     fs::create_directory(directory);
   }
 
-  void Collection::addFrame(cv::InputArray image, cv::InputArray depth, cv::InputArray confidence, FrameMetadata metadata) {
+  void Mapper::addFrame(cv::InputArray image, cv::InputArray depth, cv::InputArray confidence, FrameMetadata metadata) {
     metadata.id = static_cast<int>(frames.size());
     std::string path_prefix = getPathPrefix(metadata.id).string();
     cv::imwrite(path_prefix + "image.jpeg", image);
@@ -26,18 +26,25 @@ namespace geoar {
     frames.push_back(metadata);
   }
 
-  void Collection::addGPSObservation(GPSObservation observation) {
-    gps_observations.push_back(observation);
+
+  void Mapper::addPosition(Eigen::Vector3d position, long long timestamp) {
+    location_matcher.recordPosition(timestamp, position);
+    gps_observations = location_matcher.matches;
   }
 
-  fs::path Collection::getPathPrefix(int id) {
+  void Mapper::addLocation(Eigen::Vector3d location, Eigen::Vector3d accuracy, long long timestamp) {
+    location_matcher.recordLocation(timestamp, location, accuracy);
+    gps_observations = location_matcher.matches;
+  }
+
+  fs::path Mapper::getPathPrefix(int id) {
     std::string id_string = std::to_string(id);
     int zero_count = 8 - id_string.length();
     std::string prefix = std::string(zero_count, '0') + id_string + '_';
     return directory / prefix;
   }
 
-  void Collection::writeMetadata() {
+  void Mapper::writeMetadata() {
     {
     std::ofstream file(directory / "frames.json");
     nlohmann::json json = frames;
