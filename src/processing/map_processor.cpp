@@ -11,6 +11,22 @@ namespace geoar {
     this->data = &data;
   }
 
+  void MapProcessor::process() {
+    // data->map.landmarks.all.clear();
+
+    FrameProcessor frame_processor(*data);
+    for (Frame& frame : data->frames) {
+      frame_processor.process(frame);
+    }
+
+    // Optimize
+    BundleAdjustment bundle_adjustment(*data);
+    bundle_adjustment.construct();
+    bundle_adjustment.optimize();
+
+    // data->map.landmarks.cull();
+  }
+
   void MapProcessor::createMap(std::string out_dir) {
     std::filesystem::create_directory(out_dir);
     
@@ -31,6 +47,7 @@ namespace geoar {
     std::cout << "Saved g2o file to: " << output << std::endl;
 
     bundle_adjustment.optimize();
+    data->map.landmarks.cull();
 
     // Serialize
     nlohmann::json map_json = data->map;
