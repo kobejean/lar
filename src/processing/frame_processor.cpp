@@ -16,6 +16,7 @@ namespace geoar {
   }
 
   void FrameProcessor::process(Frame& frame) {
+    if (!frame.depth.empty()) return;
 
     // Create filename paths
     std::string path_prefix = data->getPathPrefix(frame.id).string();
@@ -59,7 +60,7 @@ namespace geoar {
         Eigen::Vector3d pt3d = projection.projectToWorld(frame.kpts[i].pt, frame.depth[i]);
         Landmark landmark(pt3d, desc.row(i), new_landmark_id);
         Eigen::Vector3d cam_position = (frame.extrinsics.block<3,1>(0,3));
-        landmark.recordSighting(cam_position);
+        landmark.recordSighting(cam_position, frame.timestamp);
 
         landmark_ids.push_back(new_landmark_id);
         new_landmarks.push_back(landmark);
@@ -68,7 +69,7 @@ namespace geoar {
         // We have a match so just push the match index
         landmark_ids.push_back(matches[i]);
         Eigen::Vector3d cam_position = (frame.extrinsics.block<3,1>(0,3));
-        data->map.landmarks[matches[i]].recordSighting(cam_position);
+        data->map.landmarks[matches[i]].recordSighting(cam_position, frame.timestamp);
       }
     }
 

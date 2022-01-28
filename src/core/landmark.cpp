@@ -12,7 +12,7 @@ namespace geoar {
     this->desc = desc;
   }
 
-  void Landmark::recordSighting(Eigen::Vector3d &cam_position) {
+  void Landmark::recordSighting(Eigen::Vector3d &cam_position, long long timestamp) {
     // TODO: find a good way to estimate the region where the landmark can be seen for good indexing
     if (sightings == 0) {
       Eigen::Vector2d position2(position.x(), position.z());
@@ -22,10 +22,11 @@ namespace geoar {
       index_center = cam_position2;
     }
     sightings++;
+    last_seen = timestamp;
   }
 
   bool Landmark::isUseable() const {
-    return sightings >= 3;
+    return sightings >= 2;
   }
 
   // Static Methods

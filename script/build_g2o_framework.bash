@@ -51,7 +51,7 @@ build_archive() {
 }
 
 rm -r $FRAMEWORK_BUILD_DIR
-cmake -Sthirdparty/g2o -B$FRAMEWORK_BUILD_DIR -GXcode -DCMAKE_SYSTEM_NAME=iOS ${CMAKE_ARGS[@]}
+cmake -Sthirdparty/g2o -B$FRAMEWORK_BUILD_DIR -GXcode -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 ${CMAKE_ARGS[@]}
 
 build_archive "generic/platform=iOS" "iphoneos" "iphoneos"
 build_archive "platform=iOS Simulator,name=iPhone 11" "iphonesimulator" "iphonesimulator"

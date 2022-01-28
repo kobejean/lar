@@ -1,7 +1,7 @@
 #ifndef GEOAR_TRACKING_TRACKER_H
 #define GEOAR_TRACKING_TRACKER_H
 
-#include <opencv2/core.hpp>
+#include <opencv2/core/types.hpp>
 
 #include "geoar/core/map.h"
 #include "geoar/tracking/vision.h"

@@ -28,7 +28,7 @@ namespace geoar {
           Data() {};
           fs::path getPathPrefix(int id) {
             std::string id_string = std::to_string(id);
-            int zero_count = 8 - id_string.length();
+            int zero_count = 8 - static_cast<int>(id_string.length());
             std::string prefix = std::string(zero_count, '0') + id_string + '_';
             return directory / prefix;
           };

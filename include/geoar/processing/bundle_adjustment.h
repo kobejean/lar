@@ -1,11 +1,6 @@
 #ifndef GEOAR_PROCESSING_BUNDLE_ADJUSTMENT_H
 #define GEOAR_PROCESSING_BUNDLE_ADJUSTMENT_H
 
-#include <opencv2/features2d.hpp>
-#include <opencv2/imgcodecs.hpp>
-#include <opencv2/imgproc.hpp>
-
-#include <nlohmann/json.hpp>
 #include <Eigen/Core>
 
 #include "g2o/core/sparse_optimizer.h"

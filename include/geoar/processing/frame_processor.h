@@ -1,7 +1,7 @@
 #ifndef GEOAR_PROCESSING_FRAME_PROCESSOR_H
 #define GEOAR_PROCESSING_FRAME_PROCESSOR_H
 
-#include <opencv2/features2d.hpp>
+#include <opencv2/core/types.hpp>
 
 #include <nlohmann/json.hpp>
 

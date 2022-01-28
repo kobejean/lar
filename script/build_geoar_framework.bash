@@ -26,7 +26,6 @@ CMAKE_ARGS=(
     -Dg2o_DIR=`pwd`/build/install/lib/cmake/g2o
     -DG2O_USE_VENDORED_CERES=ON
     -DG2O_USE_OPENGL=OFF
-    # -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0
     -DAPPLE_FRAMEWORK=ON
 )
 
@@ -50,7 +49,7 @@ build_archive() {
 }
 
 rm -r $FRAMEWORK_BUILD_DIR
-cmake -S. -B$FRAMEWORK_BUILD_DIR -GXcode -DCMAKE_SYSTEM_NAME=iOS ${CMAKE_ARGS[@]}
+cmake -S. -B$FRAMEWORK_BUILD_DIR -GXcode -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 ${CMAKE_ARGS[@]}
 
 build_archive "generic/platform=iOS" "iphoneos" "iphoneos"
 build_archive "platform=iOS Simulator,name=iPhone 11" "iphonesimulator" "iphonesimulator"

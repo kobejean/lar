@@ -3,7 +3,7 @@
 
 #include <nlohmann/json.hpp>
 #include <Eigen/Core>
-#include <opencv2/features2d.hpp>
+#include <opencv2/core/types.hpp>
 
 namespace geoar {
 
