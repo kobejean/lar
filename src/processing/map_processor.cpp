@@ -1,11 +1,11 @@
 #include <filesystem>
 
-#include "geoar/processing/bundle_adjustment.h"
-#include "geoar/processing/frame_processor.h"
-#include "geoar/processing/map_processor.h"
-#include "geoar/core/utils/json.h"
+#include "lar/processing/bundle_adjustment.h"
+#include "lar/processing/frame_processor.h"
+#include "lar/processing/map_processor.h"
+#include "lar/core/utils/json.h"
 
-namespace geoar {
+namespace lar {
 
   MapProcessor::MapProcessor(Mapper::Data& data) {
     this->data = &data;

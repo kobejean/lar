@@ -3,10 +3,10 @@
 #include <opencv2/opencv.hpp>
 #include <Eigen/Core>
 
-#include "geoar/core/utils/json.h"
-#include "geoar/mapping/mapper.h"
+#include "lar/core/utils/json.h"
+#include "lar/mapping/mapper.h"
 
-using namespace geoar;
+using namespace lar;
 
 TEST(MapperTest, WriteMetadata) {
   // Given

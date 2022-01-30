@@ -1,9 +1,9 @@
-#ifndef GEOAR_TRACKING_VISION_H
-#define GEOAR_TRACKING_VISION_H
+#ifndef LAR_TRACKING_VISION_H
+#define LAR_TRACKING_VISION_H
 
 #include <opencv2/features2d.hpp>
 
-namespace geoar {
+namespace lar {
 
   class Vision {
     public:
@@ -18,4 +18,4 @@ namespace geoar {
 
 }
 
-#endif /* GEOAR_TRACKING_VISION_H */
+#endif /* LAR_TRACKING_VISION_H */

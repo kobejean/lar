@@ -16,7 +16,7 @@ fast: CMAKE_ARGS = -DCMAKE_BUILD_TYPE=Release
 fast: configure
 	$(MAKE) $(QUIET) VERBOSE=1 -C build -j 8
 
-tests: CMAKE_ARGS = -DGEOAR_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
+tests: CMAKE_ARGS = -DLAR_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
 tests: configure
 	$(MAKE) $(QUIET) -C build -j 8
 

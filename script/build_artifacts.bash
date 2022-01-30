@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-if [[ ! -d build/frameworks ]]; then
+if [[ ! -d lib ]]; then
     exit 1
 fi
 ARTIFACTS_PATH=`pwd`/build/artifacts
 
 mkdir -p $ARTIFACTS_PATH
-cd build/frameworks
+cd lib
 
 IFS=$'\n' read -r -d '' -a FRAMEWORK_PATHS < <( find *.xcframework -depth 0 -type d )
 
@@ -15,4 +15,4 @@ do
     zip -x "*.DS_Store" -r $ARTIFACTS_PATH/$FRAMEWORK_BASENAME.zip $FRAMEWORK_PATH 
 done
 
-echo "ARTIFACTS BUILT SUCCESSFULLY"
+echo "ARTIFACTS BUILT SUCCESSFULLY AT: $ARTIFACTS_PATH"

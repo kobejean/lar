@@ -1,9 +1,9 @@
-#ifndef GEOAR_CORE_UTILS_BASE64_H
-#define GEOAR_CORE_UTILS_BASE64_H
+#ifndef LAR_CORE_UTILS_BASE64_H
+#define LAR_CORE_UTILS_BASE64_H
 
 #include <opencv2/features2d.hpp>
 
-namespace geoar {
+namespace lar {
   
   static const std::string base64_chars =
               "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -109,4 +109,4 @@ namespace geoar {
 
 }
 
-#endif /* GEOAR_CORE_UTILS_BASE64_H */
+#endif /* LAR_CORE_UTILS_BASE64_H */

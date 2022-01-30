@@ -1,6 +1,8 @@
-# GeoARCore
+# lar
 
-![GeoARCore Test Status](https://github.com/kobejean/GeoARCore/actions/workflows/test.yml/badge.svg?branch=main)
+![LAR Test Status](https://github.com/kobejean/lar/actions/workflows/test.yml/badge.svg?branch=main)
+
+LocalARのC＋＋ライブラリーです。
 
 # 仕組み
 

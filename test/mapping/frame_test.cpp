@@ -1,9 +1,9 @@
 #include <gtest/gtest.h>
-#include "geoar/mapping/frame.h"
+#include "lar/mapping/frame.h"
 
 using namespace Eigen;
 using json = nlohmann::json;
-using namespace geoar;
+using namespace lar;
 
 
 TEST(FrameTest, Initialization) {

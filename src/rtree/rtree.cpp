@@ -1,6 +1,6 @@
-#include "geoar/rtree/rtree.h"
+#include "lar/rtree/rtree.h"
 
-namespace geoar {
+namespace lar {
 
   RTree::RTree() {
     

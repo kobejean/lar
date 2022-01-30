@@ -1,12 +1,12 @@
-#ifndef GEOAR_TRACKING_TRACKER_H
-#define GEOAR_TRACKING_TRACKER_H
+#ifndef LAR_TRACKING_TRACKER_H
+#define LAR_TRACKING_TRACKER_H
 
 #include <opencv2/core/types.hpp>
 
-#include "geoar/core/map.h"
-#include "geoar/tracking/vision.h"
+#include "lar/core/map.h"
+#include "lar/tracking/vision.h"
 
-namespace geoar {
+namespace lar {
 
   class Tracker {
     public:
@@ -26,4 +26,4 @@ namespace geoar {
 
 }
 
-#endif /* GEOAR_TRACKING_TRACKER_H */
+#endif /* LAR_TRACKING_TRACKER_H */

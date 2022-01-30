@@ -1,18 +1,18 @@
 set(HEADER_LIST
-  "${PROJECT_SOURCE_DIR}/include/geoar/core/utils/base64.h"
-  "${PROJECT_SOURCE_DIR}/include/geoar/core/utils/json.h"
-  "${PROJECT_SOURCE_DIR}/include/geoar/core/landmark.h"
-  "${PROJECT_SOURCE_DIR}/include/geoar/core/landmark_database.h"
-  "${PROJECT_SOURCE_DIR}/include/geoar/core/map.h"
+  "${PROJECT_SOURCE_DIR}/include/lar/core/utils/base64.h"
+  "${PROJECT_SOURCE_DIR}/include/lar/core/utils/json.h"
+  "${PROJECT_SOURCE_DIR}/include/lar/core/landmark.h"
+  "${PROJECT_SOURCE_DIR}/include/lar/core/landmark_database.h"
+  "${PROJECT_SOURCE_DIR}/include/lar/core/map.h"
 )
 
-add_library(geoar_core
+add_library(lar_core
   ${HEADER_LIST}
   landmark.cpp
   landmark_database.cpp
   map.cpp
 )
-target_link_libraries(geoar_core 
+target_link_libraries(lar_core 
   g2o::types_slam3d
   opencv_core
   Eigen3::Eigen

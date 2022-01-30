@@ -8,7 +8,7 @@ INCLUDE_DIR=`pwd`/build/install/include/g2o
 LIB_DIR=`pwd`/thirdparty/g2o/lib/Release
 FRAMEWORKS_DIR=`pwd`/build/frameworks
 RESOURCES_PATH=`pwd`/script/resources/apple/g2o/Resources
-XCFRAMEWORK_PATH=$FRAMEWORKS_DIR/$FRAMEWORK_NAME.xcframework
+XCFRAMEWORK_PATH=`pwd`/lib/$FRAMEWORK_NAME.xcframework
 
 CMAKE_ARGS=(
     -DCMAKE_BUILD_TYPE=Release

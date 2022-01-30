@@ -1,9 +1,9 @@
 #include <iostream>
 #include <opencv2/calib3d.hpp>
 
-#include "geoar/tracking/tracker.h"
+#include "lar/tracking/tracker.h"
 
-namespace geoar {
+namespace lar {
 
   Tracker::Tracker(Map map) {
     this->map = map;

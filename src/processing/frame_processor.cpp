@@ -4,12 +4,12 @@
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 
-#include "geoar/core/landmark.h"
-#include "geoar/processing/depth.h"
-#include "geoar/processing/projection.h"
-#include "geoar/processing/frame_processor.h"
+#include "lar/core/landmark.h"
+#include "lar/processing/depth.h"
+#include "lar/processing/projection.h"
+#include "lar/processing/frame_processor.h"
 
-namespace geoar {
+namespace lar {
 
   FrameProcessor::FrameProcessor(Mapper::Data& data) {
     this->data = &data;

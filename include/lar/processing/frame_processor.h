@@ -1,15 +1,15 @@
-#ifndef GEOAR_PROCESSING_FRAME_PROCESSOR_H
-#define GEOAR_PROCESSING_FRAME_PROCESSOR_H
+#ifndef LAR_PROCESSING_FRAME_PROCESSOR_H
+#define LAR_PROCESSING_FRAME_PROCESSOR_H
 
 #include <opencv2/core/types.hpp>
 
 #include <nlohmann/json.hpp>
 
-#include "geoar/mapping/frame.h"
-#include "geoar/processing/map_processor.h"
-#include "geoar/tracking/vision.h"
+#include "lar/mapping/frame.h"
+#include "lar/processing/map_processor.h"
+#include "lar/tracking/vision.h"
 
-namespace geoar {
+namespace lar {
 
   class FrameProcessor {
     public:
@@ -27,4 +27,4 @@ namespace geoar {
 
 }
 
-#endif /* GEOAR_PROCESSING_FRAME_PROCESSOR_H */
+#endif /* LAR_PROCESSING_FRAME_PROCESSOR_H */

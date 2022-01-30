@@ -1,9 +1,9 @@
 #include <gtest/gtest.h>
 #include <Eigen/Core>
 
-#include "geoar/mapping/location_matcher.h"
+#include "lar/mapping/location_matcher.h"
 
-using namespace geoar;
+using namespace lar;
 
 TEST(LocationMatcherTest, NormalMatch) {
   // Given

@@ -1,6 +1,6 @@
-#include "geoar/processing/projection.h"
+#include "lar/processing/projection.h"
 
-namespace geoar {
+namespace lar {
 
   Projection::Projection(Eigen::Matrix3d intrinsics, Eigen::Matrix4d extrinsics) : 
     R(extrinsics.block<3,3>(0,0)), RT(extrinsics.block<3,3>(0,0).transpose()), t(extrinsics.block<3,1>(0,3)) {

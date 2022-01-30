@@ -6,10 +6,10 @@
 #include <Eigen/Core>
 
 
-#include "geoar/mapping/location_matcher.h"
+#include "lar/mapping/location_matcher.h"
 
 
-namespace geoar {
+namespace lar {
 
   void LocationMatcher::recordPosition(long long timestamp, Eigen::Vector3d position) {
     positions.push_back(std::tuple<long long, Eigen::Vector3d>{ timestamp, position });

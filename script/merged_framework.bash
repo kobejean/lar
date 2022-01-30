@@ -4,7 +4,7 @@
 
 MERGE_DIR=build/merge
 
-FRAMEWORK_NAME=geoar
+FRAMEWORK_NAME=lar
 FRAMEWORK_VERSION=A
 FRAMEWORK_PATH=`pwd`/lib/$FRAMEWORK_NAME.framework
 XCFRAMEWORK_PATH=`pwd`/lib/$FRAMEWORK_NAME.xcframework
@@ -15,14 +15,14 @@ mkdir -p $MERGE_DIR/include
 
 # Merge libs
 
-# IFS=$'\n' read -r -d '' -a lib_paths < <( find build/framework/archive/geoar.iOS.xcarchive/Products/*.a )
+# IFS=$'\n' read -r -d '' -a lib_paths < <( find build/framework/archive/lar.iOS.xcarchive/Products/*.a )
 IFS=$'\n' read -r -d '' -a lib_paths < <( find lib/*.a )
 IFS=$'\n' read -r -d '' -a lib_paths3 < <( find build/install/lib -name *.a )
 
-libtool -static -o $MERGE_DIR/lib/geoar.a "${lib_paths[@]}" "${lib_paths3[@]}"
+libtool -static -o $MERGE_DIR/lib/lar.a "${lib_paths[@]}" "${lib_paths3[@]}"
 
 # Gather includes
-manual_includes=( opencv4 eigen3 geoar ) # these we will add manually
+manual_includes=( opencv4 eigen3 lar ) # these we will add manually
 inv_pat=$( ( IFS=$'\n'; echo "${manual_includes[*]}" ) )
 IFS=$'\n' read -r -d '' -a include_src < <( ls build/install/include | grep -vF "$inv_pat" )
 include_src=( 
@@ -35,7 +35,7 @@ include_src=(
 # do
 #   cp -r "${include_dir}" "$MERGE_DIR/include"
 # done
-cp -a include/geoar/. "$MERGE_DIR/include"
+cp -a include/lar/. "$MERGE_DIR/include"
 
 # Create Framework
 
@@ -61,7 +61,7 @@ cp -a include/geoar/. "$MERGE_DIR/include"
 mkdir -p $FRAMEWORK_PATH
 mkdir -p $FRAMEWORK_PATH/Versions/$FRAMEWORK_VERSION/Headers
 mkdir -p $FRAMEWORK_PATH/Versions/$FRAMEWORK_VERSION/Resources
-lipo -create $MERGE_DIR/lib/geoar.a -o $FRAMEWORK_PATH/Versions/$FRAMEWORK_VERSION/$FRAMEWORK_NAME
+lipo -create $MERGE_DIR/lib/lar.a -o $FRAMEWORK_PATH/Versions/$FRAMEWORK_VERSION/$FRAMEWORK_NAME
 
 cp -a $MERGE_DIR/include/. $FRAMEWORK_PATH/Versions/$FRAMEWORK_VERSION/Headers
 cp -a platform/apple/Resources/. $FRAMEWORK_PATH/Versions/$FRAMEWORK_VERSION
