@@ -1,8 +1,8 @@
-# lar
+# LocalizeAR
 
 ![LAR Test Status](https://github.com/kobejean/lar/actions/workflows/test.yml/badge.svg?branch=main)
 
-LocalARのC＋＋ライブラリーです。
+LocalizeARのC＋＋ライブラリーです。
 
 # 仕組み
 

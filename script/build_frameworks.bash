@@ -9,5 +9,5 @@ mkdir build/frameworks
 ./script/build_g2o_framework.bash
 
 # Uncomment if opencv needs to be rebuilt
-# Otherwise just download the framework from here: https://github.com/kobejean/lar/releases/download/v1.0.0-alpha.0/opencv2.xcframework.zip
-./script/build_opencv_framework.bash
+# Otherwise just download the framework from here: https://github.com/kobejean/lar/releases/download/v0.5.0/opencv2.xcframework.zip
+# ./script/build_opencv_framework.bash
