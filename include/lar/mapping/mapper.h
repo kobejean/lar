@@ -1,5 +1,5 @@
-#ifndef GEOAR_MAPPING_MAPPER_H
-#define GEOAR_MAPPING_MAPPER_H
+#ifndef LAR_MAPPING_MAPPER_H
+#define LAR_MAPPING_MAPPER_H
 
 #include <filesystem>
 
@@ -7,13 +7,13 @@
 #include <nlohmann/json.hpp>
 #include <opencv2/core.hpp>
 
-#include "geoar/core/utils/json.h"
-#include "geoar/mapping/frame.h"
-#include "geoar/mapping/location_matcher.h"
+#include "lar/core/utils/json.h"
+#include "lar/mapping/frame.h"
+#include "lar/mapping/location_matcher.h"
 
 namespace fs = std::filesystem;
 
-namespace geoar {
+namespace lar {
 
   class Mapper {
     public:
@@ -48,4 +48,4 @@ namespace geoar {
 
 }
 
-#endif /* GEOAR_MAPPING_MAPPER_H */
+#endif /* LAR_MAPPING_MAPPER_H */

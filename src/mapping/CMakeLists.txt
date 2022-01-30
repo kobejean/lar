@@ -1,18 +1,18 @@
 set(HEADER_LIST 
-  "${PROJECT_SOURCE_DIR}/include/geoar/mapping/frame.h"
-  "${PROJECT_SOURCE_DIR}/include/geoar/mapping/location_matcher.h"
-  "${PROJECT_SOURCE_DIR}/include/geoar/mapping/mapper.h"
+  "${PROJECT_SOURCE_DIR}/include/lar/mapping/frame.h"
+  "${PROJECT_SOURCE_DIR}/include/lar/mapping/location_matcher.h"
+  "${PROJECT_SOURCE_DIR}/include/lar/mapping/mapper.h"
 )
 
-add_library(geoar_mapping
+add_library(lar_mapping
   frame.cpp
   location_matcher.cpp
   mapper.cpp
   ${HEADER_LIST}
 )
-target_link_libraries(geoar_mapping 
+target_link_libraries(lar_mapping 
   opencv_core opencv_imgcodecs
   nlohmann_json::nlohmann_json
   Eigen3::Eigen
-  geoar_core
+  lar_core
 )

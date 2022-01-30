@@ -2,15 +2,15 @@
 #include <fstream>
 #include <opencv2/opencv.hpp>
 
-#include "geoar/core/utils/json.h"
-#include "geoar/tracking/tracker.h"
+#include "lar/core/utils/json.h"
+#include "lar/tracking/tracker.h"
 
-using namespace geoar;
+using namespace lar;
 
 TEST(TrackerTest, LocalizeWithTransform) {
   // Given
   std::ifstream map_data_ifs("./test/_fixture/processed_map_data/map.json");
-  geoar::Map map = nlohmann::json::parse(map_data_ifs);
+  lar::Map map = nlohmann::json::parse(map_data_ifs);
   cv::Mat image = cv::imread("./test/_fixture/raw_map_data/00000004_image.jpeg", cv::IMREAD_GRAYSCALE);
   cv::Mat intrinsics(3, 3, CV_32FC1);
   intrinsics.at<float>(0,0) = 1594.2728271484375;

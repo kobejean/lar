@@ -1,15 +1,15 @@
-#ifndef GEOAR_PROCESSING_BUNDLE_ADJUSTMENT_H
-#define GEOAR_PROCESSING_BUNDLE_ADJUSTMENT_H
+#ifndef LAR_PROCESSING_BUNDLE_ADJUSTMENT_H
+#define LAR_PROCESSING_BUNDLE_ADJUSTMENT_H
 
 #include <Eigen/Core>
 
 #include "g2o/core/sparse_optimizer.h"
 
-#include "geoar/core/landmark.h"
-#include "geoar/mapping/frame.h"
-#include "geoar/mapping/mapper.h"
+#include "lar/core/landmark.h"
+#include "lar/mapping/frame.h"
+#include "lar/mapping/mapper.h"
 
-namespace geoar {
+namespace lar {
 
   class BundleAdjustment {
     public:
@@ -41,4 +41,4 @@ namespace geoar {
 
 }
 
-#endif /* GEOAR_PROCESSING_BUNDLE_ADJUSTMENT_H */
+#endif /* LAR_PROCESSING_BUNDLE_ADJUSTMENT_H */

@@ -1,6 +1,6 @@
-#include "geoar/core/landmark_database.h"
+#include "lar/core/landmark_database.h"
 
-namespace geoar {
+namespace lar {
 
   LandmarkDatabase::LandmarkDatabase() {
   }

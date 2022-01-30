@@ -1,14 +1,14 @@
 set(HEADER_LIST 
-  "${PROJECT_SOURCE_DIR}/include/geoar/tracking/tracker.h"
-  "${PROJECT_SOURCE_DIR}/include/geoar/tracking/vision.h"
+  "${PROJECT_SOURCE_DIR}/include/lar/tracking/tracker.h"
+  "${PROJECT_SOURCE_DIR}/include/lar/tracking/vision.h"
 )
 
-add_library(geoar_tracking
+add_library(lar_tracking
   tracker.cpp
   vision.cpp
   ${HEADER_LIST}
 )
-target_link_libraries(geoar_tracking 
+target_link_libraries(lar_tracking 
   opencv_core opencv_calib3d
-  geoar_core
+  lar_core
 )

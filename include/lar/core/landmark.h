@@ -1,11 +1,11 @@
-#ifndef GEOAR_CORE_LANDMARK_H
-#define GEOAR_CORE_LANDMARK_H
+#ifndef LAR_CORE_LANDMARK_H
+#define LAR_CORE_LANDMARK_H
 
 #include <Eigen/Core>
 #include <opencv2/features2d.hpp>
 #include <nlohmann/json.hpp>
 
-namespace geoar {
+namespace lar {
 
   class Landmark {
     public:
@@ -28,4 +28,4 @@ namespace geoar {
   };
 }
 
-#endif /* GEOAR_CORE_LANDMARK_H */
+#endif /* LAR_CORE_LANDMARK_H */

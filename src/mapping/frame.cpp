@@ -1,8 +1,8 @@
 #include <Eigen/Core>
 
-#include "geoar/mapping/frame.h"
+#include "lar/mapping/frame.h"
 
-namespace geoar {
+namespace lar {
 
   Frame::Frame() {
   }

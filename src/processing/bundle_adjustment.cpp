@@ -6,7 +6,7 @@
 // #include "g2o/core/robust_kernel_impl.h"
 #include "g2o/types/sba/types_six_dof_expmap.h"
 
-#include "geoar/processing/bundle_adjustment.h"
+#include "lar/processing/bundle_adjustment.h"
 
 G2O_USE_OPTIMIZATION_LIBRARY(eigen);
 
@@ -21,7 +21,7 @@ namespace g2o {
   G2O_REGISTER_TYPE(VERTEX_TRACKXYZ, VertexPointXYZ);
 }
 
-namespace geoar {
+namespace lar {
 
   BundleAdjustment::BundleAdjustment(Mapper::Data& data) {
     this->data = &data;

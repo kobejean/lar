@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 
-PROJECT_NAME=geoar
-FRAMEWORK_BUILD_DIR=`pwd`/build/geoar-framework
-FRAMEWORK_NAME=geoar
+PROJECT_NAME=lar
+FRAMEWORK_BUILD_DIR=`pwd`/build/lar-framework
+FRAMEWORK_NAME=lar
 FRAMEWORK_VERSION=A
-INCLUDE_DIR=`pwd`/include/geoar
+INCLUDE_DIR=`pwd`/include/lar
 LIB_DIR=`pwd`/lib/Release
 FRAMEWORKS_DIR=`pwd`/build/frameworks
-RESOURCES_PATH=`pwd`/script/resources/apple/geoar/Resources
-XCFRAMEWORK_PATH=$FRAMEWORKS_DIR/$FRAMEWORK_NAME.xcframework
+RESOURCES_PATH=`pwd`/script/resources/apple/lar/Resources
+XCFRAMEWORK_PATH=`pwd`/lib/$FRAMEWORK_NAME.xcframework
 
 CMAKE_ARGS=(
     -DCMAKE_BUILD_TYPE=Release
@@ -18,7 +18,7 @@ CMAKE_ARGS=(
     # -DCMAKE_XCODE_ATTRIBUTE_LLVM_LTO=YES
     -DCMAKE_XCODE_ATTRIBUTE_GCC_OPTIMIZATION_LEVEL=s
     -DUSE_SUPERBUILD=OFF
-    -DGEOAR_BUILD_APPS=OFF
+    -DLAR_BUILD_APPS=OFF
     -DOpenCV_DIR=`pwd`/build/opencv-build
     -DEigen3_DIR=`pwd`/build/Eigen3-build
     -DEIGEN3_INCLUDE_DIR=`pwd`/build/install/include/eigen3

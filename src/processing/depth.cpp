@@ -4,9 +4,9 @@
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 
-#include "geoar/processing/depth.h"
+#include "lar/processing/depth.h"
 
-namespace geoar {
+namespace lar {
 
   Depth::Depth(cv::Size img_size) {
     _img_size = img_size;

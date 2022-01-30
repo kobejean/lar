@@ -1,22 +1,22 @@
-# Create geoar_create_map executable
-add_executable(geoar_create_map geoar_create_map.cpp)
-target_link_libraries(geoar_create_map
-  geoar_processing
+# Create lar_create_map executable
+add_executable(lar_create_map lar_create_map.cpp)
+target_link_libraries(lar_create_map
+  lar_processing
 )
-set_target_properties(geoar_create_map
+set_target_properties(lar_create_map
   PROPERTIES
-  XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER com.geoar.create-map
+  XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER com.local-ar.create-map
   # EXCLUDE_FROM_ALL ON
 )
 
-# Create geoar_create_map executable
-add_executable(geoar_localize geoar_localize.cpp)
-target_link_libraries(geoar_localize
-  geoar_tracking
+# Create lar_create_map executable
+add_executable(lar_localize lar_localize.cpp)
+target_link_libraries(lar_localize
+  lar_tracking
   opencv_core opencv_features2d opencv_imgcodecs
 )
-set_target_properties(geoar_localize
+set_target_properties(lar_localize
   PROPERTIES
-  XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER com.geoar.localize
+  XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER com.local-ar.localize
   # EXCLUDE_FROM_ALL ON
 )

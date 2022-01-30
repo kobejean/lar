@@ -17,11 +17,11 @@ if(USE_SUPERBUILD)
   include(cmake/SuperBuild.cmake)
   return()
 else()
-  project(geoar)
+  project(lar)
 endif()
 
 
-# GeoAR
+# LAR
 
 include(FetchContent)
 include(ExternalProject)
@@ -30,8 +30,8 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -Wall -Wextra")
 set(CMAKE_CXX_STANDARD 17)
 
 # Options
-option(GEOAR_BUILD_APPS "Whether or not apps should be built" ON)
-option(GEOAR_BUILD_TESTS "Whether or not tests should be built" OFF)
+option(LAR_BUILD_APPS "Whether or not apps should be built" ON)
+option(LAR_BUILD_TESTS "Whether or not tests should be built" OFF)
 
 # Setup output directories
 file(MAKE_DIRECTORY lib)
@@ -48,15 +48,15 @@ find_package(g2o 1.0.0 REQUIRED)
 include_directories(${PROJECT_SOURCE_DIR}/include)
 
 # Add subdirectories
-if(GEOAR_BUILD_APPS)
-  message("GeoAR Build Apps Enabled")
+if(LAR_BUILD_APPS)
+  message("LAR Build Apps Enabled")
   add_subdirectory(apps)
 endif()
 
 add_subdirectory(src)
 
-if(GEOAR_BUILD_TESTS)
-  message("GeoAR Build Tests Enabled")
+if(LAR_BUILD_TESTS)
+  message("LAR Build Tests Enabled")
   enable_testing()
   add_subdirectory(test)
 endif()

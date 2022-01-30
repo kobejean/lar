@@ -7,8 +7,8 @@
 
 #include <opencv2/opencv.hpp>
 
-#include "geoar/core/utils/json.h"
-#include "geoar/tracking/tracker.h"
+#include "lar/core/utils/json.h"
+#include "lar/tracking/tracker.h"
 
 using namespace std;
 
@@ -26,7 +26,7 @@ int main(int argc, const char* argv[]){
 
   std::ifstream map_data_ifs(input + "/map.json");
   nlohmann::json map_data = nlohmann::json::parse(map_data_ifs);
-  geoar::Map map = map_data;
+  lar::Map map = map_data;
 
   cv::Mat image = cv::imread(input + "/00000001_image.jpeg", cv::IMREAD_GRAYSCALE);
   cv::Mat intrinsics(3, 3, CV_32FC1);
@@ -37,7 +37,7 @@ int main(int argc, const char* argv[]){
   intrinsics.at<float>(2,2) = 1.;
   cv::Mat transform;
 
-  geoar::Tracker tracker(map);
+  lar::Tracker tracker(map);
   tracker.localize(image, intrinsics, transform);
   std::cout << "transform:" << transform << std::endl;
 }

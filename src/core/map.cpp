@@ -1,6 +1,6 @@
-#include "geoar/core/map.h"
+#include "lar/core/map.h"
 
-namespace geoar {
+namespace lar {
 
   Map::Map() {
   }

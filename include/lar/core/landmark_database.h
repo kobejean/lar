@@ -1,9 +1,9 @@
-#ifndef GEOAR_CORE_LANDMARK_DATABASE_H
-#define GEOAR_CORE_LANDMARK_DATABASE_H
+#ifndef LAR_CORE_LANDMARK_DATABASE_H
+#define LAR_CORE_LANDMARK_DATABASE_H
 
-#include "geoar/core/landmark.h"
+#include "lar/core/landmark.h"
 
-namespace geoar {
+namespace lar {
 
   class LandmarkDatabase {
     public:
@@ -19,6 +19,7 @@ namespace geoar {
       void cull();
       cv::Mat getDescriptions();
   };
+  
 }
 
-#endif /* GEOAR_CORE_LANDMARK_DATABASE_H */
+#endif /* LAR_CORE_LANDMARK_DATABASE_H */

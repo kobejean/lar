@@ -1,7 +1,7 @@
 
-#include "geoar/tracking/vision.h"
+#include "lar/tracking/vision.h"
 
-namespace geoar {
+namespace lar {
 
   const float RATIO_TEST_THRESHOLD = 0.6f;
   const float MARGIN_TEST_DISTANCE = 25.f; // TODO: Think of clearer name

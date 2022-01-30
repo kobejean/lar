@@ -1,5 +1,5 @@
 
-namespace geoar {
+namespace lar {
 
   class RTree {
     public: 

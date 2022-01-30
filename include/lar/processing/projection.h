@@ -1,11 +1,11 @@
-#ifndef GEOAR_PROCESSING_PROJECTION_H
-#define GEOAR_PROCESSING_PROJECTION_H
+#ifndef LAR_PROCESSING_PROJECTION_H
+#define LAR_PROCESSING_PROJECTION_H
 
 #include <nlohmann/json.hpp>
 #include <Eigen/Core>
 #include <opencv2/core/types.hpp>
 
-namespace geoar {
+namespace lar {
 
   class Projection {
     public:
@@ -21,4 +21,4 @@ namespace geoar {
 
 }
 
-#endif /* GEOAR_PROCESSING_PROJECTION_H */
+#endif /* LAR_PROCESSING_PROJECTION_H */

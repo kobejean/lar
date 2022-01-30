@@ -1,9 +1,9 @@
 #include <gtest/gtest.h>
-#include "geoar/processing/projection.h"
+#include "lar/processing/projection.h"
 
 using namespace Eigen;
 using json = nlohmann::json;
-using namespace geoar;
+using namespace lar;
 
 TEST(ProjectionTest, ProjectToWorld1) {
   // Given

@@ -1,14 +1,14 @@
-#ifndef GEOAR_CORE_UTILS_JSON_H
-#define GEOAR_CORE_UTILS_JSON_H
+#ifndef LAR_CORE_UTILS_JSON_H
+#define LAR_CORE_UTILS_JSON_H
 
 #include <Eigen/Core>
 #include <opencv2/features2d.hpp>
 #include <nlohmann/json.hpp>
 
-#include "geoar/core/utils/base64.h"
-#include "geoar/core/map.h"
+#include "lar/core/utils/base64.h"
+#include "lar/core/map.h"
 
-namespace geoar {
+namespace lar {
 
   static void to_json(nlohmann::json& j, const Landmark& l) {
     std::string desc64 = base64_encode(l.desc);
@@ -52,4 +52,4 @@ namespace Eigen {
   
 }
 
-#endif /* GEOAR_CORE_UTILS_JSON_H */
+#endif /* LAR_CORE_UTILS_JSON_H */

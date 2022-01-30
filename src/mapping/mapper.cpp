@@ -5,12 +5,12 @@
 #include <opencv2/imgcodecs.hpp>
 #include <nlohmann/json.hpp>
 
-#include "geoar/core/utils/json.h"
-#include "geoar/mapping/mapper.h"
+#include "lar/core/utils/json.h"
+#include "lar/mapping/mapper.h"
 
 namespace fs = std::filesystem;
 
-namespace geoar {
+namespace lar {
 
   Mapper::Mapper(fs::path directory) {
     fs::create_directory(directory);

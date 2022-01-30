@@ -1,5 +1,5 @@
-#ifndef GEOAR_MAPPING_LOCATION_MATCHER_H
-#define GEOAR_MAPPING_LOCATION_MATCHER_H
+#ifndef LAR_MAPPING_LOCATION_MATCHER_H
+#define LAR_MAPPING_LOCATION_MATCHER_H
 
 #include <algorithm>
 #include <tuple>
@@ -7,9 +7,9 @@
 
 #include <Eigen/Core>
 
-#include "geoar/core/utils/json.h"
+#include "lar/core/utils/json.h"
 
-namespace geoar {
+namespace lar {
 
   struct GPSObservation {
     long long timestamp;
@@ -34,4 +34,4 @@ namespace geoar {
 
 }
 
-#endif /* GEOAR_MAPPING_LOCATION_MATCHER_H */
+#endif /* LAR_MAPPING_LOCATION_MATCHER_H */
