@@ -29,6 +29,7 @@ CMAKE_ARGS=(
     -DAPPLE_FRAMEWORK=ON
 )
 
+rm -r $FRAMEWORKS_DIR $XCFRAMEWORK_PATH
 mkdir -p $FRAMEWORKS_DIR
 mkdir -p $FRAMEWORK_BUILD_DIR
 
@@ -55,7 +56,7 @@ build_archive "generic/platform=iOS" "iphoneos" "iphoneos"
 build_archive "platform=iOS Simulator,name=iPhone 11" "iphonesimulator" "iphonesimulator"
 
 rm -r $FRAMEWORK_BUILD_DIR
-cmake -S. -B$FRAMEWORK_BUILD_DIR -GXcode -DCMAKE_SYSTEM_NAME=Darwin "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" ${CMAKE_ARGS[@]}
+cmake -S. -B$FRAMEWORK_BUILD_DIR -GXcode -DCMAKE_SYSTEM_NAME=Darwin -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" ${CMAKE_ARGS[@]}
 
 build_archive "platform=macOS" "macos" "macosx"
 

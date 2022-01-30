@@ -9,32 +9,39 @@ namespace lar {
     this->map = map;
   }
 
-  void Tracker::localize(cv::InputArray image, cv::Mat intrinsics, cv::Mat &transform) {
+  bool Tracker::localize(cv::InputArray image, cv::Mat intrinsics, cv::Mat &transform) {
     cv::Mat rvec, tvec;
     if (!transform.empty()) {
       fromTransform(transform, rvec, tvec);
     }
 
-    localize(image, intrinsics, cv::Mat(), rvec, tvec, !transform.empty());
-    toTransform(rvec, tvec, transform);
+    bool success = localize(image, intrinsics, cv::Mat(), rvec, tvec, !transform.empty());
+    if (success) {
+      toTransform(rvec, tvec, transform);
+    }
+    return success;
   }
 
-  void Tracker::localize(cv::InputArray image, cv::Mat intrinsics, cv::Mat dist_coeffs, cv::Mat &rvec, cv::Mat &tvec, bool use_extrinsic_guess) {
+  bool Tracker::localize(cv::InputArray image, cv::Mat intrinsics, cv::Mat dist_coeffs, cv::Mat &rvec, cv::Mat &tvec, bool use_extrinsic_guess) {
     // Extract Features
     std::vector<cv::KeyPoint> kpts;
     cv::Mat desc;
     vision.extractFeatures(image, cv::noArray(), kpts, desc);
     cv::Mat map_desc = map.landmarks.getDescriptions();
     std::vector<cv::DMatch> matches = vision.match(desc, map_desc);
+    std::cout << "matches.size()" << matches.size() << std::endl;
+    if (matches.size() <= 3) return false; 
+    
     cv::Mat object_points = objectPoints(matches);
     cv::Mat image_points = imagePoints(matches, kpts);
     cv::Mat inliers;
 
-    cv::solvePnPRansac(object_points, image_points, intrinsics, dist_coeffs, rvec, tvec,
+    bool success = cv::solvePnPRansac(object_points, image_points, intrinsics, dist_coeffs, rvec, tvec,
       use_extrinsic_guess, 100, 8.0, 0.99, inliers, cv::SolvePnPMethod::SOLVEPNP_ITERATIVE);
     std::cout << "kpts.size()" << kpts.size() << std::endl;
     std::cout << "matches.size()" << matches.size() << std::endl;
     std::cout << "inliers.size()" << inliers.size() << std::endl;
+    return success;
   }
 
   // Private Methods
