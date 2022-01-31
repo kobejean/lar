@@ -14,8 +14,8 @@ namespace lar {
       Map map;
 
       Tracker(Map map);
-      void localize(cv::InputArray image, cv::Mat intrinsics, cv::Mat &transform);
-      void localize(cv::InputArray image, cv::Mat intrinsics, cv::Mat dist_coeffs, cv::Mat &rvec, cv::Mat &tvec, bool use_extrinsic_guess);
+      bool localize(cv::InputArray image, cv::Mat intrinsics, cv::Mat &transform);
+      bool localize(cv::InputArray image, cv::Mat intrinsics, cv::Mat dist_coeffs, cv::Mat &rvec, cv::Mat &tvec, bool use_extrinsic_guess);
 
     private:
       cv::Mat objectPoints(std::vector<cv::DMatch> matches);
