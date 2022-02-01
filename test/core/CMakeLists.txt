@@ -1,5 +1,7 @@
 set(LAR_CORE_TEST_SRCS
   "${CMAKE_CURRENT_SOURCE_DIR}/utils/json_test.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/utils/wgs84_test.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/map_test.cpp"
 )
 set(LAR_CORE_TEST_SRCS ${LAR_CORE_TEST_SRCS} PARENT_SCOPE)
 

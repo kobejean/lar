@@ -14,6 +14,7 @@ namespace lar {
 
       Eigen::Matrix3d crossCovariance(const Eigen::Vector3d rc, const Eigen::Vector3d gc, const Eigen::DiagonalMatrix<double,3> D);
       void centroids(Eigen::Vector3d& rc, Eigen::Vector3d& gc);
+      static inline double weight(Eigen::Vector3d accuracy);
   };
 
 }

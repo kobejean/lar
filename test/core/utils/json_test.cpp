@@ -7,7 +7,7 @@ using json = nlohmann::json;
 using namespace lar;
 
 
-TEST(JsonTest, MapSerialization) {
+TEST(JSONTest, MapSerialization) {
   // Given
   std::string json_string = "{\"landmarks\":[{\"desc\":\"IL5sAIARAME/AICBxTH+xx0BACAABnAEAAAAPIYASPcfAPj/QhACAP47XAcANwAAAMjxGOP//8dDYHj/AA==\",\"id\":19,\"position\":[28.978420115684386,9.0347303998687,-17.00002901344248]}]}";
   lar::Map map = json::parse(json_string);
@@ -17,7 +17,7 @@ TEST(JsonTest, MapSerialization) {
   EXPECT_EQ(map_json.dump(), json_string);
 }
 
-TEST(JsonTest, MapDeserialization) {
+TEST(JSONTest, MapDeserialization) {
   // Given
   json map_json = json::parse("{\"landmarks\":[{\"desc\":\"IL5sAIARAME/AICBxTH+xx0BACAABnAEAAAAPIYASPcfAPj/QhACAP47XAcANwAAAMjxGOP//8dDYHj/AA==\",\"id\":19,\"position\":[28.978420115684386,9.0347303998687,-17.00002901344248]}]}");
   // When
@@ -39,7 +39,7 @@ TEST(JsonTest, MapDeserialization) {
   EXPECT_NEAR(map.landmarks[0].position.z(), -17.00002901344248, 1e-10);
 }
 
-TEST(JsonTest, MatrixSerialization) {
+TEST(JSONTest, MatrixSerialization) {
   // Given
   Eigen::Matrix3d mat;
   mat << 0.1,0.4,0.7,
@@ -51,7 +51,7 @@ TEST(JsonTest, MatrixSerialization) {
   EXPECT_EQ(mat_json.dump(), "[0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9]");
 }
 
-TEST(JsonTest, MatrixDeserialization) {
+TEST(JSONTest, MatrixDeserialization) {
   // Given
   json mat_json = json::parse("[0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9]");
   // When
