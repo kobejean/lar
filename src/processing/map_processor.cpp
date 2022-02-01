@@ -2,6 +2,7 @@
 
 #include "lar/processing/bundle_adjustment.h"
 #include "lar/processing/frame_processor.h"
+#include "lar/processing/global_alignment.h"
 #include "lar/processing/map_processor.h"
 #include "lar/core/utils/json.h"
 
@@ -12,8 +13,12 @@ namespace lar {
   }
 
   void MapProcessor::process() {
-    // data->map.landmarks.all.clear();
+    // Update GPS alignment
+    GlobalAlignment global_alignment(*data);
+    global_alignment.updateAlignment();
+    std::cout << data->map.origin.matrix() << std::endl;
 
+    // Process frames
     FrameProcessor frame_processor(*data);
     for (Frame& frame : data->frames) {
       frame_processor.process(frame);
@@ -23,12 +28,14 @@ namespace lar {
     BundleAdjustment bundle_adjustment(*data);
     bundle_adjustment.construct();
     bundle_adjustment.optimize();
-
-    // data->map.landmarks.cull();
   }
 
   void MapProcessor::createMap(std::string out_dir) {
     std::filesystem::create_directory(out_dir);
+
+    // Update GPS alignment
+    GlobalAlignment global_alignment(*data);
+    global_alignment.updateAlignment();
     
     // Process frames
     FrameProcessor frame_processor(*data);

@@ -29,12 +29,12 @@ namespace lar {
 
   void Mapper::addPosition(Eigen::Vector3d position, long long timestamp) {
     location_matcher.recordPosition(timestamp, position);
-    data.gps_observations = location_matcher.matches;
+    data.gps_obs = location_matcher.matches;
   }
 
   void Mapper::addLocation(Eigen::Vector3d location, Eigen::Vector3d accuracy, long long timestamp) {
     location_matcher.recordLocation(timestamp, location, accuracy);
-    data.gps_observations = location_matcher.matches;
+    data.gps_obs = location_matcher.matches;
   }
 
   void Mapper::writeMetadata() {
@@ -44,8 +44,8 @@ namespace lar {
     file << json << std::endl;
     }
     {
-    std::ofstream file(data.directory / "gps_observations.json");
-    nlohmann::json json = data.gps_observations;
+    std::ofstream file(data.directory / "gps.json");
+    nlohmann::json json = data.gps_obs;
     file << json << std::endl;
     }
   }
@@ -56,8 +56,8 @@ namespace lar {
     data.frames = nlohmann::json::parse(ifs);
     }
     {
-    std::ifstream ifs(data.directory / "gps_observations.json");
-    data.gps_observations = nlohmann::json::parse(ifs);
+    std::ifstream ifs(data.directory / "gps.json");
+    data.gps_obs = nlohmann::json::parse(ifs);
     }
   }
 

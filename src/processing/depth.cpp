@@ -20,6 +20,11 @@ namespace lar {
     return interpolate(_confidence, kpts, cv::INTER_NEAREST);
   }
 
+  std::vector<Eigen::Vector3d> Depth::surfaceNormalAt(std::vector<cv::KeyPoint> const &kpts) {
+    // TODO: Implement surface normal calculations
+    return std::vector<Eigen::Vector3d>();
+  }
+
 
   // Depth - Private Methods
   

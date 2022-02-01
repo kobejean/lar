@@ -1,6 +1,7 @@
 #ifndef LAR_PROCESSING_DEPTH_H
 #define LAR_PROCESSING_DEPTH_H
 
+#include <Eigen/Core>
 #include <opencv2/core/types.hpp>
 
 namespace lar {
@@ -11,6 +12,7 @@ namespace lar {
 
       std::vector<float> depthAt(std::vector<cv::KeyPoint> const &kpts);
       std::vector<float> confidenceAt(std::vector<cv::KeyPoint> const &kpts);
+      std::vector<Eigen::Vector3d> surfaceNormalAt(std::vector<cv::KeyPoint> const &kpts);
 
     protected:
       cv::Size _img_size;

@@ -46,7 +46,7 @@ namespace lar {
     for (size_t i = 0; i < data->frames.size(); i++) {
       // Add camera pose vertex
       Frame const& frame = data->frames[i];
-      addPose(frame.extrinsics, frame_id, i+1 == data->frames.size());
+      addPose(frame.extrinsics, frame_id, i == 0);
 
       // Add odometry measurement edge if not first frame
       if (frame_id > landmark_count) {

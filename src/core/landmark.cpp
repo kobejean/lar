@@ -26,7 +26,7 @@ namespace lar {
   }
 
   bool Landmark::isUseable() const {
-    return sightings >= 2;
+    return sightings >= 3;
   }
 
   // Static Methods
