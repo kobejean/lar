@@ -2,6 +2,7 @@ set(HEADER_LIST
   "${PROJECT_SOURCE_DIR}/include/lar/processing/bundle_adjustment.h"
   "${PROJECT_SOURCE_DIR}/include/lar/processing/depth.h"
   "${PROJECT_SOURCE_DIR}/include/lar/processing/frame_processor.h"
+  "${PROJECT_SOURCE_DIR}/include/lar/processing/global_alignment.h"
   "${PROJECT_SOURCE_DIR}/include/lar/processing/map_processor.h"
   "${PROJECT_SOURCE_DIR}/include/lar/processing/projection.h"
 )
@@ -10,6 +11,7 @@ add_library(lar_processing
   bundle_adjustment.cpp
   depth.cpp
   frame_processor.cpp
+  global_alignment.cpp
   map_processor.cpp
   projection.cpp
   ${HEADER_LIST}

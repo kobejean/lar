@@ -1,6 +1,7 @@
 set(HEADER_LIST
   "${PROJECT_SOURCE_DIR}/include/lar/core/utils/base64.h"
   "${PROJECT_SOURCE_DIR}/include/lar/core/utils/json.h"
+  "${PROJECT_SOURCE_DIR}/include/lar/core/utils/wgs84.h"
   "${PROJECT_SOURCE_DIR}/include/lar/core/landmark.h"
   "${PROJECT_SOURCE_DIR}/include/lar/core/landmark_database.h"
   "${PROJECT_SOURCE_DIR}/include/lar/core/map.h"

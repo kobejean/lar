@@ -36,7 +36,7 @@ TEST(MapperTest, WriteMetadata) {
     .global=global,
     .accuracy=accuracy
   };
-  mapper.data.gps_observations.push_back(observation);
+  mapper.data.gps_obs.push_back(observation);
   mapper.addFrame(frame, image, depth, confidence);
   // When
   mapper.writeMetadata();
@@ -70,18 +70,18 @@ TEST(MapperTest, WriteMetadata) {
   EXPECT_NEAR(frames[0].extrinsics(3,2), 1.5, 1e-10);
   EXPECT_NEAR(frames[0].extrinsics(3,3), 1.6, 1e-10);
 
-  std::ifstream gps_observations_ifs("./test/_fixture/output/gps_observations.json");
-  std::vector<GPSObservation> gps_observations = nlohmann::json::parse(gps_observations_ifs);
-  EXPECT_EQ(gps_observations[0].timestamp, 987654321987654321);
-  EXPECT_NEAR(gps_observations[0].relative.x(), 0.1, 1e-10);
-  EXPECT_NEAR(gps_observations[0].relative.y(), 0.2, 1e-10);
-  EXPECT_NEAR(gps_observations[0].relative.z(), 0.3, 1e-10);
-  EXPECT_NEAR(gps_observations[0].global.x(), 100.0, 1e-10);
-  EXPECT_NEAR(gps_observations[0].global.y(), -50.0, 1e-10);
-  EXPECT_NEAR(gps_observations[0].global.z(), 500.0, 1e-10);
-  EXPECT_NEAR(gps_observations[0].accuracy.x(), 10.0, 1e-10);
-  EXPECT_NEAR(gps_observations[0].accuracy.y(), 10.0, 1e-10);
-  EXPECT_NEAR(gps_observations[0].accuracy.z(), 30.0, 1e-10);
+  std::ifstream gps_ifs("./test/_fixture/output/gps.json");
+  std::vector<GPSObservation> gps_obs = nlohmann::json::parse(gps_ifs);
+  EXPECT_EQ(gps_obs[0].timestamp, 987654321987654321);
+  EXPECT_NEAR(gps_obs[0].relative.x(), 0.1, 1e-10);
+  EXPECT_NEAR(gps_obs[0].relative.y(), 0.2, 1e-10);
+  EXPECT_NEAR(gps_obs[0].relative.z(), 0.3, 1e-10);
+  EXPECT_NEAR(gps_obs[0].global.x(), 100.0, 1e-10);
+  EXPECT_NEAR(gps_obs[0].global.y(), -50.0, 1e-10);
+  EXPECT_NEAR(gps_obs[0].global.z(), 500.0, 1e-10);
+  EXPECT_NEAR(gps_obs[0].accuracy.x(), 10.0, 1e-10);
+  EXPECT_NEAR(gps_obs[0].accuracy.y(), 10.0, 1e-10);
+  EXPECT_NEAR(gps_obs[0].accuracy.z(), 30.0, 1e-10);
 }
 
 TEST(MapperTest, ReadMetadata) {
