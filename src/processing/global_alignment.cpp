@@ -28,8 +28,6 @@ namespace lar {
     data->map.origin = T;
   }
 
-  inline double weight(Eigen::Vector3d accuracy);
-
   Eigen::Matrix3d GlobalAlignment::crossCovariance(const Eigen::Vector3d rc, const Eigen::Vector3d gc, const Eigen::DiagonalMatrix<double,3> D) {
     assert(data->gps_obs.size() >= 2);
     int n = static_cast<int>(data->gps_obs.size());
@@ -71,7 +69,7 @@ namespace lar {
     gc /= w_sum;
   }
 
-  inline double weight(Eigen::Vector3d accuracy) {
+  inline double GlobalAlignment::weight(Eigen::Vector3d accuracy) {
     double ha = accuracy.x();
     if (ha <= 0) return 1e-4;
     // inverse variance weighting
