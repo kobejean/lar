@@ -12,7 +12,7 @@ namespace lar {
     return all[id];
   }
 
-  void LandmarkDatabase::insert(std::vector<Landmark> &landmarks) {
+  void LandmarkDatabase::insert(const std::vector<Landmark>& landmarks) {
     all.reserve(all.size() + std::distance(landmarks.begin(), landmarks.end()));
     all.insert(all.end(), landmarks.begin(), landmarks.end());
   }
@@ -32,7 +32,7 @@ namespace lar {
     all = landmarks;
   }
 
-  cv::Mat LandmarkDatabase::getDescriptions() {
+  cv::Mat LandmarkDatabase::getDescriptions() const {
     cv::Mat desc;
     Landmark::concatDescriptions(all, desc);
     return desc;

@@ -7,7 +7,7 @@ namespace lar {
 
   class GlobalAlignment {
     public:
-      Mapper::Data* data;
+      Mapper::Data& data;
 
       GlobalAlignment(Mapper::Data &data);
       void updateAlignment();

@@ -11,7 +11,7 @@ namespace lar {
     matcher = cv::BFMatcher(cv::NORM_HAMMING);
   }
 
-  void Vision::extractFeatures(cv::InputArray image, cv::InputArray mask, std::vector<cv::KeyPoint> &kpts, cv::Mat &desc) {
+  void Vision::extractFeatures(cv::InputArray image, cv::InputArray mask, std::vector<cv::KeyPoint>& kpts, cv::Mat& desc) {
     std::vector<cv::KeyPoint> new_kpts;
     cv::Mat new_desc;
 
@@ -31,7 +31,7 @@ namespace lar {
     }
   }
 
-  std::vector<cv::DMatch> Vision::match(cv::Mat &desc1, cv::Mat &desc2) {
+  std::vector<cv::DMatch> Vision::match(const cv::Mat& desc1, const cv::Mat& desc2) {
     std::vector<cv::DMatch> filtered_matches;
     // We need at least 2 rows to perform ratio test
     if (desc1.rows <= 2 || desc2.rows <= 2) return filtered_matches;

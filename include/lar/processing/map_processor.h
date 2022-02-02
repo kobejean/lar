@@ -10,7 +10,7 @@ namespace lar {
 
   class MapProcessor {
     public:
-      Mapper::Data* data;
+      Mapper::Data& data;
       
       MapProcessor(Mapper::Data& data);
       void process();

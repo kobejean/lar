@@ -10,9 +10,9 @@ namespace lar {
     public:
       Depth(cv::Size img_size);
 
-      std::vector<float> depthAt(std::vector<cv::KeyPoint> const &kpts);
-      std::vector<float> confidenceAt(std::vector<cv::KeyPoint> const &kpts);
-      std::vector<Eigen::Vector3d> surfaceNormalAt(std::vector<cv::KeyPoint> const &kpts);
+      std::vector<float> depthAt(const std::vector<cv::KeyPoint> &kpts);
+      std::vector<float> confidenceAt(const std::vector<cv::KeyPoint> &kpts);
+      std::vector<Eigen::Vector3d> surfaceNormalAt(const std::vector<cv::KeyPoint> &kpts);
 
     protected:
       cv::Size _img_size;
@@ -20,7 +20,7 @@ namespace lar {
       cv::Mat _confidence;
 
     private:
-      std::vector<float> interpolate(cv::Mat image, std::vector<cv::KeyPoint> const &kpts, cv::InterpolationFlags interpolation);
+      std::vector<float> interpolate(const cv::Mat& image, const std::vector<cv::KeyPoint> &kpts, cv::InterpolationFlags interpolation);
   };
 
 

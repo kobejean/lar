@@ -20,11 +20,11 @@ namespace lar {
       double index_radius;
 
       Landmark();
-      Landmark(Eigen::Vector3d &position, cv::Mat desc, size_t id);
-      void recordSighting(Eigen::Vector3d &cam_position, long long timestamp) ;
+      Landmark(const Eigen::Vector3d& position, const cv::Mat& desc, size_t id);
+      void recordSighting(const Eigen::Vector3d& cam_position, long long timestamp);
       bool isUseable() const;
 
-      static void concatDescriptions(std::vector<Landmark> landmarks, cv::Mat &desc);
+      static void concatDescriptions(const std::vector<Landmark>& landmarks, cv::Mat &desc);
   };
 }
 

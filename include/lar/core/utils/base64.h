@@ -98,7 +98,7 @@ namespace lar {
       return ret;
     }
 
-    static std::string base64_encode(cv::Mat mat) {
+    static std::string base64_encode(const cv::Mat& mat) {
       std::vector<uchar> contiguous = mat.isContinuous()? mat : mat.clone();
       return base64_encode(&contiguous[0], static_cast<int>(contiguous.size()));
     }
