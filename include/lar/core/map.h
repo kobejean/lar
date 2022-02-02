@@ -12,8 +12,8 @@ namespace lar {
       Eigen::Transform<double,3,Eigen::Affine> origin;
 
       Map();
-      Eigen::Vector3d globalPointFrom(Eigen::Vector3d relative);
-      Eigen::Vector3d relativePointFrom(Eigen::Vector3d global);
+      Eigen::Vector3d globalPointFrom(const Eigen::Vector3d& relative);
+      Eigen::Vector3d relativePointFrom(const Eigen::Vector3d& global);
   };
   
 }

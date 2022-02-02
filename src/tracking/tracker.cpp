@@ -9,7 +9,7 @@ namespace lar {
     this->map = map;
   }
 
-  bool Tracker::localize(cv::InputArray image, cv::Mat intrinsics, cv::Mat &transform) {
+  bool Tracker::localize(cv::InputArray image, const cv::Mat& intrinsics, cv::Mat &transform) {
     cv::Mat rvec, tvec;
     if (!transform.empty()) {
       fromTransform(transform, rvec, tvec);
@@ -22,7 +22,7 @@ namespace lar {
     return success;
   }
 
-  bool Tracker::localize(cv::InputArray image, cv::Mat intrinsics, cv::Mat dist_coeffs, cv::Mat &rvec, cv::Mat &tvec, bool use_extrinsic_guess) {
+  bool Tracker::localize(cv::InputArray image, const cv::Mat& intrinsics, const cv::Mat& dist_coeffs, cv::Mat &rvec, cv::Mat &tvec, bool use_extrinsic_guess) {
     // Extract Features
     std::vector<cv::KeyPoint> kpts;
     cv::Mat desc;
@@ -46,7 +46,7 @@ namespace lar {
 
   // Private Methods
 
-  cv::Mat Tracker::objectPoints(std::vector<cv::DMatch> matches) {
+  cv::Mat Tracker::objectPoints(const std::vector<cv::DMatch>& matches) {
     cv::Mat object_points(matches.size(), 3, CV_32FC1);
     for (size_t i = 0; i < matches.size(); i++) {
       cv::DMatch match = matches[i];
@@ -58,7 +58,7 @@ namespace lar {
     return object_points;
   }
 
-  cv::Mat Tracker::imagePoints(std::vector<cv::DMatch> matches, std::vector<cv::KeyPoint> kpts) {
+  cv::Mat Tracker::imagePoints(const std::vector<cv::DMatch>& matches, const std::vector<cv::KeyPoint>& kpts) {
     cv::Mat image_points(matches.size(), 2, CV_32FC1);
     for (size_t i = 0; i < matches.size(); i++) {
       cv::DMatch match = matches[i];

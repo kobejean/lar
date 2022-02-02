@@ -11,15 +11,14 @@
 
 namespace lar {
 
-  FrameProcessor::FrameProcessor(Mapper::Data& data) {
-    this->data = &data;
+  FrameProcessor::FrameProcessor(Mapper::Data& data) : data(data) {
   }
 
   void FrameProcessor::process(Frame& frame) {
     if (!frame.depth.empty()) return;
 
     // Create filename paths
-    std::string path_prefix = data->getPathPrefix(frame.id).string();
+    std::string path_prefix = data.getPathPrefix(frame.id).string();
     std::string img_filepath = path_prefix + "image.jpeg";
 
     // Load image
@@ -53,7 +52,7 @@ namespace lar {
     std::vector<size_t> landmark_ids;
     landmark_ids.reserve(landmark_count);
     
-    size_t new_landmark_id = data->map.landmarks.size();
+    size_t new_landmark_id = data.map.landmarks.size();
     for (size_t i = 0; i < landmark_count; i++) {
       if (matches.find(i) == matches.end()) {
         // No match so create landmark
@@ -69,17 +68,17 @@ namespace lar {
         // We have a match so just push the match index
         landmark_ids.push_back(matches[i]);
         Eigen::Vector3d cam_position = (frame.extrinsics.block<3,1>(0,3));
-        data->map.landmarks[matches[i]].recordSighting(cam_position, frame.timestamp);
+        data.map.landmarks[matches[i]].recordSighting(cam_position, frame.timestamp);
       }
     }
 
-    data->map.landmarks.insert(new_landmarks);
+    data.map.landmarks.insert(new_landmarks);
     return landmark_ids;
   }
 
   std::map<size_t, size_t> FrameProcessor::getMatches(cv::Mat &desc) {
     // Get matches
-    std::vector<cv::DMatch> matches = vision.match(desc, data->desc);
+    std::vector<cv::DMatch> matches = vision.match(desc, data.desc);
     std::cout << "matches: " << matches.size() << std::endl;
 
     // Populate `idx_matched` map
@@ -97,11 +96,11 @@ namespace lar {
       }
     }
 
-    // Add new descriptions to `data->desc`
-    if (data->desc.rows > 0) {
-      cv::vconcat(data->desc, unmatched_desc, data->desc);
+    // Add new descriptions to `data.desc`
+    if (data.desc.rows > 0) {
+      cv::vconcat(data.desc, unmatched_desc, data.desc);
     } else {
-      data->desc = unmatched_desc;
+      data.desc = unmatched_desc;
     }
 
     return idx_matched;

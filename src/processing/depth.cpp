@@ -8,19 +8,18 @@
 
 namespace lar {
 
-  Depth::Depth(cv::Size img_size) {
-    _img_size = img_size;
+  Depth::Depth(cv::Size img_size): _img_size(img_size) {
   }
   
-  std::vector<float> Depth::depthAt(std::vector<cv::KeyPoint> const &kpts) {
+  std::vector<float> Depth::depthAt(const std::vector<cv::KeyPoint>& kpts) {
     return interpolate(_depth, kpts, cv::INTER_LINEAR);
   }
   
-  std::vector<float> Depth::confidenceAt(std::vector<cv::KeyPoint> const &kpts) {
+  std::vector<float> Depth::confidenceAt(const std::vector<cv::KeyPoint>& kpts) {
     return interpolate(_confidence, kpts, cv::INTER_NEAREST);
   }
 
-  std::vector<Eigen::Vector3d> Depth::surfaceNormalAt(std::vector<cv::KeyPoint> const &kpts) {
+  std::vector<Eigen::Vector3d> Depth::surfaceNormalAt(const std::vector<cv::KeyPoint>& kpts) {
     // TODO: Implement surface normal calculations
     return std::vector<Eigen::Vector3d>();
   }
@@ -28,7 +27,7 @@ namespace lar {
 
   // Depth - Private Methods
   
-  std::vector<float> Depth::interpolate(cv::Mat image, std::vector<cv::KeyPoint> const &kpts, cv::InterpolationFlags interpolation) {
+  std::vector<float> Depth::interpolate(const cv::Mat& image, const std::vector<cv::KeyPoint>& kpts, cv::InterpolationFlags interpolation) {
     assert(image.channels() == 1);
     size_t keypoint_count = kpts.size();
 

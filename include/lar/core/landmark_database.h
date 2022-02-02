@@ -14,10 +14,10 @@ namespace lar {
       Landmark& operator[](size_t id);
       const Landmark& operator[](size_t id) const;
 
-      void insert(std::vector<Landmark> &landmarks);
+      void insert(const std::vector<Landmark>& landmarks);
       size_t size() const;
       void cull();
-      cv::Mat getDescriptions();
+      cv::Mat getDescriptions() const;
   };
   
 }

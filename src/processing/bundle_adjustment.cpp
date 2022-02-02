@@ -23,8 +23,7 @@ namespace g2o {
 
 namespace lar {
 
-  BundleAdjustment::BundleAdjustment(Mapper::Data& data) {
-    this->data = &data;
+  BundleAdjustment::BundleAdjustment(Mapper::Data& data) : data(data) {
     optimizer.setVerbose(true);
     std::string solver_name = "lm_fix6_3";
     g2o::OptimizationAlgorithmProperty solver_property;
@@ -35,17 +34,17 @@ namespace lar {
   void BundleAdjustment::construct() {
 
     // Add landmarks to graph
-    size_t landmark_count = data->map.landmarks.size();
+    size_t landmark_count = data.map.landmarks.size();
     for (size_t i = 0; i < landmark_count; i++) {
-      Landmark &landmark = data->map.landmarks[i];
+      Landmark &landmark = data.map.landmarks[i];
       _stats.total_usable_landmarks += addLandmark(landmark, i);
     }
 
     // Use frame data to add poses and measurements
     size_t frame_id = landmark_count;
-    for (size_t i = 0; i < data->frames.size(); i++) {
+    for (size_t i = 0; i < data.frames.size(); i++) {
       // Add camera pose vertex
-      Frame const& frame = data->frames[i];
+      Frame const& frame = data.frames[i];
       addPose(frame.extrinsics, frame_id, i == 0);
 
       // Add odometry measurement edge if not first frame
@@ -70,7 +69,7 @@ namespace lar {
     optimizer.setVerbose(true);
     optimizer.optimize(50);
 
-    size_t landmark_count = data->map.landmarks.size();
+    size_t landmark_count = data.map.landmarks.size();
     for (size_t i = 0; i < landmark_count; i++) {
       updateLandmark(i);
     }
@@ -132,7 +131,7 @@ namespace lar {
 
     for (size_t j = 0; j < frame.landmark_ids.size(); j++) {
       size_t landmark_id = frame.landmark_ids[j];
-      Landmark &landmark = data->map.landmarks[landmark_id];
+      Landmark &landmark = data.map.landmarks[landmark_id];
       cv::KeyPoint keypoint = frame.kpts[j];
       Eigen::Vector3d kp(keypoint.pt.x, keypoint.pt.y, frame.depth[j]);
       
@@ -158,7 +157,7 @@ namespace lar {
   }
 
   void BundleAdjustment::updateLandmark(size_t landmark_id) {
-      Landmark &landmark = data->map.landmarks[landmark_id];
+      Landmark &landmark = data.map.landmarks[landmark_id];
       if (landmark.isUseable()) {
         g2o::VertexPointXYZ* v = dynamic_cast<g2o::VertexPointXYZ*>(optimizer.vertex(landmark_id));
         landmark.position = v->estimate();

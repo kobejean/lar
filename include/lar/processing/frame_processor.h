@@ -13,15 +13,15 @@ namespace lar {
 
   class FrameProcessor {
     public:
-      Mapper::Data* data;
+      Mapper::Data& data;
       Vision vision;
 
-      FrameProcessor(Mapper::Data &data);
+      FrameProcessor(Mapper::Data& data);
       void process(Frame& frame);
 
     private:
-      std::vector<size_t> getLandmarks(Frame &frame, cv::Mat &desc);
-      std::map<size_t, size_t> getMatches(cv::Mat &desc);
+      std::vector<size_t> getLandmarks(Frame& frame, cv::Mat& desc);
+      std::map<size_t, size_t> getMatches(cv::Mat& desc);
       std::string getPathPrefix(int id, std::string directory);
   };
 

@@ -14,9 +14,9 @@ namespace lar {
   class BundleAdjustment {
     public:
       g2o::SparseOptimizer optimizer;
-      Mapper::Data* data;
+      Mapper::Data& data;
 
-      BundleAdjustment(Mapper::Data &data);
+      BundleAdjustment(Mapper::Data& data);
       void construct();
       void optimize();
 
@@ -30,11 +30,11 @@ namespace lar {
       };
       Stats _stats;
       
-      bool addLandmark(Landmark const &landmark, size_t id);
-      void addPose(Eigen::Matrix4d const &extrinsics, size_t id, bool fixed);
+      bool addLandmark(const Landmark& landmark, size_t id);
+      void addPose(const Eigen::Matrix4d& extrinsics, size_t id, bool fixed);
       void addOdometry(size_t last_frame_id);
-      void addIntrinsics(Eigen::Matrix3d const &intrinsics, size_t id);
-      void addLandmarkMeasurements(Frame const &frame, size_t frame_id, size_t params_id);
+      void addIntrinsics(const Eigen::Matrix3d& intrinsics, size_t id);
+      void addLandmarkMeasurements(const Frame& frame, size_t frame_id, size_t params_id);
 
       void updateLandmark(size_t landmark_id);
   };

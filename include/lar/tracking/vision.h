@@ -13,7 +13,7 @@ namespace lar {
       Vision();
 
       void extractFeatures(cv::InputArray image, cv::InputArray mask, std::vector<cv::KeyPoint> &kpts, cv::Mat &desc);
-      std::vector<cv::DMatch> match(cv::Mat &desc1, cv::Mat &desc2);
+      std::vector<cv::DMatch> match(const cv::Mat &desc1, const cv::Mat &desc2);
   };
 
 }

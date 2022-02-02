@@ -3,16 +3,13 @@
 namespace lar {
 
   Landmark::Landmark() {
-    
   }
 
-  Landmark::Landmark(Eigen::Vector3d &position, cv::Mat desc, size_t id) {
-    this->id = id;
-    this->position = position;
-    this->desc = desc;
+  Landmark::Landmark(const Eigen::Vector3d& position, const cv::Mat& desc, size_t id) :
+    position(position), desc(desc), id(id) {
   }
 
-  void Landmark::recordSighting(Eigen::Vector3d &cam_position, long long timestamp) {
+  void Landmark::recordSighting(const Eigen::Vector3d &cam_position, long long timestamp) {
     // TODO: find a good way to estimate the region where the landmark can be seen for good indexing
     if (sightings == 0) {
       Eigen::Vector2d position2(position.x(), position.z());
@@ -31,7 +28,7 @@ namespace lar {
 
   // Static Methods
 
-  void Landmark::concatDescriptions(std::vector<Landmark> landmarks, cv::Mat &desc) {
+  void Landmark::concatDescriptions(const std::vector<Landmark>& landmarks, cv::Mat &desc) {
     for (size_t i = 0; i < landmarks.size(); i++) {
       desc.push_back(landmarks[i].desc);
     }

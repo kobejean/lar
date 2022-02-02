@@ -8,24 +8,23 @@
 
 namespace lar {
 
-  MapProcessor::MapProcessor(Mapper::Data& data) {
-    this->data = &data;
+  MapProcessor::MapProcessor(Mapper::Data& data) : data(data) {
   }
 
   void MapProcessor::process() {
     // Update GPS alignment
-    GlobalAlignment global_alignment(*data);
+    GlobalAlignment global_alignment(data);
     global_alignment.updateAlignment();
-    std::cout << data->map.origin.matrix() << std::endl;
+    std::cout << data.map.origin.matrix() << std::endl;
 
     // Process frames
-    FrameProcessor frame_processor(*data);
-    for (Frame& frame : data->frames) {
+    FrameProcessor frame_processor(data);
+    for (Frame& frame : data.frames) {
       frame_processor.process(frame);
     }
 
     // Optimize
-    BundleAdjustment bundle_adjustment(*data);
+    BundleAdjustment bundle_adjustment(data);
     bundle_adjustment.construct();
     bundle_adjustment.optimize();
   }
@@ -34,17 +33,17 @@ namespace lar {
     std::filesystem::create_directory(out_dir);
 
     // Update GPS alignment
-    GlobalAlignment global_alignment(*data);
+    GlobalAlignment global_alignment(data);
     global_alignment.updateAlignment();
     
     // Process frames
-    FrameProcessor frame_processor(*data);
-    for (Frame& frame : data->frames) {
+    FrameProcessor frame_processor(data);
+    for (Frame& frame : data.frames) {
       frame_processor.process(frame);
     }
 
     // Optimize
-    BundleAdjustment bundle_adjustment(*data);
+    BundleAdjustment bundle_adjustment(data);
     bundle_adjustment.construct();
 
     std::string output = out_dir + "/map.g2o";
@@ -54,10 +53,10 @@ namespace lar {
     std::cout << "Saved g2o file to: " << output << std::endl;
 
     bundle_adjustment.optimize();
-    data->map.landmarks.cull();
+    data.map.landmarks.cull();
 
     // Serialize
-    nlohmann::json map_json = data->map;
+    nlohmann::json map_json = data.map;
     // Save
     std::ofstream file(out_dir + "/map.json");
     file << std::setw(2) << map_json << std::endl;

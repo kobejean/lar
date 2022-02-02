@@ -34,11 +34,11 @@ namespace lar {
   namespace wgs84 {
 
     /**
-    * @param WGS84Reference WGS84 position to be used as reference.
-    * @param WGS84Position WGS84 position to be transformed.
-    * @return Eigen::Vector2d Cartesian position after transforming WGS84Position using the given WGS84Reference using Mercator projection.
+    * @param wgs84_reference WGS84 position to be used as reference.
+    * @param wgs84_position WGS84 position to be transformed.
+    * @return Eigen::Vector2d Cartesian position after transforming wgs84_position using the given wgs84_reference using Mercator projection.
     */
-    static inline Eigen::Vector2d to_cartesian(const Eigen::Vector2d &WGS84Reference, const Eigen::Vector2d &WGS84Position) {
+    static inline Eigen::Vector2d to_cartesian(const Eigen::Vector2d &wgs84_reference, const Eigen::Vector2d &wgs84_position) {
     #ifndef M_PI
         constexpr double M_PI = 3.141592653589793;
     #endif
@@ -81,7 +81,7 @@ namespace lar {
             return (R0 * lat - cos_phi * (R1 + squared_sin_phi * (R2 + squared_sin_phi * (R3 + squared_sin_phi * R4))));
         };
 
-        const double ML0{mlfn(WGS84Reference.x() * DEG_TO_RAD)};
+        const double ML0{mlfn(wgs84_reference.x() * DEG_TO_RAD)};
 
         auto msfn = [&](const double &sinPhi, const double &cosPhi, const double &es) { return (cosPhi / std::sqrt(1.0 - es * sinPhi * sinPhi)); };
 
@@ -103,55 +103,55 @@ namespace lar {
             if (std::abs(D) < EPSILON12) {
                 lat = (lat < 0.0) ? -1.0 * HALF_PI : HALF_PI;
             }
-            lon -= WGS84Reference.y() * DEG_TO_RAD;
-            const auto projectedRetVal{project(lat, lon)};
-            return Eigen::Vector2d{EQUATOR_RADIUS * projectedRetVal.x(), EQUATOR_RADIUS * projectedRetVal.y()};
+            lon -= wgs84_reference.y() * DEG_TO_RAD;
+            const auto projected_ret_val{project(lat, lon)};
+            return Eigen::Vector2d{EQUATOR_RADIUS * projected_ret_val.x(), EQUATOR_RADIUS * projected_ret_val.y()};
         };
 
-        return fwd(WGS84Position.x() * DEG_TO_RAD, WGS84Position.y() * DEG_TO_RAD);
+        return fwd(wgs84_position.x() * DEG_TO_RAD, wgs84_position.y() * DEG_TO_RAD);
     }
 
     /**
-    * @param WGS84Reference WGS84 position to be used as reference.
-    * @param CartesianPosition Cartesian position to be transformed.
-    * @return Eigen::Vector2d Approximating a WGS84 position from a given CartesianPosition based on a given WGS84Reference using Mercator projection.
+    * @param wgs84_reference WGS84 position to be used as reference.
+    * @param cartesian_position Cartesian position to be transformed.
+    * @return Eigen::Vector2d Approximating a WGS84 position from a given cartesian_position based on a given wgs84_reference using Mercator projection.
     */
-    static inline Eigen::Vector2d from_cartesian(const Eigen::Vector2d &WGS84Reference, const Eigen::Vector2d &CartesianPosition) {
+    static inline Eigen::Vector2d from_cartesian(const Eigen::Vector2d &wgs84_reference, const Eigen::Vector2d &cartesian_position) {
         constexpr double EPSILON10{1.0e-4};
-        const int32_t signLon{(CartesianPosition.x() < 0) ? -1 : 1};
-        const int32_t signLat{(CartesianPosition.y() < 0) ? -1 : 1};
+        const int32_t signLon{(cartesian_position.x() < 0) ? -1 : 1};
+        const int32_t signLat{(cartesian_position.y() < 0) ? -1 : 1};
 
-        Eigen::Vector2d approximateWGS84Position{WGS84Reference};
-        Eigen::Vector2d cartesianResult{to_cartesian(WGS84Reference, approximateWGS84Position)};
+        Eigen::Vector2d approximate_wgs84_position{wgs84_reference};
+        Eigen::Vector2d cartesianResult{to_cartesian(wgs84_reference, approximate_wgs84_position)};
 
         double dPrev{(std::numeric_limits<double>::max)()};
-        double d = std::abs(CartesianPosition.y() - cartesianResult.y());
+        double d = std::abs(cartesian_position.y() - cartesianResult.y());
         double incLat{1e-6};
         while ((d < dPrev) && (d > EPSILON10)) {
             incLat = std::max(1e-6 * d, static_cast<double>(1e-9));
-            approximateWGS84Position.x() = approximateWGS84Position.x() + signLat * incLat;
-            cartesianResult             = to_cartesian(WGS84Reference, approximateWGS84Position);
+            approximate_wgs84_position.x() = approximate_wgs84_position.x() + signLat * incLat;
+            cartesianResult             = to_cartesian(wgs84_reference, approximate_wgs84_position);
             dPrev                       = d;
-            d                           = std::abs(CartesianPosition.y() - cartesianResult.y());
+            d                           = std::abs(cartesian_position.y() - cartesianResult.y());
         }
 
         dPrev = (std::numeric_limits<double>::max)();
-        d     = std::abs(CartesianPosition.x() - cartesianResult.x());
+        d     = std::abs(cartesian_position.x() - cartesianResult.x());
         double incLon{1e-6};
         while ((d < dPrev) && (d > EPSILON10)) {
             incLon = std::max(1e-6 * d, static_cast<double>(1e-9));
-            approximateWGS84Position.y() = approximateWGS84Position.y() + signLon * incLon;
-            cartesianResult             = to_cartesian(WGS84Reference, approximateWGS84Position);
+            approximate_wgs84_position.y() = approximate_wgs84_position.y() + signLon * incLon;
+            cartesianResult             = to_cartesian(wgs84_reference, approximate_wgs84_position);
             dPrev                       = d;
-            d                           = std::abs(CartesianPosition.x() - cartesianResult.x());
+            d                           = std::abs(cartesian_position.x() - cartesianResult.x());
         }
 
-        return approximateWGS84Position;
+        return approximate_wgs84_position;
     }
 
-    static inline Eigen::DiagonalMatrix<double,3> wgs84_scaling(const Eigen::Vector3d &WGS84Reference) {
-        Eigen::Vector2d WGS84Reference2{ WGS84Reference.x(),WGS84Reference.y() };
-        Eigen::Vector2d delta = from_cartesian(WGS84Reference2, { 1, 1 }) - WGS84Reference2;
+    static inline Eigen::DiagonalMatrix<double,3> wgs84_scaling(const Eigen::Vector3d &wgs84_reference) {
+        Eigen::Vector2d wgs84_reference2{ wgs84_reference.x(),wgs84_reference.y() };
+        Eigen::Vector2d delta = from_cartesian(wgs84_reference2, { 1, 1 }) - wgs84_reference2;
         return Eigen::DiagonalMatrix<double,3>{ 1/delta.x(), 1/delta.y(), 1};
     }
   }
