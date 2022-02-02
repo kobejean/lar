@@ -3,6 +3,17 @@
 
 using namespace lar;
 
+TEST(MapTest, GlobalPointNotReady) {
+  // Given
+  Map map;
+  Eigen::Vector3d relative{ 0, 4, 0 };
+  // When
+  Eigen::Vector3d global;
+  bool success = map.globalPointFrom(relative, global);
+  // Then
+  EXPECT_FALSE(success);
+}
+
 TEST(MapTest, GlobalPointFromExample1) {
   // Given
   Map map;
@@ -14,8 +25,10 @@ TEST(MapTest, GlobalPointFromExample1) {
   map.origin = Eigen::Transform<double, 3, Eigen::Affine>(origin);
   Eigen::Vector3d relative{ 0, 4, 0 };
   // When
-  Eigen::Vector3d global = map.globalPointFrom(relative);
+  Eigen::Vector3d global;
+  bool success = map.globalPointFrom(relative, global);
   // Then
+  EXPECT_TRUE(success);
   EXPECT_NEAR(global.x(), 37.5236728, 1e-5);
   EXPECT_NEAR(global.y(), 139.9380725, 1e-5);
   EXPECT_NEAR(global.z(), 212, 1e-5);
@@ -31,25 +44,25 @@ TEST(MapTest, GlobalPointFromExample2) {
                                  0, 0,                       0,           1;
   map.origin = Eigen::Transform<double, 3, Eigen::Affine>(origin);
   Eigen::Vector3d relative{ 1289.6952137156, 0, 1289.6952137156 };
-  // Mapper::Data data;
-  // GPSObservation observation1;
-  // observation1.relative = { 0, 4, 0 };
-  // observation1.global = { 37.5236728, 139.9380725, 212 };
-  // observation1.accuracy = { 10, 0, 0};
-  // data.gps_obs.push_back(observation1);
-
-  // GPSObservation observation2;
-  // observation2.relative = { 1289.6952137156, 0, 1289.6952137156 };
-  // observation2.global = { 37.5085404, 139.9300318, 208 };
-  // observation2.accuracy = { 5, 5, 15};
-  // data.gps_obs.push_back(observation2);
-
   // When
-  Eigen::Vector3d global = map.globalPointFrom(relative);
+  Eigen::Vector3d global;
+  bool success = map.globalPointFrom(relative, global);
   // Then
+  EXPECT_TRUE(success);
   EXPECT_NEAR(global.x(), 37.5085404, 1e-5);
   EXPECT_NEAR(global.y(), 139.9300318, 1e-5);
   EXPECT_NEAR(global.z(), 208, 1e-5);
+}
+
+TEST(MapTest, RelativePointNotReady) {
+  // Given
+  Map map;
+  Eigen::Vector3d global{ 37.5236728, 139.9380725, 212 };
+  // When
+  Eigen::Vector3d relative;
+  bool success = map.relativePointFrom(relative, global);
+  // Then
+  EXPECT_FALSE(success);
 }
 
 TEST(MapTest, RelativePointFromExample1) {
@@ -63,8 +76,10 @@ TEST(MapTest, RelativePointFromExample1) {
   map.origin = Eigen::Transform<double, 3, Eigen::Affine>(origin);
   Eigen::Vector3d global{ 37.5236728, 139.9380725, 212 };
   // When
-  Eigen::Vector3d relative = map.relativePointFrom(global);
+  Eigen::Vector3d relative;
+  bool success = map.relativePointFrom(global, relative);
   // Then
+  EXPECT_TRUE(success);
   EXPECT_NEAR(relative.x(), 0, 1e-2);
   EXPECT_NEAR(relative.y(), 4, 1e-2);
   EXPECT_NEAR(relative.z(), 0, 1e-2);
@@ -81,8 +96,10 @@ TEST(MapTest, RelativePointFromExample2) {
   map.origin = Eigen::Transform<double, 3, Eigen::Affine>(origin);
   Eigen::Vector3d global{ 37.5085404, 139.9300318, 208 };
   // When
-  Eigen::Vector3d relative = map.relativePointFrom(global);
+  Eigen::Vector3d relative;
+  bool success = map.relativePointFrom(global, relative);
   // Then
+  EXPECT_TRUE(success);
   EXPECT_NEAR(relative.x(), 1289.6959515561, 1e-5);
   EXPECT_NEAR(relative.y(), 0, 1e-2);
   EXPECT_NEAR(relative.z(), 1289.6959515561, 1e-5);
