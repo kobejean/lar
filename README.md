@@ -4,6 +4,28 @@
 
 LocalizeARのC＋＋ライブラリーです。
 
+# コンパイルする方法
+
+普通
+```sh
+make all
+```
+
+並列コンピューティングを活用する
+```sh
+make fast
+```
+
+Testを含める
+```sh
+make tests
+```
+
+XCFrameworkをコンパイル
+```sh
+make frameworks
+```
+
 # 仕組み
 
 **STEP　１**
