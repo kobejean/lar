@@ -9,11 +9,11 @@ namespace lar {
   class Map {
     public: 
       LandmarkDatabase landmarks;
-      Eigen::Transform<double,3,Eigen::Affine> origin;
+      Eigen::Transform<double,3,Eigen::Affine> origin{Eigen::Transform<double,3,Eigen::Affine>::Identity()};
 
       Map();
-      Eigen::Vector3d globalPointFrom(const Eigen::Vector3d& relative);
-      Eigen::Vector3d relativePointFrom(const Eigen::Vector3d& global);
+      bool globalPointFrom(const Eigen::Vector3d& relative, Eigen::Vector3d& global);
+      bool relativePointFrom(const Eigen::Vector3d& global, Eigen::Vector3d& relative);
   };
   
 }
