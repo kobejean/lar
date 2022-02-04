@@ -61,8 +61,8 @@ namespace lar {
         Eigen::Vector3d pt3d = projection.projectToWorld(frame.kpts[i].pt, frame.depth[i]);
         Landmark landmark(pt3d, desc.row(i), new_landmark_id);
         landmark.recordObservation({
-          .cam_position=(frame.extrinsics.block<3,1>(0,3)),
           .timestamp=frame.timestamp,
+          .cam_position=(frame.extrinsics.block<3,1>(0,3)),
           .surface_normal=frame.surface_normals[i]
         });
 
@@ -73,8 +73,8 @@ namespace lar {
         // We have a match so just push the match index
         landmark_ids.push_back(matches[i]);
         data.map.landmarks[matches[i]].recordObservation({
-          .cam_position=(frame.extrinsics.block<3,1>(0,3)),
           .timestamp=frame.timestamp,
+          .cam_position=(frame.extrinsics.block<3,1>(0,3)),
           .surface_normal=frame.surface_normals[i]
         });
       }
