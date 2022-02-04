@@ -28,6 +28,8 @@ XCFrameworkをコンパイル
 make frameworks
 ```
 
+[`g2o_viewer`のインストールはこちら](/docs/INSTALL_G2O_VIEWER.md)
+
 # 仕組み
 
 **STEP　１**

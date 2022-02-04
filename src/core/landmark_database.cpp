@@ -21,6 +21,14 @@ namespace lar {
     return all.size();
   }
 
+  cv::Mat LandmarkDatabase::getDescriptions() const {
+    cv::Mat desc;
+    Landmark::concatDescriptions(all, desc);
+    return desc;
+  }
+
+#ifndef LAR_COMPACT_BUILD
+
   void LandmarkDatabase::cull() {
     std::vector<Landmark> landmarks;
     for (size_t i = 0; i < all.size(); i++) {
@@ -31,11 +39,7 @@ namespace lar {
     }
     all = landmarks;
   }
-
-  cv::Mat LandmarkDatabase::getDescriptions() const {
-    cv::Mat desc;
-    Landmark::concatDescriptions(all, desc);
-    return desc;
-  }
+  
+#endif
 
 }

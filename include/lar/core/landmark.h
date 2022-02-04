@@ -11,8 +11,8 @@ namespace lar {
     public:
       size_t id;
       Eigen::Vector3d position;
+      Eigen::Vector3f orientation;
       cv::Mat desc;
-      int sightings{0};
       long long last_seen;
 
       // For r-tree indexing
@@ -21,10 +21,25 @@ namespace lar {
 
       Landmark();
       Landmark(const Eigen::Vector3d& position, const cv::Mat& desc, size_t id);
-      void recordSighting(const Eigen::Vector3d& cam_position, long long timestamp);
-      bool isUseable() const;
 
       static void concatDescriptions(const std::vector<Landmark>& landmarks, cv::Mat &desc);
+
+#ifndef LAR_COMPACT_BUILD
+
+      struct Observation {
+        long long timestamp;
+        Eigen::Vector3d cam_position;
+        Eigen::Vector3f surface_normal;
+      };
+      // Auxilary data
+      int sightings{0};
+      std::vector<Observation> obs;
+      
+      void recordObservation(Observation observation);
+      bool isUseable() const;
+
+#endif
+
   };
 }
 

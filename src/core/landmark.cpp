@@ -9,23 +9,6 @@ namespace lar {
     position(position), desc(desc), id(id) {
   }
 
-  void Landmark::recordSighting(const Eigen::Vector3d &cam_position, long long timestamp) {
-    // TODO: find a good way to estimate the region where the landmark can be seen for good indexing
-    if (sightings == 0) {
-      Eigen::Vector2d position2(position.x(), position.z());
-      Eigen::Vector2d cam_position2(cam_position.x(), cam_position.z());
-      double distance = (position2 - cam_position2).norm();
-      index_radius = distance;
-      index_center = cam_position2;
-    }
-    sightings++;
-    last_seen = timestamp;
-  }
-
-  bool Landmark::isUseable() const {
-    return sightings >= 3;
-  }
-
   // Static Methods
 
   void Landmark::concatDescriptions(const std::vector<Landmark>& landmarks, cv::Mat &desc) {
@@ -33,5 +16,28 @@ namespace lar {
       desc.push_back(landmarks[i].desc);
     }
   }
+
+#ifndef LAR_COMPACT_BUILD
+
+  void Landmark::recordObservation(Observation observation) {
+    obs.push_back(observation);
+    // TODO: find a good way to estimate the region where the landmark can be seen for good indexing
+    if (sightings == 0) {
+      Eigen::Vector2d position2(position.x(), position.z());
+      Eigen::Vector2d cam_position2(observation.cam_position.x(), observation.cam_position.z());
+      double distance = (position2 - cam_position2).norm();
+      index_radius = distance;
+      index_center = cam_position2;
+      orientation = observation.surface_normal;
+    }
+    sightings++;
+    last_seen = observation.timestamp;
+  }
+
+  bool Landmark::isUseable() const {
+    return sightings >= 3;
+  }
+
+#endif
 
 }
