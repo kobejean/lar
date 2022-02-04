@@ -8,7 +8,8 @@
 
 namespace lar {
 
-  Depth::Depth(cv::Size img_size): _img_size(img_size) {
+  Depth::Depth(cv::Size img_size, Eigen::Matrix3d intrinsics, Eigen::Matrix4d extrinsics):
+    _img_size(img_size), _intrinsics(intrinsics), _extrinsics(extrinsics) {
   }
   
   std::vector<float> Depth::depthAt(const std::vector<cv::KeyPoint>& kpts) {
@@ -19,9 +20,51 @@ namespace lar {
     return interpolate(_confidence, kpts, cv::INTER_NEAREST);
   }
 
-  std::vector<Eigen::Vector3d> Depth::surfaceNormalAt(const std::vector<cv::KeyPoint>& kpts) {
-    // TODO: Implement surface normal calculations
-    return std::vector<Eigen::Vector3d>();
+  std::vector<Eigen::Vector3f> Depth::surfaceNormaslAt(const std::vector<cv::KeyPoint>& kpts) {
+    cv::Mat rough_normals = cv::Mat::zeros(_depth.size(), CV_32FC3);
+    float image_scale_u = (float) _img_size.height / (float) _depth.size().height;
+    float image_scale_v = (float) _img_size.width / (float) _depth.size().width;
+    float y_per_uz = -image_scale_u / _intrinsics(1,1);
+    float x_per_vz = image_scale_v / _intrinsics(0,0);
+
+
+    Eigen::Matrix3f rotation = _extrinsics.block<3,3>(0,0).cast<float>().transpose();
+
+    // TODO: add proper padding
+    for (int u = 1; u < _depth.rows-1; u++) {
+      for (int v = 1; v < _depth.cols-1; v++) {
+        float z = _depth.at<float>(u, v);
+        float dy = z * y_per_uz * 2;
+        float dx = z * x_per_vz * 2;
+        float dzdy = (_depth.at<float>(u+1, v) - _depth.at<float>(u-1, v)) / dy;
+        float dzdx = (_depth.at<float>(u, v+1) - _depth.at<float>(u, v-1)) / dx;
+
+        cv::Vec3f d(-dzdx, -dzdy, 1);
+        cv::Vec3f n = normalize(d);
+        // Eigen::Vector3f normal{ n[0], n[1], n[2] };
+        // normal = rotation * normal;
+        // n[0] = normal.x();
+        // n[1] = normal.y();
+        // n[2] = normal.z();
+        rough_normals.at<cv::Vec3f>(u, v) = n;
+      }
+    }
+
+    // Visualize surface normals
+    // cv::Mat vis = (rough_normals + 1)*255/2;
+    // cv::Mat vis2 = (_depth - *std::min_element(_depth.begin<float>(), _depth.end<float>()))*255/ *std::max_element(_depth.begin<float>(), _depth.end<float>());
+    // cv::imwrite("./output/normals.jpeg", vis);
+    // cv::imwrite("./output/depth.jpeg", vis2);
+
+    std::vector<Eigen::Vector3f> surface_normals;
+    for (const cv::KeyPoint& kpt : kpts) {
+      int u = (int) round(kpt.pt.y / image_scale_u);
+      int v = (int) round(kpt.pt.x / image_scale_v);
+      cv::Vec3f n = rough_normals.at<cv::Vec3f>(u, v);
+      Eigen::Vector3f normal{ n[0], n[1], n[2] };
+      surface_normals.push_back(rotation * normal);
+    }
+    return surface_normals;
   }
 
 
@@ -55,7 +98,8 @@ namespace lar {
 
   // SavedDepth
 
-  SavedDepth::SavedDepth(cv::Size img_size, std::string path_prefix): Depth(img_size) {
+  SavedDepth::SavedDepth(cv::Size img_size, Eigen::Matrix3d intrinsics, Eigen::Matrix4d extrinsics, std::string path_prefix):
+    Depth(img_size, intrinsics, extrinsics) {
     std::string depth_filepath = path_prefix + "depth.pfm";
     std::string confidence_filepath = path_prefix + "confidence.pfm";
 

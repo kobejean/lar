@@ -16,8 +16,11 @@ namespace lar {
 
       void insert(const std::vector<Landmark>& landmarks);
       size_t size() const;
-      void cull();
       cv::Mat getDescriptions() const;
+
+#ifndef LAR_COMPACT_BUILD
+      void cull();
+#endif
   };
   
 }

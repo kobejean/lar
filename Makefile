@@ -12,6 +12,10 @@ all: CMAKE_ARGS = -DCMAKE_BUILD_TYPE=Release
 all: configure
 	$(MAKE) $(QUIET) -C build
 
+compact: CMAKE_ARGS = -DLAR_COMPACT_BUILD=ON -DCMAKE_BUILD_TYPE=Release
+compact: configure
+	$(MAKE) $(QUIET) -C build -j 8
+
 fast: CMAKE_ARGS = -DCMAKE_BUILD_TYPE=Release
 fast: configure
 	$(MAKE) $(QUIET) VERBOSE=1 -C build -j 8

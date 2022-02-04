@@ -8,13 +8,15 @@ namespace lar {
 
   class Depth {
     public:
-      Depth(cv::Size img_size);
+      Depth(cv::Size img_size, Eigen::Matrix3d intrinsics, Eigen::Matrix4d extrinsics);
 
       std::vector<float> depthAt(const std::vector<cv::KeyPoint> &kpts);
       std::vector<float> confidenceAt(const std::vector<cv::KeyPoint> &kpts);
-      std::vector<Eigen::Vector3d> surfaceNormalAt(const std::vector<cv::KeyPoint> &kpts);
+      std::vector<Eigen::Vector3f> surfaceNormaslAt(const std::vector<cv::KeyPoint> &kpts);\
 
     protected:
+      Eigen::Matrix3d _intrinsics;
+      Eigen::Matrix4d _extrinsics;
       cv::Size _img_size;
       cv::Mat _depth;
       cv::Mat _confidence;
@@ -26,7 +28,7 @@ namespace lar {
 
   class SavedDepth : public Depth {
     public:
-      SavedDepth(cv::Size img_size, std::string path_prefix);
+      SavedDepth(cv::Size img_size, Eigen::Matrix3d intrinsics, Eigen::Matrix4d extrinsics, std::string path_prefix);
   };
 
 }

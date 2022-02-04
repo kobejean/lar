@@ -15,7 +15,7 @@ namespace lar {
   }
 
   void FrameProcessor::process(Frame& frame) {
-    if (!frame.depth.empty()) return;
+    if (frame.processed) return;
 
     // Create filename paths
     std::string path_prefix = data.getPathPrefix(frame.id).string();
@@ -31,12 +31,14 @@ namespace lar {
     std::cout << "features: " << frame.kpts.size() << std::endl;
 
     // Retreive depth values
-    SavedDepth depth(image.size(), path_prefix);
+    SavedDepth depth(image.size(), frame.intrinsics, frame.extrinsics, path_prefix);
     frame.depth = depth.depthAt(frame.kpts);
     frame.confidence = depth.confidenceAt(frame.kpts);
+    frame.surface_normals = depth.surfaceNormaslAt(frame.kpts);
 
     // Get landmarks
     frame.landmark_ids = getLandmarks(frame, desc);
+    frame.processed = true;
   }
 
   // Private methods
@@ -58,8 +60,11 @@ namespace lar {
         // No match so create landmark
         Eigen::Vector3d pt3d = projection.projectToWorld(frame.kpts[i].pt, frame.depth[i]);
         Landmark landmark(pt3d, desc.row(i), new_landmark_id);
-        Eigen::Vector3d cam_position = (frame.extrinsics.block<3,1>(0,3));
-        landmark.recordSighting(cam_position, frame.timestamp);
+        landmark.recordObservation({
+          .cam_position=(frame.extrinsics.block<3,1>(0,3)),
+          .timestamp=frame.timestamp,
+          .surface_normal=frame.surface_normals[i]
+        });
 
         landmark_ids.push_back(new_landmark_id);
         new_landmarks.push_back(landmark);
@@ -67,8 +72,11 @@ namespace lar {
       } else {
         // We have a match so just push the match index
         landmark_ids.push_back(matches[i]);
-        Eigen::Vector3d cam_position = (frame.extrinsics.block<3,1>(0,3));
-        data.map.landmarks[matches[i]].recordSighting(cam_position, frame.timestamp);
+        data.map.landmarks[matches[i]].recordObservation({
+          .cam_position=(frame.extrinsics.block<3,1>(0,3)),
+          .timestamp=frame.timestamp,
+          .surface_normal=frame.surface_normals[i]
+        });
       }
     }
 
@@ -78,7 +86,7 @@ namespace lar {
 
   std::map<size_t, size_t> FrameProcessor::getMatches(cv::Mat &desc) {
     // Get matches
-    std::vector<cv::DMatch> matches = vision.match(desc, data.desc);
+    std::vector<cv::DMatch> matches = vision.match(desc, data.map.landmarks.getDescriptions());
     std::cout << "matches: " << matches.size() << std::endl;
 
     // Populate `idx_matched` map
@@ -94,13 +102,6 @@ namespace lar {
       if (idx_matched.find(i) == idx_matched.end()) {
         unmatched_desc.push_back(desc.row(i));
       }
-    }
-
-    // Add new descriptions to `data.desc`
-    if (data.desc.rows > 0) {
-      cv::vconcat(data.desc, unmatched_desc, data.desc);
-    } else {
-      data.desc = unmatched_desc;
     }
 
     return idx_matched;

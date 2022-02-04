@@ -15,9 +15,11 @@ namespace lar {
       Eigen::Matrix3d intrinsics;
       Eigen::Matrix4d extrinsics;
       // Processing
+      bool processed{false};
       std::vector<cv::KeyPoint> kpts;
       std::vector<float> depth;
       std::vector<float> confidence;
+      std::vector<Eigen::Vector3f> surface_normals;
       std::vector<size_t> landmark_ids;
 
       Frame();

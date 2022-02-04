@@ -22,7 +22,6 @@ namespace lar {
           Map map;
           std::vector<Frame> frames;
           std::vector<GPSObservation> gps_obs;
-          cv::Mat desc;
           fs::path directory;
 
           Data() {};

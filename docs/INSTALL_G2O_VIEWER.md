@@ -2,13 +2,13 @@
 
 `g2o_viewer`をインストールするには`Qt5`、`libQGLViewer`、`Eigen`が必用です。
 
-## Install `Eigen`:
+## Install `Eigen`
 
 ```
 brew install eigen
 ```
 
-## Install `Qt5`:
+## Install `Qt5`
 
 ```
 brew install qt@5
