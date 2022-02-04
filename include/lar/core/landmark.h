@@ -11,6 +11,7 @@ namespace lar {
     public:
       size_t id;
       Eigen::Vector3d position;
+      Eigen::Vector3f orientation;
       cv::Mat desc;
       long long last_seen;
 

@@ -13,7 +13,7 @@ namespace lar {
   static void to_json(nlohmann::json& j, const Landmark& l) {
     std::string desc64 = base64::base64_encode(l.desc);
 
-    j = nlohmann::json{ {"id", l.id}, {"desc", desc64}, {"position", l.position}, };
+    j = nlohmann::json{ {"id", l.id}, {"desc", desc64}, {"position", l.position}, {"orientation", l.orientation} };
   }
 
   static void from_json(const nlohmann::json& j, Landmark& l) {
@@ -22,6 +22,7 @@ namespace lar {
     j.at("id").get_to(l.id);
     l.desc = base64::base64_decode(desc64, 1, 61, CV_8UC1);
     j.at("position").get_to(l.position);
+    j.at("orientation").get_to(l.orientation);
   }
 
   static void to_json(nlohmann::json& j, const Map& m) {

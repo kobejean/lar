@@ -28,6 +28,7 @@ namespace lar {
       double distance = (position2 - cam_position2).norm();
       index_radius = distance;
       index_center = cam_position2;
+      orientation = observation.surface_normal;
     }
     sightings++;
     last_seen = observation.timestamp;

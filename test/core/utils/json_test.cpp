@@ -9,7 +9,7 @@ using namespace lar;
 
 TEST(JSONTest, MapSerialization) {
   // Given
-  std::string json_string = "{\"landmarks\":[{\"desc\":\"IL5sAIARAME/AICBxTH+xx0BACAABnAEAAAAPIYASPcfAPj/QhACAP47XAcANwAAAMjxGOP//8dDYHj/AA==\",\"id\":19,\"position\":[28.978420115684386,9.0347303998687,-17.00002901344248]}]}";
+  std::string json_string = "{\"landmarks\":[{\"desc\":\"IL5sAIARAME/AICBxTH+xx0BACAABnAEAAAAPIYASPcfAPj/QhACAP47XAcANwAAAMjxGOP//8dDYHj/AA==\",\"id\":19,\"orientation\":[0.9376014471054077,0.13693156838417053,0.3196144700050354],\"position\":[28.978420115684386,9.0347303998687,-17.00002901344248]}]}";
   lar::Map map = json::parse(json_string);
   // When
   json map_json = map;
@@ -19,7 +19,7 @@ TEST(JSONTest, MapSerialization) {
 
 TEST(JSONTest, MapDeserialization) {
   // Given
-  json map_json = json::parse("{\"landmarks\":[{\"desc\":\"IL5sAIARAME/AICBxTH+xx0BACAABnAEAAAAPIYASPcfAPj/QhACAP47XAcANwAAAMjxGOP//8dDYHj/AA==\",\"id\":19,\"position\":[28.978420115684386,9.0347303998687,-17.00002901344248]}]}");
+  json map_json = json::parse("{\"landmarks\":[{\"desc\":\"IL5sAIARAME/AICBxTH+xx0BACAABnAEAAAAPIYASPcfAPj/QhACAP47XAcANwAAAMjxGOP//8dDYHj/AA==\",\"id\":19,\"orientation\":[0.9376014471054077,0.13693156838417053,0.3196144700050354],\"position\":[28.978420115684386,9.0347303998687,-17.00002901344248]}]}");
   // When
   lar::Map map = map_json;
   // Then
