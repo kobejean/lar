@@ -1,3 +1,4 @@
+#include <Eigen/Core>
 #include <iostream>
 #include "lar/core/utils/wgs84.h"
 #include "lar/processing/global_alignment.h"
@@ -29,20 +30,16 @@ namespace lar {
 
   Eigen::Matrix3d GlobalAlignment::crossCovariance(const Eigen::Vector3d rc, const Eigen::Vector3d gc, const Eigen::DiagonalMatrix<double,3> D) {
     assert(data.gps_obs.size() >= 2);
-    int n = static_cast<int>(data.gps_obs.size());
-    Eigen::Matrix<double, Eigen::Dynamic, 3> X(n,3);
-    Eigen::Matrix<double, Eigen::Dynamic, 3> WYD(n,3);
+    Eigen::Matrix3d CC = Eigen::Matrix3d::Zero();
     
     for (size_t i=0; i < data.gps_obs.size(); i++) {
       GPSObservation& obs = data.gps_obs[i];
       double w = weight(obs.accuracy);
       auto dr = obs.relative - rc;
       auto dg = D * (obs.global - gc);
-      X.row(i) = dr.transpose();
-      WYD.row(i) = dg.transpose() * w;
+      CC += dg * w * dr.transpose();
     }
 
-    Eigen::Matrix3d CC = WYD.transpose() * X;
     CC(0,1) = 0;
     CC(1,1) = 0;
     CC(2,0) = 0;

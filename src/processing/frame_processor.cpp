@@ -1,6 +1,7 @@
 #include <iostream>
 #include <fstream>
 
+#include <Eigen/Core>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 
@@ -62,7 +63,7 @@ namespace lar {
         Landmark landmark(pt3d, desc.row(i), new_landmark_id);
         landmark.recordObservation({
           .timestamp=frame.timestamp,
-          .cam_position=(frame.extrinsics.block<3,1>(0,3)),
+          .cam_position=frame.extrinsics.block<3,1>(0,3),
           .surface_normal=frame.surface_normals[i]
         });
 
@@ -74,7 +75,7 @@ namespace lar {
         landmark_ids.push_back(matches[i]);
         data.map.landmarks[matches[i]].recordObservation({
           .timestamp=frame.timestamp,
-          .cam_position=(frame.extrinsics.block<3,1>(0,3)),
+          .cam_position=frame.extrinsics.block<3,1>(0,3),
           .surface_normal=frame.surface_normals[i]
         });
       }

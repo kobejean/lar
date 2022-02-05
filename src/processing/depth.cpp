@@ -21,48 +21,41 @@ namespace lar {
   }
 
   std::vector<Eigen::Vector3f> Depth::surfaceNormaslAt(const std::vector<cv::KeyPoint>& kpts) {
-    cv::Mat rough_normals = cv::Mat::zeros(_depth.size(), CV_32FC3);
     float image_scale_u = (float) _img_size.height / (float) _depth.size().height;
     float image_scale_v = (float) _img_size.width / (float) _depth.size().width;
     float y_per_uz = -image_scale_u / _intrinsics(1,1);
     float x_per_vz = image_scale_v / _intrinsics(0,0);
+    cv::Mat rough_normals = cv::Mat::zeros(_depth.size().height-1, _depth.size().width-1, CV_32FC3);
 
+    Eigen::Matrix3f rotation = _extrinsics.block<3,3>(0,0).cast<float>();
 
-    Eigen::Matrix3f rotation = _extrinsics.block<3,3>(0,0).cast<float>().transpose();
-
-    // TODO: add proper padding
-    for (int u = 1; u < _depth.rows-1; u++) {
-      for (int v = 1; v < _depth.cols-1; v++) {
-        float z = _depth.at<float>(u, v);
-        float dy = z * y_per_uz * 2;
-        float dx = z * x_per_vz * 2;
-        float dzdy = (_depth.at<float>(u+1, v) - _depth.at<float>(u-1, v)) / dy;
-        float dzdx = (_depth.at<float>(u, v+1) - _depth.at<float>(u, v-1)) / dx;
-
-        cv::Vec3f d(-dzdx, -dzdy, 1);
-        cv::Vec3f n = normalize(d);
-        // Eigen::Vector3f normal{ n[0], n[1], n[2] };
-        // normal = rotation * normal;
-        // n[0] = normal.x();
-        // n[1] = normal.y();
-        // n[2] = normal.z();
-        rough_normals.at<cv::Vec3f>(u, v) = n;
+    for (int u = 0; u < _depth.rows-1; u++) {
+      for (int v = 0; v < _depth.cols-1; v++) {
+        float z = 0.25 * (_depth.at<float>(u, v) + _depth.at<float>(u+1, v) + _depth.at<float>(u, v+1) + _depth.at<float>(u+1, v+1));
+        float dy = z * y_per_uz;
+        float dx = z * x_per_vz;
+        float y = (_depth.at<float>(u+1, v) - _depth.at<float>(u, v)) / dy;
+        float x = (_depth.at<float>(u, v+1) - _depth.at<float>(u, v)) / dx;
+        cv::Vec3f direction(x, y, 1);
+        rough_normals.at<cv::Vec3f>(u, v) = cv::normalize(direction);
       }
     }
 
     // Visualize surface normals
-    // cv::Mat vis = (rough_normals + 1)*255/2;
+    // cv::Mat vis = (1 + rough_normals)*255/2;
     // cv::Mat vis2 = (_depth - *std::min_element(_depth.begin<float>(), _depth.end<float>()))*255/ *std::max_element(_depth.begin<float>(), _depth.end<float>());
     // cv::imwrite("./output/normals.jpeg", vis);
     // cv::imwrite("./output/depth.jpeg", vis2);
 
+    // TODO: Take into account, the key points size
     std::vector<Eigen::Vector3f> surface_normals;
     for (const cv::KeyPoint& kpt : kpts) {
-      int u = (int) round(kpt.pt.y / image_scale_u);
-      int v = (int) round(kpt.pt.x / image_scale_v);
+      int u = std::max((int) round(kpt.pt.y / image_scale_u - 0.5), 0);
+      int v = std::max((int) round(kpt.pt.x / image_scale_v - 0.5), 0);
       cv::Vec3f n = rough_normals.at<cv::Vec3f>(u, v);
       Eigen::Vector3f normal{ n[0], n[1], n[2] };
-      surface_normals.push_back(rotation * normal);
+      normal = rotation * normal;
+      surface_normals.push_back(normal);
     }
     return surface_normals;
   }
