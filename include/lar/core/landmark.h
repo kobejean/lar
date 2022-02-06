@@ -3,7 +3,8 @@
 
 #include <Eigen/Core>
 #include <opencv2/features2d.hpp>
-#include <nlohmann/json.hpp>
+#include "lar/core/utils/base64.h"
+#include "lar/core/utils/json.h"
 
 namespace lar {
 
@@ -13,7 +14,6 @@ namespace lar {
       Eigen::Vector3d position;
       Eigen::Vector3f orientation;
       cv::Mat desc;
-      long long last_seen;
 
       // For r-tree indexing
       Eigen::Vector2d index_center;
@@ -27,13 +27,18 @@ namespace lar {
 #ifndef LAR_COMPACT_BUILD
 
       struct Observation {
+        size_t landmark_id;
+        size_t frame_id;
         long long timestamp;
         Eigen::Vector3d cam_position;
+        cv::KeyPoint kpt;
+        float depth;
+        float depth_confidence;
         Eigen::Vector3f surface_normal;
       };
       // Auxilary data
       int sightings{0};
-      std::vector<Observation> obs;
+      long long last_seen;
       
       void recordObservation(Observation observation);
       bool isUseable() const;
@@ -41,6 +46,27 @@ namespace lar {
 #endif
 
   };
+
+  static void to_json(nlohmann::json& j, const Landmark& l) {
+    std::string desc64 = base64::base64_encode(l.desc);
+
+    j = nlohmann::json{
+      {"id", l.id},
+      {"desc", desc64},
+      {"position", l.position},
+      {"orientation", l.orientation}
+    };
+  }
+
+  static void from_json(const nlohmann::json& j, Landmark& l) {
+    std::string desc64 = j.at("desc").get<std::string>();
+
+    j.at("id").get_to(l.id);
+    l.desc = base64::base64_decode(desc64, 1, 61, CV_8UC1);
+    j.at("position").get_to(l.position);
+    j.at("orientation").get_to(l.orientation);
+  }
+
 }
 
 #endif /* LAR_CORE_LANDMARK_H */

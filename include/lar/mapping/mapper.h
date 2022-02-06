@@ -8,6 +8,7 @@
 #include <opencv2/core.hpp>
 
 #include "lar/core/utils/json.h"
+#include "lar/core/map.h"
 #include "lar/mapping/frame.h"
 #include "lar/mapping/location_matcher.h"
 

@@ -5,22 +5,20 @@
 #include <opencv2/features2d.hpp>
 
 #include "lar/core/utils/json.h"
+#include "lar/core/landmark.h"
 
 namespace lar {
 
   class Frame {
     public:
+      // TODO: Make these attributes const
       size_t id;
       long long timestamp;
       Eigen::Matrix3d intrinsics;
       Eigen::Matrix4d extrinsics;
-      // Processing
+      // Auxilary data
       bool processed{false};
-      std::vector<cv::KeyPoint> kpts;
-      std::vector<float> depth;
-      std::vector<float> confidence;
-      std::vector<Eigen::Vector3f> surface_normals;
-      std::vector<size_t> landmark_ids;
+      std::vector<Landmark::Observation> obs;
 
       Frame();
   };

@@ -28,28 +28,45 @@ namespace lar {
 
     // Extract features
     cv::Mat desc;
-    vision.extractFeatures(image, cv::noArray(), frame.kpts, desc);
-    std::cout << "features: " << frame.kpts.size() << std::endl;
+    std::vector<cv::KeyPoint> kpts;
+    vision.extractFeatures(image, cv::noArray(), kpts, desc);
+    std::cout << "features: " << kpts.size() << std::endl;
 
     // Retreive depth values
     SavedDepth depth(image.size(), frame.intrinsics, frame.extrinsics, path_prefix);
-    frame.depth = depth.depthAt(frame.kpts);
-    frame.confidence = depth.confidenceAt(frame.kpts);
-    frame.surface_normals = depth.surfaceNormaslAt(frame.kpts);
+    auto depth_values = depth.depthAt(kpts);
+    auto confidence_values = depth.confidenceAt(kpts);
+    auto surface_normals = depth.surfaceNormaslAt(kpts);
+    auto landmark_ids = getLandmarkIds(frame, desc, kpts, depth_values);
 
-    // Get landmarks
-    frame.landmark_ids = getLandmarks(frame, desc);
+    // Create landmark observations
+    for (size_t i=0; i<kpts.size(); i++) {
+      Landmark::Observation obs{
+        .landmark_id=landmark_ids[i],
+        .frame_id=frame.id,
+        .timestamp=frame.timestamp,
+        .cam_position=frame.extrinsics.block<3,1>(0,3),
+        .kpt=kpts[i],
+        .depth=depth_values[i],
+        .depth_confidence=confidence_values[i],
+        .surface_normal=surface_normals[i],
+      };
+      frame.obs.push_back(obs);
+      Landmark& landmark = data.map.landmarks[landmark_ids[i]];
+      landmark.recordObservation(obs);
+    }
+
     frame.processed = true;
   }
 
   // Private methods
 
-  std::vector<size_t> FrameProcessor::getLandmarks(Frame &frame, cv::Mat &desc) {
+  std::vector<size_t> FrameProcessor::getLandmarkIds(const Frame &frame, const cv::Mat &desc, const std::vector<cv::KeyPoint>& kpts, const std::vector<float>& depth) {
     // Filter out features that have been matched
     std::map<size_t, size_t> matches = getMatches(desc);
     Projection projection(frame.intrinsics, frame.extrinsics);
 
-    size_t landmark_count = frame.kpts.size();
+    size_t landmark_count = kpts.size();
     std::vector<Landmark> new_landmarks;
     new_landmarks.reserve(landmark_count);
     std::vector<size_t> landmark_ids;
@@ -59,13 +76,8 @@ namespace lar {
     for (size_t i = 0; i < landmark_count; i++) {
       if (matches.find(i) == matches.end()) {
         // No match so create landmark
-        Eigen::Vector3d pt3d = projection.projectToWorld(frame.kpts[i].pt, frame.depth[i]);
+        Eigen::Vector3d pt3d = projection.projectToWorld(kpts[i].pt, depth[i]);
         Landmark landmark(pt3d, desc.row(i), new_landmark_id);
-        landmark.recordObservation({
-          .timestamp=frame.timestamp,
-          .cam_position=frame.extrinsics.block<3,1>(0,3),
-          .surface_normal=frame.surface_normals[i]
-        });
 
         landmark_ids.push_back(new_landmark_id);
         new_landmarks.push_back(landmark);
@@ -73,11 +85,6 @@ namespace lar {
       } else {
         // We have a match so just push the match index
         landmark_ids.push_back(matches[i]);
-        data.map.landmarks[matches[i]].recordObservation({
-          .timestamp=frame.timestamp,
-          .cam_position=frame.extrinsics.block<3,1>(0,3),
-          .surface_normal=frame.surface_normals[i]
-        });
       }
     }
 
@@ -85,7 +92,7 @@ namespace lar {
     return landmark_ids;
   }
 
-  std::map<size_t, size_t> FrameProcessor::getMatches(cv::Mat &desc) {
+  std::map<size_t, size_t> FrameProcessor::getMatches(const cv::Mat &desc) {
     // Get matches
     std::vector<cv::DMatch> matches = vision.match(desc, data.map.landmarks.getDescriptions());
     std::cout << "matches: " << matches.size() << std::endl;
