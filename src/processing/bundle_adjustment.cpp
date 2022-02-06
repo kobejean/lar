@@ -129,18 +129,18 @@ namespace lar {
   void BundleAdjustment::addLandmarkMeasurements(Frame const &frame, size_t frame_id, size_t params_id) {
     size_t usable_landmarks = 0;
 
-    for (size_t j = 0; j < frame.landmark_ids.size(); j++) {
-      size_t landmark_id = frame.landmark_ids[j];
+    for (size_t j = 0; j < frame.obs.size(); j++) {
+      size_t landmark_id = frame.obs[j].landmark_id;
       Landmark &landmark = data.map.landmarks[landmark_id];
-      cv::KeyPoint keypoint = frame.kpts[j];
-      Eigen::Vector3d kp(keypoint.pt.x, keypoint.pt.y, frame.depth[j]);
+      cv::KeyPoint keypoint = frame.obs[j].kpt;
+      Eigen::Vector3d kp(keypoint.pt.x, keypoint.pt.y, frame.obs[j].depth);
       
       if (landmark.isUseable()) {
         g2o::EdgeProjectXYZ2UVD * edge = new g2o::EdgeProjectXYZ2UVD();
         edge->setVertex(0, optimizer.vertex(landmark_id));
         edge->setVertex(1, optimizer.vertex(frame_id));
         edge->setMeasurement(kp);
-        edge->information() = Eigen::Vector3d(1.,1.,frame.confidence[j]).asDiagonal();
+        edge->information() = Eigen::Vector3d(1.,1.,frame.obs[j].depth_confidence).asDiagonal();
         edge->setParameterId(0, params_id);
         // g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
         // rk->setDelta(2.5);
@@ -152,7 +152,7 @@ namespace lar {
     }
 
     // Populate stats
-    _stats.landmarks.push_back(frame.landmark_ids.size());
+    _stats.landmarks.push_back(frame.obs.size());
     _stats.usable_landmarks.push_back(usable_landmarks);
   }
 

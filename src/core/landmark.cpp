@@ -20,7 +20,6 @@ namespace lar {
 #ifndef LAR_COMPACT_BUILD
 
   void Landmark::recordObservation(Observation observation) {
-    obs.push_back(observation);
     // TODO: find a good way to estimate the region where the landmark can be seen for good indexing
     if (sightings == 0) {
       Eigen::Vector2d position2(position.x(), position.z());
