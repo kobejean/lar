@@ -27,8 +27,8 @@
 #ifndef G2O_SBA_VERTEXSE3EXPMAP_H
 #define G2O_SBA_VERTEXSE3EXPMAP_H
 
-#include "g2o/types/slam3d/se3quat.h"
 #include "g2o/core/base_vertex.h"
+#include "g2o/types/slam3d/se3quat.h"
 #include "g2o_types_sba_api.h"
 
 #include "g2o/config.h"
@@ -66,6 +66,7 @@ class G2O_TYPES_SBA_API VertexSE3Expmap : public BaseVertex<6, SE3Quat> {
   };
 
 #endif
+
 }  // namespace g2o
 
 #endif

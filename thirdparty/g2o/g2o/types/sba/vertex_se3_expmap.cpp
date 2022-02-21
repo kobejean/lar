@@ -25,8 +25,8 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "vertex_se3_expmap.h"
-#include "g2o/core/factory.h"
 #ifdef G2O_HAVE_OPENGL
+#include "g2o/core/factory.h"
 #include "g2o/stuff/opengl_wrapper.h"
 #include "g2o/stuff/opengl_primitives.h"
 #endif
@@ -105,4 +105,5 @@ void VertexSE3Expmap::oplusImpl(const number_t* update_) {
   }
 
 #endif
+
 }  // namespace g2o
