@@ -54,7 +54,8 @@ bool EdgeProjectXYZ2UV::write(std::ostream& os) const {
 void EdgeProjectXYZ2UV::computeError() {
   const VertexSE3Expmap* v1 = static_cast<const VertexSE3Expmap*>(_vertices[1]);
   const VertexPointXYZ* v2 = static_cast<const VertexPointXYZ*>(_vertices[0]);
-  const CameraParameters* cam = static_cast<const CameraParameters*>(parameter(0));
+  const CameraParameters* cam =
+      static_cast<const CameraParameters*>(parameter(0));
   _error = measurement() - cam->cam_map(v1->estimate().map(v2->estimate()));
 }
 
@@ -70,37 +71,33 @@ void EdgeProjectXYZ2UV::linearizeOplus() {
   number_t z = xyz_trans[2];
   number_t z_2 = z * z;
 
-  const CameraParameters* cam = static_cast<const CameraParameters*>(parameter(0));
+  const CameraParameters* cam =
+      static_cast<const CameraParameters*>(parameter(0));
 
-  Eigen::Matrix<number_t, 2, 3, Eigen::ColMajor> J_intr;
-  J_intr(0, 0) = -1. / z * cam->focal_length;
-  J_intr(0, 1) = 0;
-  J_intr(0, 2) = x / z_2 * cam->focal_length;
+  Eigen::Matrix<number_t, 2, 3, Eigen::ColMajor> tmp;
+  tmp(0, 0) = cam->focal_length;
+  tmp(0, 1) = 0;
+  tmp(0, 2) = -x / z * cam->focal_length;
 
-  J_intr(1, 0) = 0;
-  J_intr(1, 1) = -1. / z * cam->focal_length;
-  J_intr(1, 2) = y / z_2 * cam->focal_length;
+  tmp(1, 0) = 0;
+  tmp(1, 1) = cam->focal_length;
+  tmp(1, 2) = -y / z * cam->focal_length;
 
-  _jacobianOplusXi = J_intr * T.rotation().toRotationMatrix();
+  _jacobianOplusXi = -1. / z * tmp * T.rotation().toRotationMatrix();
 
-  /*
-  Translation Jacobian:
-  J_intr * [[   0,  -z,   y],
-            [   z,   0,  -x],
-            [-y*f, x*f,   0]]
-  */
   _jacobianOplusXj(0, 0) = x * y / z_2 * cam->focal_length;
   _jacobianOplusXj(0, 1) = -(1 + (x * x / z_2)) * cam->focal_length;
   _jacobianOplusXj(0, 2) = y / z * cam->focal_length;
+  _jacobianOplusXj(0, 3) = -1. / z * cam->focal_length;
+  _jacobianOplusXj(0, 4) = 0;
+  _jacobianOplusXj(0, 5) = x / z_2 * cam->focal_length;
 
   _jacobianOplusXj(1, 0) = (1 + y * y / z_2) * cam->focal_length;
   _jacobianOplusXj(1, 1) = -x * y / z_2 * cam->focal_length;
   _jacobianOplusXj(1, 2) = -x / z * cam->focal_length;
-
-  /*
-  Rotation Jacobian:
-  */
-  _jacobianOplusXj.block<2,3>(0, 3) = J_intr;
+  _jacobianOplusXj(1, 3) = 0;
+  _jacobianOplusXj(1, 4) = -1. / z * cam->focal_length;
+  _jacobianOplusXj(1, 5) = y / z_2 * cam->focal_length;
 }
 
 #ifdef G2O_HAVE_OPENGL

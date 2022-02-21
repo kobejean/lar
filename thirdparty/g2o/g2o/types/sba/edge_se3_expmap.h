@@ -31,6 +31,9 @@
 #include "g2o_types_sba_api.h"
 #include "vertex_se3_expmap.h"
 
+#include "g2o/config.h"
+#include "g2o/core/hyper_graph_action.h"
+
 namespace g2o {
 
 /**

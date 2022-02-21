@@ -64,6 +64,7 @@ class G2O_TYPES_SBA_API EdgeProjectXYZ2UV
     Eigen::Vector3d getDirectionVector(const CameraParameters* cam, Eigen::Vector2d kpt);
   };
 #endif
+
 }  // namespace g2o
 
 #endif
