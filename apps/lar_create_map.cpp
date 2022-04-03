@@ -17,11 +17,12 @@ int main(int argc, const char* argv[]){
 
   if (status != 0) {
     cout << "Could not read directory at '" << input << endl;
-    return 0;
+    return 1;
   }
 
   lar::Mapper mapper(input);
   mapper.readMetadata();
   lar::MapProcessor processor(mapper.data);
   processor.createMap(output);
+  return 0;
 }

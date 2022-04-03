@@ -8,18 +8,18 @@ using namespace lar;
 
 TEST(GlobalAlignmentTest, Centroids) {
   // Given
-  Mapper::Data data;
+  std::shared_ptr<Mapper::Data> data = std::make_shared<Mapper::Data>();
   GPSObservation observation1;
   observation1.relative = { 0, -6,4 };
   observation1.global = { 37.5236728, 139.9380725, 212 };
   observation1.accuracy = { 10, 10, 30};
-  data.gps_obs.push_back(observation1);
+  data->gps_obs.push_back(observation1);
 
   GPSObservation observation2;
   observation2.relative = { 1823.9011198309, -1, 0};
   observation2.global = { 37.5085404, 139.9300318, 208};
   observation2.accuracy = { 5, 5, 15 };
-  data.gps_obs.push_back(observation2);
+  data->gps_obs.push_back(observation2);
 
   GlobalAlignment aligner(data);
   // When
@@ -36,18 +36,18 @@ TEST(GlobalAlignmentTest, Centroids) {
 
 TEST(GlobalAlignmentTest, CrossCovariance) {
   // Given
-  Mapper::Data data;
+  std::shared_ptr<Mapper::Data> data = std::make_shared<Mapper::Data>();
   GPSObservation observation1;
   observation1.relative = { 0, 4, 0 };
   observation1.global = { 37.5236728, 139.9380725, 212 };
   observation1.accuracy = { 10, 0, 0 };
-  data.gps_obs.push_back(observation1);
+  data->gps_obs.push_back(observation1);
 
   GPSObservation observation2;
   observation2.relative = { 1289.6959515561, 0, 1289.6959515561 };
   observation2.global = { 37.5085404, 139.9300318, 208 };  // -0.0151324, -0.0080407, 62
   observation2.accuracy = { 5, 5, 15 };
-  data.gps_obs.push_back(observation2);
+  data->gps_obs.push_back(observation2);
 
   GlobalAlignment aligner(data);
   Vector3d rc, gc;
@@ -69,24 +69,24 @@ TEST(GlobalAlignmentTest, CrossCovariance) {
 
 TEST(GlobalAlignmentTest, UpdateAlignment) {
   // Given
-  Mapper::Data data;
+  std::shared_ptr<Mapper::Data> data = std::make_shared<Mapper::Data>();
   GPSObservation observation1;
   observation1.relative = { 0, 4, 0 };
   observation1.global = { 37.5236728, 139.9380725, 212 };
   observation1.accuracy = { 10, 0, 0 };
-  data.gps_obs.push_back(observation1);
+  data->gps_obs.push_back(observation1);
 
   GPSObservation observation2;
   observation2.relative = { 1289.6959515561, 0, 1289.6959515561 };
   observation2.global = { 37.5085404, 139.9300318, 208 };
   observation2.accuracy = { 5, 5, 15};
-  data.gps_obs.push_back(observation2);
+  data->gps_obs.push_back(observation2);
 
   GlobalAlignment aligner(data);
   // When
   aligner.updateAlignment();
   // Then
-  auto origin = data.map.origin.matrix();
+  auto origin = data->map.origin.matrix();
   EXPECT_NEAR(origin(0,0), -8.34987069574182e-06, 1e-20);
   EXPECT_NEAR(origin(0,1), 0, 1e-10);
   EXPECT_NEAR(origin(0,2), -3.3834374392020437e-06, 1e-20);

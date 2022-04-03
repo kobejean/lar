@@ -14,9 +14,9 @@ namespace lar {
   class BundleAdjustment {
     public:
       g2o::SparseOptimizer optimizer;
-      Mapper::Data& data;
+      std::shared_ptr<Mapper::Data> data;
 
-      BundleAdjustment(Mapper::Data& data);
+      BundleAdjustment(std::shared_ptr<Mapper::Data> data);
       void construct();
       void optimize();
 

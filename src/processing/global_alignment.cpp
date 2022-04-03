@@ -5,11 +5,11 @@
 
 namespace lar {
 
-  GlobalAlignment::GlobalAlignment(Mapper::Data &data) : data(data) {
+  GlobalAlignment::GlobalAlignment(std::shared_ptr<Mapper::Data> data) : data(data) {
   }
 
   void GlobalAlignment::updateAlignment() {
-    if (data.gps_obs.size() < 2) return;
+    if (data->gps_obs.size() < 2) return;
     Eigen::Vector3d rc, gc;
     centroids(rc, gc);
     Eigen::DiagonalMatrix<double,3> D = wgs84::wgs84_scaling(gc);
@@ -25,15 +25,15 @@ namespace lar {
     Tmat.block<3,3>(0,0) = D.inverse() * R;
     Tmat.block<3,1>(0,3) = gc;
     Eigen::Transform<double, 3, Eigen::Affine> T = Eigen::Transform<double, 3, Eigen::Affine>(Tmat) * Eigen::Translation<double, 3>(-rc);
-    data.map.origin = T;
+    data->map.origin = T;
   }
 
   Eigen::Matrix3d GlobalAlignment::crossCovariance(const Eigen::Vector3d rc, const Eigen::Vector3d gc, const Eigen::DiagonalMatrix<double,3> D) {
-    assert(data.gps_obs.size() >= 2);
+    assert(data->gps_obs.size() >= 2);
     Eigen::Matrix3d CC = Eigen::Matrix3d::Zero();
     
-    for (size_t i=0; i < data.gps_obs.size(); i++) {
-      GPSObservation& obs = data.gps_obs[i];
+    for (size_t i=0; i < data->gps_obs.size(); i++) {
+      GPSObservation& obs = data->gps_obs[i];
       double w = weight(obs.accuracy);
       auto dr = obs.relative - rc;
       auto dg = D * (obs.global - gc);
@@ -48,13 +48,13 @@ namespace lar {
   }
 
   void GlobalAlignment::centroids(Eigen::Vector3d& rc, Eigen::Vector3d& gc) {
-    assert(data.gps_obs.size() >= 2);
+    assert(data->gps_obs.size() >= 2);
     rc = Eigen::Vector3d::Zero();
     gc = Eigen::Vector3d::Zero();
-    if (data.gps_obs.size() == 0) return;
+    if (data->gps_obs.size() == 0) return;
     double w_sum = 0;
     
-    for (GPSObservation& obs : data.gps_obs) {
+    for (GPSObservation& obs : data->gps_obs) {
       double w = weight(obs.accuracy);
       rc += w * obs.relative;
       gc += w * obs.global;

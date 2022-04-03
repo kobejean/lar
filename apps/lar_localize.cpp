@@ -21,7 +21,7 @@ int main(int argc, const char* argv[]){
 
   if (status != 0) {
     cout << "Could not read directory at '" << input << endl;
-    return 0;
+    return 1;
   }
 
   std::ifstream map_data_ifs(input + "/map.json");
@@ -40,4 +40,5 @@ int main(int argc, const char* argv[]){
   lar::Tracker tracker(map);
   tracker.localize(image, intrinsics, transform);
   std::cout << "transform:" << transform << std::endl;
+  return 0;
 }

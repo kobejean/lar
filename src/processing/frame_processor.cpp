@@ -12,14 +12,14 @@
 
 namespace lar {
 
-  FrameProcessor::FrameProcessor(Mapper::Data& data) : data(data) {
+  FrameProcessor::FrameProcessor(std::shared_ptr<Mapper::Data> data) : data(data) {
   }
 
   void FrameProcessor::process(Frame& frame) {
     if (frame.processed) return;
 
     // Create filename paths
-    std::string path_prefix = data.getPathPrefix(frame.id).string();
+    std::string path_prefix = data->getPathPrefix(frame.id).string();
     std::string img_filepath = path_prefix + "image.jpeg";
 
     // Load image
@@ -52,7 +52,7 @@ namespace lar {
         .surface_normal=surface_normals[i],
       };
       frame.obs.push_back(obs);
-      Landmark& landmark = data.map.landmarks[landmark_ids[i]];
+      Landmark& landmark = data->map.landmarks[landmark_ids[i]];
       landmark.recordObservation(obs);
     }
 
@@ -72,7 +72,7 @@ namespace lar {
     std::vector<size_t> landmark_ids;
     landmark_ids.reserve(landmark_count);
     
-    size_t new_landmark_id = data.map.landmarks.size();
+    size_t new_landmark_id = data->map.landmarks.size();
     for (size_t i = 0; i < landmark_count; i++) {
       if (matches.find(i) == matches.end()) {
         // No match so create landmark
@@ -88,13 +88,13 @@ namespace lar {
       }
     }
 
-    data.map.landmarks.insert(new_landmarks);
+    data->map.landmarks.insert(new_landmarks);
     return landmark_ids;
   }
 
   std::map<size_t, size_t> FrameProcessor::getMatches(const cv::Mat &desc) {
     // Get matches
-    std::vector<cv::DMatch> matches = vision.match(desc, data.map.landmarks.getDescriptions());
+    std::vector<cv::DMatch> matches = vision.match(desc, data->map.landmarks.getDescriptions());
     std::cout << "matches: " << matches.size() << std::endl;
 
     // Populate `idx_matched` map
