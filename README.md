@@ -4,7 +4,7 @@
 
 LocalizeARのC＋＋ライブラリーです。
 
-SWIFT版はこちら　→　[lar-swift](https://github.com/kobejean/lar-swift)
+Swift版はこちら　→　[lar-swift](https://github.com/kobejean/lar-swift)
 
 # コンパイルする方法
 

@@ -10,9 +10,9 @@ namespace lar {
 
   class MapProcessor {
     public:
-      Mapper::Data& data;
+      std::shared_ptr<Mapper::Data> data;
       
-      MapProcessor(Mapper::Data& data);
+      MapProcessor(std::shared_ptr<Mapper::Data> data);
       void process();
       void createMap(std::string out_dir);
   };

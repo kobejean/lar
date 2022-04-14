@@ -7,9 +7,9 @@ namespace lar {
 
   class GlobalAlignment {
     public:
-      Mapper::Data& data;
+      std::shared_ptr<Mapper::Data> data;
 
-      GlobalAlignment(Mapper::Data &data);
+      GlobalAlignment(std::shared_ptr<Mapper::Data> data);
       void updateAlignment();
 
       Eigen::Matrix3d crossCovariance(const Eigen::Vector3d rc, const Eigen::Vector3d gc, const Eigen::DiagonalMatrix<double,3> D);

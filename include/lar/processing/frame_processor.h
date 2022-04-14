@@ -13,10 +13,10 @@ namespace lar {
 
   class FrameProcessor {
     public:
-      Mapper::Data& data;
+      std::shared_ptr<Mapper::Data> data;
       Vision vision;
 
-      FrameProcessor(Mapper::Data& data);
+      FrameProcessor(std::shared_ptr<Mapper::Data> data);
       void process(Frame& frame);
 
     private:

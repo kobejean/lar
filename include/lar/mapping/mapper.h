@@ -34,7 +34,7 @@ namespace lar {
           };
       };
 
-      Data data;
+      std::shared_ptr<Data> data = std::make_shared<Data>();
       LocationMatcher location_matcher;
 
       Mapper(fs::path directory);

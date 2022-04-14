@@ -36,7 +36,7 @@ TEST(MapperTest, WriteMetadata) {
     .global=global,
     .accuracy=accuracy
   };
-  mapper.data.gps_obs.push_back(observation);
+  mapper.data->gps_obs.push_back(observation);
   mapper.addFrame(frame, image, depth, confidence);
   // When
   mapper.writeMetadata();
@@ -90,14 +90,14 @@ TEST(MapperTest, ReadMetadata) {
   // When
   mapper.readMetadata();
   // Then
-  EXPECT_EQ(mapper.data.frames[0].timestamp, 136463350);
-  EXPECT_NEAR(mapper.data.frames[0].intrinsics(0,0), 1594.7247314453125, 1e-10);
-  EXPECT_NEAR(mapper.data.frames[0].intrinsics(0,1), 0, 1e-10);
-  EXPECT_NEAR(mapper.data.frames[0].intrinsics(0,2), 952.86053466796875, 1e-10);
-  EXPECT_NEAR(mapper.data.frames[0].intrinsics(1,0), 0, 1e-10);
-  EXPECT_NEAR(mapper.data.frames[0].intrinsics(1,1), 1594.7247314453125, 1e-10);
-  EXPECT_NEAR(mapper.data.frames[0].intrinsics(1,2), 714.1676025390625, 1e-10);
-  EXPECT_NEAR(mapper.data.frames[0].intrinsics(2,0), 0, 1e-10);
-  EXPECT_NEAR(mapper.data.frames[0].intrinsics(2,1), 0, 1e-10);
-  EXPECT_NEAR(mapper.data.frames[0].intrinsics(2,2), 1, 1e-10);
+  EXPECT_EQ(mapper.data->frames[0].timestamp, 136463350);
+  EXPECT_NEAR(mapper.data->frames[0].intrinsics(0,0), 1594.7247314453125, 1e-10);
+  EXPECT_NEAR(mapper.data->frames[0].intrinsics(0,1), 0, 1e-10);
+  EXPECT_NEAR(mapper.data->frames[0].intrinsics(0,2), 952.86053466796875, 1e-10);
+  EXPECT_NEAR(mapper.data->frames[0].intrinsics(1,0), 0, 1e-10);
+  EXPECT_NEAR(mapper.data->frames[0].intrinsics(1,1), 1594.7247314453125, 1e-10);
+  EXPECT_NEAR(mapper.data->frames[0].intrinsics(1,2), 714.1676025390625, 1e-10);
+  EXPECT_NEAR(mapper.data->frames[0].intrinsics(2,0), 0, 1e-10);
+  EXPECT_NEAR(mapper.data->frames[0].intrinsics(2,1), 0, 1e-10);
+  EXPECT_NEAR(mapper.data->frames[0].intrinsics(2,2), 1, 1e-10);
 }
