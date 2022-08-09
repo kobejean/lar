@@ -9,7 +9,7 @@ set_target_properties(lar_create_map
   # EXCLUDE_FROM_ALL ON
 )
 
-# Create lar_create_map executable
+# Create lar_localize executable
 add_executable(lar_localize lar_localize.cpp)
 target_link_libraries(lar_localize
   lar_tracking
@@ -18,5 +18,16 @@ target_link_libraries(lar_localize
 set_target_properties(lar_localize
   PROPERTIES
   XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER com.local-ar.localize
+  # EXCLUDE_FROM_ALL ON
+)
+
+# Create lar_rtree executable
+add_executable(lar_rtree lar_rtree.cpp)
+target_link_libraries(lar_rtree
+  lar_core
+)
+set_target_properties(lar_rtree
+  PROPERTIES
+  XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER com.local-ar.rtree
   # EXCLUDE_FROM_ALL ON
 )

@@ -1,5 +1,5 @@
 SHELL = /bin/bash
-
+VERBOSE = 0
 ifeq ($(VERBOSE), 1)
 	QUIET=
 else
@@ -18,7 +18,7 @@ compact: configure
 
 fast: CMAKE_ARGS = -DCMAKE_BUILD_TYPE=Release
 fast: configure
-	$(MAKE) $(QUIET) VERBOSE=1 -C build -j 8
+	$(MAKE) $(QUIET) -C build -j 8
 
 tests: CMAKE_ARGS = -DLAR_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
 tests: configure

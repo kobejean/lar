@@ -1,23 +1,18 @@
 set(LAR_CORE_TEST_SRCS
-  "${CMAKE_CURRENT_SOURCE_DIR}/utils/json_test.cpp"
-  "${CMAKE_CURRENT_SOURCE_DIR}/utils/wgs84_test.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/map_test.cpp"
 )
-set(LAR_CORE_TEST_SRCS ${LAR_CORE_TEST_SRCS} PARENT_SCOPE)
 
 set(LAR_CORE_TEST_LIBS lar_core)
-set(LAR_CORE_TEST_LIBS ${LAR_CORE_TEST_LIBS} PARENT_SCOPE)
 
+add_executable(lar_core_test ${LAR_CORE_TEST_SRCS})
+target_link_libraries(lar_core_test ${LAR_CORE_TEST_LIBS} gtest_main)
 
-add_executable(
-  lar_core_test
-  ${LAR_CORE_TEST_SRCS}
-)
-target_link_libraries(
-  lar_core_test
-  ${LAR_CORE_TEST_LIBS}
-  gtest_main
-)
+add_subdirectory(spacial)
+add_subdirectory(utils)
 
 include(GoogleTest)
 gtest_discover_tests(lar_core_test)
+
+# add tests to parent targets
+target_sources(lar_test PRIVATE ${LAR_CORE_TEST_SRCS})
+target_link_libraries(lar_test ${LAR_CORE_TEST_LIBS})

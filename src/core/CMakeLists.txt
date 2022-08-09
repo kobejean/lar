@@ -21,3 +21,5 @@ target_link_libraries(lar_core
   Eigen3::Eigen
   nlohmann_json::nlohmann_json
 )
+
+add_subdirectory(spacial)
