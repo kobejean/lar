@@ -5,6 +5,10 @@
 
 namespace lar {
 
+  namespace {
+
+  }
+
   Tracker::Tracker(Map map) {
     this->map = map;
   }
@@ -23,16 +27,25 @@ namespace lar {
   }
 
   bool Tracker::localize(cv::InputArray image, const cv::Mat& intrinsics, const cv::Mat& dist_coeffs, cv::Mat &rvec, cv::Mat &tvec, bool use_extrinsic_guess) {
+    // get map descriptors
+    std::vector<Landmark> landmarks;
+    if (tvec.empty()) {
+      landmarks = map.landmarks.all;
+    } else {
+      double query_diameter = 200;
+      Rect query = Rect(Point(tvec.at<double>(0), tvec.at<double>(2)), query_diameter, query_diameter);
+      landmarks = map.landmarks.find(query);
+    }
+    cv::Mat map_desc = Landmark::concatDescriptions(landmarks);
     // Extract Features
     std::vector<cv::KeyPoint> kpts;
     cv::Mat desc;
     vision.extractFeatures(image, cv::noArray(), kpts, desc);
-    cv::Mat map_desc = map.landmarks.getDescriptions();
     std::vector<cv::DMatch> matches = vision.match(desc, map_desc);
     std::cout << "matches.size()" << matches.size() << std::endl;
     if (matches.size() <= 3) return false; 
     
-    cv::Mat object_points = objectPoints(matches);
+    cv::Mat object_points = objectPoints(landmarks, matches);
     cv::Mat image_points = imagePoints(matches, kpts);
     cv::Mat inliers;
 
@@ -46,11 +59,11 @@ namespace lar {
 
   // Private Methods
 
-  cv::Mat Tracker::objectPoints(const std::vector<cv::DMatch>& matches) {
+  cv::Mat Tracker::objectPoints(const std::vector<Landmark> &landmarks, const std::vector<cv::DMatch>& matches) {
     cv::Mat object_points(matches.size(), 3, CV_32FC1);
     for (size_t i = 0; i < matches.size(); i++) {
       cv::DMatch match = matches[i];
-      Eigen::Vector3d position = map.landmarks[match.trainIdx].position;
+      const Eigen::Vector3d position = landmarks[match.trainIdx].position;
       object_points.at<float>(i,0) = position.x();
       object_points.at<float>(i,1) = position.y();
       object_points.at<float>(i,2) = position.z();

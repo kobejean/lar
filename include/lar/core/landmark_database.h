@@ -2,6 +2,7 @@
 #define LAR_CORE_LANDMARK_DATABASE_H
 
 #include "lar/core/landmark.h"
+#include "lar/core/spacial/region_tree.h"
 
 namespace lar {
 
@@ -15,12 +16,14 @@ namespace lar {
       const Landmark& operator[](size_t id) const;
 
       void insert(const std::vector<Landmark>& landmarks);
+      std::vector<Landmark> find(const Rect &query) const;
       size_t size() const;
-      cv::Mat getDescriptions() const;
 
 #ifndef LAR_COMPACT_BUILD
       void cull();
 #endif
+    // private: // TODO: make private
+      RegionTree<size_t> _rtree;
   };
   
 }

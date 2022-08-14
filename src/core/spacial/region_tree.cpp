@@ -13,6 +13,9 @@ template <typename T>
 RegionTree<T>* _insert(RegionTree<T> *root, RegionTree<T> *node);
 
 template <typename T>
+void _find(const RegionTree<T> *root, const Rect &query, std::vector<T> &result);
+
+template <typename T>
 void _print(std::ostream &os, const RegionTree<T> *node, int depth);
 
 template <typename T>
@@ -38,7 +41,10 @@ RegionTree<T>::RegionTree(T value, Rect bounds, size_t id) : bounds(bounds), val
 
 template <typename T>
 RegionTree<T>::~RegionTree() {
-  
+  std::cout << "~RegionTree() " << children.size() << std::endl;
+  // for (auto &child : children) {
+  //   child->print(std::cout);
+  // }
 }
 
 template <typename T>
@@ -62,17 +68,10 @@ void RegionTree<T>::insert(T value, Rect bounds, size_t id) {
 }
 
 template <typename T>
-void RegionTree<T>::find(const Rect &query, std::vector<T> &result) {
-  if (_isLeaf(this)) {
-    result.push_back(this->value);
-    return;
-  }
-
-  for (auto & child : children) {
-    if (child->bounds.intersectsWith(query)) {
-      child->find(query, result);
-    }
-  }
+std::vector<T> RegionTree<T>::find(const Rect &query) const {
+  std::vector<T> result;
+  if (children.size() > 0) _find(this, query, result);
+  return result;
 }
 
 template <typename T>
@@ -149,6 +148,20 @@ void _linearPickSeeds(std::vector<RegionTree<T>*> &children, RegionTree<T> **see
   children.pop_back();
   children[hx] = children.back();
   children.pop_back();
+}
+
+template <typename T>
+void _find(const RegionTree<T> *root, const Rect &query, std::vector<T> &result) {
+  if (_isLeaf(root)) {
+    result.push_back(root->value);
+    return;
+  }
+
+  for (auto & child : root->children) {
+    if (child->bounds.intersectsWith(query)) {
+      _find(child, query, result);
+    }
+  }
 }
 
 
@@ -301,6 +314,7 @@ RegionTree<T> *_findBestInsertChild(RegionTree<T> *root, RegionTree<T> *node) {
 
 // explicit instantiations
 template class RegionTree<int>;
-template class RegionTree<Landmark>;
+template class RegionTree<size_t>;
+// template class RegionTree<Landmark>;
 
 } // namespace lar

@@ -11,7 +11,7 @@ namespace lar {
   template <typename T>
   class RegionTree {
     public: 
-      static constexpr std::size_t MAX_CHILDREN = 5;
+      static constexpr std::size_t MAX_CHILDREN = 50;
       Rect bounds;
       T value;
       size_t id;
@@ -21,7 +21,7 @@ namespace lar {
       RegionTree(T value, Rect bounds, size_t id);
       ~RegionTree();
       void insert(T value, Rect bounds, size_t id);
-      void find(const Rect &query, std::vector<T> &result);
+      std::vector<T> find(const Rect &query) const;
       void print(std::ostream &os);
   };
 

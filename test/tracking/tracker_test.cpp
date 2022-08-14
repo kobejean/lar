@@ -12,15 +12,15 @@ TEST(TrackerTest, LocalizeWithTransform) {
   std::ifstream map_data_ifs("./test/_fixture/processed_map_data/map.json");
   lar::Map map = nlohmann::json::parse(map_data_ifs);
   cv::Mat image = cv::imread("./test/_fixture/raw_map_data/00000004_image.jpeg", cv::IMREAD_GRAYSCALE);
-  cv::Mat intrinsics(3, 3, CV_32FC1);
-  intrinsics.at<float>(0,0) = 1594.2728271484375;
-  intrinsics.at<float>(1,1) = 1594.2728271484375;
-  intrinsics.at<float>(0,2) = 952.8714599609375;
-  intrinsics.at<float>(1,2) = 714.1612548828125;
-  intrinsics.at<float>(2,2) = 1.;
+  cv::Mat intrinsics = (cv::Mat_<float>(3,3) << 1594.2728271484375, 0., 952.8714599609375,
+                                                0., 1594.2728271484375, 714.1612548828125, 
+                                                0., 0., 1.);
+  cv::Mat transform = (cv::Mat_<double>(4,4) << 1., 0., 0., -3.,
+                                                0., 1., 0., -0.,
+                                                0., 0., 1., -27.,
+                                                0., 0., 0., 1.);
   Tracker tracker(map);
   // When
-  cv::Mat transform;
   tracker.localize(image, intrinsics, transform);
   // Then
   EXPECT_NEAR(transform.at<double>(0,0), -0.27073314785957336, 1e-2);

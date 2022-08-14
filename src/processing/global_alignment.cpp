@@ -14,7 +14,7 @@ namespace lar {
     centroids(rc, gc);
     Eigen::DiagonalMatrix<double,3> D = wgs84::wgs84_scaling(gc);
     Eigen::Matrix3d CC = crossCovariance(rc, gc, D);
-    Eigen::JacobiSVD<Eigen::Matrix3d> svd(CC, Eigen::ComputeThinU | Eigen::ComputeThinV);
+    Eigen::JacobiSVD<Eigen::Matrix3d> svd(CC, Eigen::ComputeFullU | Eigen::ComputeFullV);
     
     Eigen::Matrix3d R = svd.matrixU() * svd.matrixV().transpose();
     R(0,1) = 0;

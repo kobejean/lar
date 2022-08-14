@@ -35,9 +35,17 @@ int main(int argc, const char* argv[]){
   intrinsics.at<float>(0,2) = 952.7379150390625;
   intrinsics.at<float>(1,2) = 714.167236328125;
   intrinsics.at<float>(2,2) = 1.;
-  cv::Mat transform;
+  cv::Mat transform;//(4, 4, CV_64FC1);
+  // transform.at<double>(0,3) = 0.;
+  // transform.at<double>(1,3) = 0.;
+  // transform.at<double>(2,3) = 0.;
+  // transform.at<double>(0,0) = 1.;
+  // transform.at<double>(1,1) = 1.;
+  // transform.at<double>(2,2) = 1.;
+  // transform.at<double>(3,3) = 1.;
 
   lar::Tracker tracker(map);
+  std::cout << "parse map" << std::endl;
   tracker.localize(image, intrinsics, transform);
   std::cout << "transform:" << transform << std::endl;
   return 0;

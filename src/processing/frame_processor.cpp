@@ -61,9 +61,12 @@ namespace lar {
 
   // Private methods
 
+  // TODO: See if there is a better way to deal with the side effect of inserting into map.landmarks
   std::vector<size_t> FrameProcessor::getLandmarkIds(const Frame &frame, const cv::Mat &desc, const std::vector<cv::KeyPoint>& kpts, const std::vector<float>& depth) {
     // Filter out features that have been matched
-    std::map<size_t, size_t> matches = getMatches(desc);
+    double query_diameter = 50.0;
+    Rect query = Rect(Point(frame.extrinsics(0,3), frame.extrinsics(2,3)), query_diameter, query_diameter);
+    std::map<size_t, size_t> matches = getMatches(desc, query);
     Projection projection(frame.intrinsics, frame.extrinsics);
 
     size_t landmark_count = kpts.size();
@@ -81,6 +84,7 @@ namespace lar {
 
         landmark_ids.push_back(new_landmark_id);
         new_landmarks.push_back(landmark);
+        // std::cout << "new landmark: " << new_landmark_id << std::endl;
         new_landmark_id++;
       } else {
         // We have a match so just push the match index
@@ -92,16 +96,18 @@ namespace lar {
     return landmark_ids;
   }
 
-  std::map<size_t, size_t> FrameProcessor::getMatches(const cv::Mat &desc) {
+  std::map<size_t, size_t> FrameProcessor::getMatches(const cv::Mat &desc, const Rect &query) {
     // Get matches
-    std::vector<cv::DMatch> matches = vision.match(desc, data->map.landmarks.getDescriptions());
+    std::vector<Landmark> landmarks = data->map.landmarks.find(query);
+    const cv::Mat &existing_desc = Landmark::concatDescriptions(landmarks);
+    std::vector<cv::DMatch> matches = vision.match(desc, existing_desc);
     std::cout << "matches: " << matches.size() << std::endl;
 
     // Populate `idx_matched` map
     std::map<size_t, size_t> idx_matched;
     for (size_t i = 0; i < matches.size(); i++) {
       int idx = matches[i].queryIdx;
-      idx_matched[idx] = matches[i].trainIdx;
+      idx_matched[idx] = landmarks[matches[i].trainIdx].id;
     }
 
     // Populate unmatched descriptions
