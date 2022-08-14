@@ -1,26 +1,26 @@
 #include <gtest/gtest.h>
-#include "lar/core/spacial/rectangle.h"
+#include "lar/core/spacial/rect.h"
 
 using namespace lar;
 
-TEST(RectangleTest, Print) {
+TEST(RectTest, Print) {
   // Given
   std::ostringstream output;
-  lar::Rectangle rect(1, 2, 3, 4);
+  lar::Rect rect(1, 2, 3, 4);
   // When
   rect.print(output);
   // Then
   EXPECT_EQ(output.str(), "( 1, 2 ) - ( 3, 4 )" );
 }
 
-TEST(RectangleTest, IntersectsWithIdenticalRectangles) {
+TEST(RectTest, IntersectsWithIdenticalRects) {
   // Given
   std::ostringstream output;
-  lar::Rectangle rect1( 1,  2,  3,  4);
-  lar::Rectangle rect2(-4, -3, -2, -1);
-  lar::Rectangle rect3( 1,  1,  1,  1);
-  lar::Rectangle rect4( 0,  0,  0,  0);
-  lar::Rectangle rect5(-1, -1, -1, -1);
+  lar::Rect rect1( 1,  2,  3,  4);
+  lar::Rect rect2(-4, -3, -2, -1);
+  lar::Rect rect3( 1,  1,  1,  1);
+  lar::Rect rect4( 0,  0,  0,  0);
+  lar::Rect rect5(-1, -1, -1, -1);
   // Then
   EXPECT_TRUE(rect1.intersectsWith(rect1));
   EXPECT_TRUE(rect2.intersectsWith(rect2));
@@ -29,14 +29,14 @@ TEST(RectangleTest, IntersectsWithIdenticalRectangles) {
   EXPECT_TRUE(rect5.intersectsWith(rect5));
 }
 
-TEST(RectangleTest, IntersectsWithIntersectingRectangles) {
+TEST(RectTest, IntersectsWithIntersectingRects) {
   // Given
-  lar::Rectangle rect_center(-1, -1, 1, 1);
-  lar::Rectangle rect_above(-0.9, 1, 0.9, 2);
-  lar::Rectangle rect_below(-0.9, -2, 0.9, -1);
-  lar::Rectangle rect_right(1, -0.9, 2, 0.9);
-  lar::Rectangle rect_left(-2, -0.9, 1, 0.9);
-  lar::Rectangle rect_inside(-0.9, -0.9, 0.9, 0.9);
+  lar::Rect rect_center(-1, -1, 1, 1);
+  lar::Rect rect_above(-0.9, 1, 0.9, 2);
+  lar::Rect rect_below(-0.9, -2, 0.9, -1);
+  lar::Rect rect_right(1, -0.9, 2, 0.9);
+  lar::Rect rect_left(-2, -0.9, 1, 0.9);
+  lar::Rect rect_inside(-0.9, -0.9, 0.9, 0.9);
   // Then
   EXPECT_TRUE(rect_center.intersectsWith(rect_above));
   EXPECT_TRUE(rect_center.intersectsWith(rect_below));
@@ -50,13 +50,13 @@ TEST(RectangleTest, IntersectsWithIntersectingRectangles) {
   EXPECT_TRUE(rect_inside.intersectsWith(rect_center));
 }
 
-TEST(RectangleTest, IntersectsWithDisjoinedRectangles) {
+TEST(RectTest, IntersectsWithDisjoinedRects) {
   // Given
-  lar::Rectangle rect_center(-1, -1, 1, 1);
-  lar::Rectangle rect_above(-2, 1.1, 2, 2);
-  lar::Rectangle rect_below(-2, -2, 2, -1.1);
-  lar::Rectangle rect_right(1.1, -2, 2, 2);
-  lar::Rectangle rect_left(-2, -2, -1.1, 2);
+  lar::Rect rect_center(-1, -1, 1, 1);
+  lar::Rect rect_above(-2, 1.1, 2, 2);
+  lar::Rect rect_below(-2, -2, 2, -1.1);
+  lar::Rect rect_right(1.1, -2, 2, 2);
+  lar::Rect rect_left(-2, -2, -1.1, 2);
   // Then
   EXPECT_FALSE(rect_center.intersectsWith(rect_above));
   EXPECT_FALSE(rect_center.intersectsWith(rect_below));

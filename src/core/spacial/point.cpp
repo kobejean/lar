@@ -9,4 +9,11 @@ namespace lar {
   Point::Point() : Point(0, 0) {
   }
 
+  double Point::dist2(Point &other) const {
+    return (x - other.x) * (x - other.x) + (y - other.y) * (y - other.y);
+  }
+
+  double Point::l1() const {
+    return x + y;
+  }
 }

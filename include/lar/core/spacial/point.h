@@ -10,6 +10,9 @@ namespace lar {
 
     Point(double x, double y);
     Point();
+
+    double dist2(Point &other) const;
+    double l1() const;
   };
 
 }
