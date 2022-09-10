@@ -40,6 +40,8 @@ namespace lar {
       // Auxilary data
       int sightings{0};
       long long last_seen;
+      bool is_matched{false};
+      // bool is_inlier{false};
       
       void recordObservation(Observation observation);
       bool isUseable() const;

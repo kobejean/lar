@@ -28,15 +28,14 @@ namespace lar {
 
   bool Tracker::localize(cv::InputArray image, const cv::Mat& intrinsics, const cv::Mat& dist_coeffs, cv::Mat &rvec, cv::Mat &tvec, bool use_extrinsic_guess) {
     // get map descriptors
-    std::vector<Landmark> landmarks;
     if (tvec.empty()) {
-      landmarks = map.landmarks.all;
+      local_landmarks = map.landmarks.all;
     } else {
-      double query_diameter = 200;
+      double query_diameter = 50;
       Rect query = Rect(Point(tvec.at<double>(0), tvec.at<double>(2)), query_diameter, query_diameter);
-      landmarks = map.landmarks.find(query);
+      local_landmarks = map.landmarks.find(query);
     }
-    cv::Mat map_desc = Landmark::concatDescriptions(landmarks);
+    cv::Mat map_desc = Landmark::concatDescriptions(local_landmarks);
     // Extract Features
     std::vector<cv::KeyPoint> kpts;
     cv::Mat desc;
@@ -45,7 +44,7 @@ namespace lar {
     std::cout << "matches.size()" << matches.size() << std::endl;
     if (matches.size() <= 3) return false; 
     
-    cv::Mat object_points = objectPoints(landmarks, matches);
+    cv::Mat object_points = objectPoints(local_landmarks, matches);
     cv::Mat image_points = imagePoints(matches, kpts);
     cv::Mat inliers;
 
@@ -54,6 +53,14 @@ namespace lar {
     std::cout << "kpts.size()" << kpts.size() << std::endl;
     std::cout << "matches.size()" << matches.size() << std::endl;
     std::cout << "inliers.size()" << inliers.size() << std::endl;
+
+#ifndef LAR_COMPACT_BUILD
+    // mark matches
+    for (auto &match : matches) {
+      local_landmarks[match.trainIdx].is_matched = true;
+    }
+#endif
+
     return success;
   }
 

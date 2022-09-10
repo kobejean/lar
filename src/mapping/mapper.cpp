@@ -38,27 +38,16 @@ namespace lar {
   }
 
   void Mapper::writeMetadata() {
-    {
-    std::ofstream file(data->directory / "frames.json");
-    nlohmann::json json = data->frames;
-    file << json << std::endl;
-    }
-    {
-    std::ofstream file(data->directory / "gps.json");
-    nlohmann::json json = data->gps_obs;
-    file << json << std::endl;
-    }
+    nlohmann::json frames_json = data->frames;
+    std::ofstream(data->directory / "frames.json") << frames_json << std::endl;
+    
+    nlohmann::json gps_json = data->gps_obs;
+    std::ofstream(data->directory / "gps.json") << gps_json << std::endl;
   }
 
   void Mapper::readMetadata() {
-    {
-    std::ifstream ifs(data->directory / "frames.json");
-    data->frames = nlohmann::json::parse(ifs);
-    }
-    {
-    std::ifstream ifs(data->directory / "gps.json");
-    data->gps_obs = nlohmann::json::parse(ifs);
-    }
+    data->frames = nlohmann::json::parse(std::ifstream(data->directory / "frames.json"));
+    data->gps_obs = nlohmann::json::parse(std::ifstream(data->directory / "gps.json"));
   }
 
 }
