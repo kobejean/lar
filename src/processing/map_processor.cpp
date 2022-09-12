@@ -29,8 +29,8 @@ namespace lar {
     bundle_adjustment.optimize();
   }
 
-  void MapProcessor::createMap(std::string out_dir) {
-    std::filesystem::create_directory(out_dir);
+  void MapProcessor::createMap(std::string dir) {
+    std::filesystem::create_directory(dir);
 
     // Update GPS alignment
     GlobalAlignment global_alignment(data);
@@ -46,7 +46,7 @@ namespace lar {
     BundleAdjustment bundle_adjustment(data);
     bundle_adjustment.construct();
 
-    std::string output = out_dir + "/map.g2o";
+    std::string output = dir + "/map.g2o";
 
     std::cout << std::endl;
     bundle_adjustment.optimizer.save(output.c_str());
@@ -58,7 +58,7 @@ namespace lar {
     // Serialize
     nlohmann::json map_json = data->map;
     // Save
-    std::ofstream file(out_dir + "/map.json");
+    std::ofstream file(dir + "/map.json");
     file << std::setw(2) << map_json << std::endl;
   }
 

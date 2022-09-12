@@ -14,7 +14,8 @@ namespace lar {
       
       MapProcessor(std::shared_ptr<Mapper::Data> data);
       void process();
-      void createMap(std::string out_dir);
+      void createMap(std::string dir);
+      void loadMap(std::string dir);
   };
 }
 
