@@ -3,6 +3,7 @@
 
 #include <array>
 #include <vector>
+#include <memory>
 #include <iostream>
 #include "lar/core/spacial/rect.h"
 
@@ -11,7 +12,7 @@ namespace lar {
   template <typename T>
   class RegionTree {
     public: 
-      static constexpr std::size_t MAX_CHILDREN = 7;
+      static constexpr std::size_t MAX_CHILDREN = 50;
       
       RegionTree();
       void insert(T value, Rect bounds, size_t id);

@@ -109,9 +109,9 @@ namespace lar {
     optimizer.addVertex(vertex);
   }
 
-  void BundleAdjustment::addOdometry(size_t last_frame_id) {
-    g2o::VertexSE3Expmap* v1 = dynamic_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(last_frame_id-1));
-    g2o::VertexSE3Expmap* v2 = dynamic_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(last_frame_id));
+  void BundleAdjustment::addOdometry(size_t frame_id) {
+    g2o::VertexSE3Expmap* v1 = dynamic_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(frame_id-1));
+    g2o::VertexSE3Expmap* v2 = dynamic_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(frame_id));
     g2o::SE3Quat pose_change = v2->estimate() * v1->estimate().inverse();
 
     g2o::EdgeSE3Expmap * e = new g2o::EdgeSE3Expmap();

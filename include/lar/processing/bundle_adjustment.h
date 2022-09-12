@@ -32,7 +32,7 @@ namespace lar {
       
       bool addLandmark(const Landmark& landmark, size_t id);
       void addPose(const Eigen::Matrix4d& extrinsics, size_t id, bool fixed);
-      void addOdometry(size_t last_frame_id);
+      void addOdometry(size_t frame_id);
       void addIntrinsics(const Eigen::Matrix3d& intrinsics, size_t id);
       void addLandmarkMeasurements(const Landmark& landmark, size_t id);
 
