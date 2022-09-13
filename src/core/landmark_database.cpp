@@ -16,10 +16,7 @@ namespace lar {
     all.reserve(all.size() + std::distance(landmarks.begin(), landmarks.end()));
     all.insert(all.end(), landmarks.begin(), landmarks.end());
     for (const Landmark& landmark : landmarks) {
-      Point center = Point(landmark.cam_position.x(), landmark.cam_position.y());
-      // std::cout << "landmark.distance: " << landmark.distance << std::endl;
-      Rect bounds(center, landmark.distance, landmark.distance);
-      _rtree.insert(landmark.id, bounds, landmark.id);
+      _rtree.insert(landmark.id, landmark.bounds(), landmark.id);
     }
   }
 
@@ -40,10 +37,12 @@ namespace lar {
   void LandmarkDatabase::cull() {
     // TODO: cull rtree nodes as well
     std::vector<Landmark> landmarks;
+    _rtree = RegionTree<size_t>();
     for (Landmark& landmark : all) {
       if (landmark.isUseable()) {
         landmark.id = landmarks.size();
         landmarks.push_back(landmark);
+        _rtree.insert(landmark.id, landmark.bounds(), landmark.id);
       }
     }
     all = landmarks;

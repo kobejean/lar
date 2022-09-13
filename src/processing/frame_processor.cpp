@@ -42,7 +42,6 @@ namespace lar {
     // Create landmark observations
     for (size_t i=0; i<kpts.size(); i++) {
       Landmark::Observation obs{
-        .landmark_id=landmark_ids[i],
         .frame_id=frame.id,
         .timestamp=frame.timestamp,
         .cam_position=frame.extrinsics.block<3,1>(0,3),
@@ -51,7 +50,6 @@ namespace lar {
         .depth_confidence=confidence_values[i],
         .surface_normal=surface_normals[i],
       };
-      frame.obs.push_back(obs);
       Landmark& landmark = data->map.landmarks[landmark_ids[i]];
       landmark.recordObservation(obs);
     }

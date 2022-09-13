@@ -9,6 +9,12 @@ namespace lar {
     id(id), position(position), desc(desc) {
   }
 
+  Rect Landmark::bounds() const {
+    Point center = Point(cam_position.x(), cam_position.y());
+    Rect bounds(center, distance, distance);
+    return bounds;
+  }
+
   // Static Methods
 
   cv::Mat Landmark::concatDescriptions(const std::vector<Landmark>& landmarks) {
@@ -22,6 +28,7 @@ namespace lar {
 #ifndef LAR_COMPACT_BUILD
 
   void Landmark::recordObservation(Observation observation) {
+    obs.push_back(observation);
     // TODO: find a good way to estimate the region where the landmark can be seen for good indexing
     if (sightings == 0) {
       Eigen::Vector2d position2(position.x(), position.z());

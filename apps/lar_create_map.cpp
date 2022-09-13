@@ -23,6 +23,6 @@ int main(int argc, const char* argv[]){
   lar::Mapper mapper(input);
   mapper.readMetadata();
   lar::MapProcessor processor(mapper.data);
-  processor.createMap(output);
+  processor.saveMap(output);
   return 0;
 }

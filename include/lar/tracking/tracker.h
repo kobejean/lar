@@ -12,6 +12,7 @@ namespace lar {
     public:
       Vision vision;
       Map map;
+      std::vector<Landmark> local_landmarks;
 
       Tracker(Map map);
       bool localize(cv::InputArray image, const cv::Mat& intrinsics, cv::Mat &transform);

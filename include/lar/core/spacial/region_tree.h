@@ -3,6 +3,7 @@
 
 #include <array>
 #include <vector>
+#include <memory>
 #include <iostream>
 #include "lar/core/spacial/rect.h"
 
@@ -12,17 +13,14 @@ namespace lar {
   class RegionTree {
     public: 
       static constexpr std::size_t MAX_CHILDREN = 50;
-      Rect bounds;
-      T value;
-      size_t id;
-      std::vector<RegionTree*> children;
-
+      
       RegionTree();
-      RegionTree(T value, Rect bounds, size_t id);
-      ~RegionTree();
       void insert(T value, Rect bounds, size_t id);
       std::vector<T> find(const Rect &query) const;
       void print(std::ostream &os);
+
+    private:
+      std::shared_ptr<void> root;
   };
 
 }

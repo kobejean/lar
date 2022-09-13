@@ -22,13 +22,13 @@ namespace lar {
 
       Landmark();
       Landmark(const Eigen::Vector3d& position, const cv::Mat& desc, size_t id);
+      Rect bounds() const;
 
       static cv::Mat concatDescriptions(const std::vector<Landmark>& landmarks);
 
 #ifndef LAR_COMPACT_BUILD
 
       struct Observation {
-        size_t landmark_id;
         size_t frame_id;
         long long timestamp;
         Eigen::Vector3d cam_position;
@@ -39,7 +39,9 @@ namespace lar {
       };
       // Auxilary data
       int sightings{0};
+      std::vector<Observation> obs;
       long long last_seen;
+      bool is_matched{false};
       
       void recordObservation(Observation observation);
       bool isUseable() const;

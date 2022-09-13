@@ -3,8 +3,9 @@
 
 #include <string>
 
-#include "lar/mapping/mapper.h"
 #include "lar/core/map.h"
+#include "lar/mapping/mapper.h"
+#include "lar/processing/bundle_adjustment.h"
 
 namespace lar {
 
@@ -14,7 +15,9 @@ namespace lar {
       
       MapProcessor(std::shared_ptr<Mapper::Data> data);
       void process();
-      void createMap(std::string out_dir);
+      void saveMap(std::string dir);
+    private:
+      BundleAdjustment bundle_adjustment;
   };
 }
 

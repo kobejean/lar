@@ -18,7 +18,6 @@ namespace lar {
       Eigen::Matrix4d extrinsics;
       // Auxilary data
       bool processed{false};
-      std::vector<Landmark::Observation> obs;
 
       Frame();
   };

@@ -32,36 +32,43 @@ namespace lar {
   }
 
   void BundleAdjustment::construct() {
-
-    // Add landmarks to graph
-    size_t landmark_count = data->map.landmarks.size();
-    for (size_t i = 0; i < landmark_count; i++) {
-      Landmark &landmark = data->map.landmarks[i];
-      _stats.total_usable_landmarks += addLandmark(landmark, i);
-    }
+    _stats = Stats();
+    _stats.landmarks = std::vector<size_t>(data->frames.size(),0);
+    _stats.usable_landmarks = std::vector<size_t>(data->frames.size(),0);
 
     // Use frame data to add poses and measurements
-    size_t frame_id = landmark_count;
-    for (size_t i = 0; i < data->frames.size(); i++) {
+    for (size_t frame_id = 0; frame_id < data->frames.size(); frame_id++) {
       // Add camera pose vertex
-      Frame const& frame = data->frames[i];
-      addPose(frame.extrinsics, frame_id, i == 0);
+      Frame const& frame = data->frames[frame_id];
+      addPose(frame.extrinsics, frame_id, frame_id == data->frames.size() - 1);
 
       // Add odometry measurement edge if not first frame
-      if (frame_id > landmark_count) {
+      if (frame_id > 0) {
         addOdometry(frame_id);
       }
 
       // Add camera intrinsics parameters
-      size_t params_id = i+1;
+      size_t params_id = frame_id+1;
       addIntrinsics(frame.intrinsics, params_id);
-      addLandmarkMeasurements(frame, frame_id, params_id);
+    }
 
-      frame_id++;
+    // Add landmarks to graph
+    size_t landmark_count = data->map.landmarks.size();
+    for (size_t landmark_id = 0; landmark_id < landmark_count; landmark_id++) {
+      Landmark &landmark = data->map.landmarks[landmark_id];
+      size_t id = landmark_id + data->frames.size();
+      _stats.total_usable_landmarks += addLandmark(landmark, id);
+      addLandmarkMeasurements(landmark, id);
     }
     
     // Print statistics for debuging purposes
     _stats.print();
+  }
+
+
+  void BundleAdjustment::reset() {
+    optimizer.clear();
+    optimizer.clearParameters();
   }
 
   void BundleAdjustment::optimize() {
@@ -103,9 +110,9 @@ namespace lar {
     optimizer.addVertex(vertex);
   }
 
-  void BundleAdjustment::addOdometry(size_t last_frame_id) {
-    g2o::VertexSE3Expmap* v1 = dynamic_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(last_frame_id-1));
-    g2o::VertexSE3Expmap* v2 = dynamic_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(last_frame_id));
+  void BundleAdjustment::addOdometry(size_t frame_id) {
+    g2o::VertexSE3Expmap* v1 = dynamic_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(frame_id-1));
+    g2o::VertexSE3Expmap* v2 = dynamic_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(frame_id));
     g2o::SE3Quat pose_change = v2->estimate() * v1->estimate().inverse();
 
     g2o::EdgeSE3Expmap * e = new g2o::EdgeSE3Expmap();
@@ -126,40 +133,34 @@ namespace lar {
     }
   }
 
-  void BundleAdjustment::addLandmarkMeasurements(Frame const &frame, size_t frame_id, size_t params_id) {
-    size_t usable_landmarks = 0;
-
-    for (size_t j = 0; j < frame.obs.size(); j++) {
-      size_t landmark_id = frame.obs[j].landmark_id;
-      Landmark &landmark = data->map.landmarks[landmark_id];
-      cv::KeyPoint keypoint = frame.obs[j].kpt;
-      Eigen::Vector3d kp(keypoint.pt.x, keypoint.pt.y, frame.obs[j].depth);
+  void BundleAdjustment::addLandmarkMeasurements(const Landmark& landmark, size_t id) {
+    for (auto const &obs : landmark.obs) {
+      size_t frame_id = obs.frame_id;
+      Eigen::Vector3d kp(obs.kpt.pt.x, obs.kpt.pt.y, obs.depth);
       
       if (landmark.isUseable()) {
         g2o::EdgeProjectXYZ2UVD * edge = new g2o::EdgeProjectXYZ2UVD();
-        edge->setVertex(0, optimizer.vertex(landmark_id));
+        edge->setVertex(0, optimizer.vertex(id));
         edge->setVertex(1, optimizer.vertex(frame_id));
         edge->setMeasurement(kp);
-        edge->information() = Eigen::Vector3d(1.,1.,frame.obs[j].depth_confidence).asDiagonal();
-        edge->setParameterId(0, params_id);
+        edge->information() = Eigen::Vector3d(1.,1., obs.depth_confidence).asDiagonal();
+        edge->setParameterId(0, frame_id+1);
         // g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
         // rk->setDelta(2.5);
         // edge->setRobustKernel(rk);
         optimizer.addEdge(edge);
 
-        usable_landmarks++;
+        _stats.usable_landmarks[frame_id]++;
       }
+      _stats.landmarks[frame_id]++;
     }
-
-    // Populate stats
-    _stats.landmarks.push_back(frame.obs.size());
-    _stats.usable_landmarks.push_back(usable_landmarks);
   }
 
   void BundleAdjustment::updateLandmark(size_t landmark_id) {
       Landmark &landmark = data->map.landmarks[landmark_id];
       if (landmark.isUseable()) {
-        g2o::VertexPointXYZ* v = dynamic_cast<g2o::VertexPointXYZ*>(optimizer.vertex(landmark_id));
+        size_t vertex_id = landmark_id + data->frames.size();
+        g2o::VertexPointXYZ* v = dynamic_cast<g2o::VertexPointXYZ*>(optimizer.vertex(vertex_id));
         landmark.position = v->estimate();
       }
   }
