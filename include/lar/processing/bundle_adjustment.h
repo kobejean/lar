@@ -18,6 +18,7 @@ namespace lar {
 
       BundleAdjustment(std::shared_ptr<Mapper::Data> data);
       void construct();
+      void reset();
       void optimize();
 
     private:

@@ -42,7 +42,7 @@ namespace lar {
   }
 
   bool Landmark::isUseable() const {
-    return sightings >= 3 || is_fixed;
+    return sightings >= 3;
   }
 
 #endif

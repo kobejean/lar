@@ -48,10 +48,6 @@ namespace lar {
   void Mapper::readMetadata() {
     data->frames = nlohmann::json::parse(std::ifstream(data->directory / "frames.json"));
     data->gps_obs = nlohmann::json::parse(std::ifstream(data->directory / "gps.json"));
-    // if file map.json exists
-    if (fs::exists(data->directory / "map.json")) {
-      data->map = nlohmann::json::parse(std::ifstream(data->directory / "map.json"));
-    }
   }
 
 }

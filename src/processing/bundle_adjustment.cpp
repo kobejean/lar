@@ -65,6 +65,12 @@ namespace lar {
     _stats.print();
   }
 
+
+  void BundleAdjustment::reset() {
+    optimizer.clear();
+    optimizer.clearParameters();
+  }
+
   void BundleAdjustment::optimize() {
     optimizer.initializeOptimization();
     optimizer.setVerbose(true);
@@ -82,12 +88,7 @@ namespace lar {
     if (landmark.isUseable()) {
       g2o::VertexPointXYZ * vertex = new g2o::VertexPointXYZ();
       vertex->setId(id);
-#ifndef LAR_COMPACT_BUILD
-      vertex->setMarginalized(!landmark.is_fixed);
-      vertex->setFixed(landmark.is_fixed);
-#else
       vertex->setMarginalized(true);
-#endif
       vertex->setEstimate(landmark.position);
       optimizer.addVertex(vertex);
       return true;

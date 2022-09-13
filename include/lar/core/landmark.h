@@ -42,8 +42,6 @@ namespace lar {
       std::vector<Observation> obs;
       long long last_seen;
       bool is_matched{false};
-      // bool is_inlier{false};
-      bool is_fixed{false};
       
       void recordObservation(Observation observation);
       bool isUseable() const;
@@ -76,10 +74,6 @@ namespace lar {
     j.at("distance").get_to(l.distance);
     j.at("cam_position").get_to(l.cam_position);
     j.at("sightings").get_to(l.sightings);
-
-#ifndef LAR_COMPACT_BUILD
-    l.is_fixed = true;
-#endif
   }
 
 }
