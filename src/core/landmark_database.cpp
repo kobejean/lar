@@ -16,7 +16,7 @@ namespace lar {
     all.reserve(all.size() + std::distance(landmarks.begin(), landmarks.end()));
     all.insert(all.end(), landmarks.begin(), landmarks.end());
     for (const Landmark& landmark : landmarks) {
-      _rtree.insert(landmark.id, landmark.bounds(), landmark.id);
+      _rtree.insert(landmark.id, landmark.bounds, landmark.id);
     }
   }
 
@@ -42,7 +42,7 @@ namespace lar {
       if (landmark.isUseable()) {
         landmark.id = landmarks.size();
         landmarks.push_back(landmark);
-        _rtree.insert(landmark.id, landmark.bounds(), landmark.id);
+        _rtree.insert(landmark.id, landmark.bounds, landmark.id);
       }
     }
     all = landmarks;

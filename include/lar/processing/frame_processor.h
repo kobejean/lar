@@ -20,7 +20,7 @@ namespace lar {
       void process(Frame& frame);
 
     private:
-      std::vector<size_t> getLandmarkIds(const Frame &frame, const cv::Mat &desc, const std::vector<cv::KeyPoint>& kpts, const std::vector<float>& depth);
+      std::vector<size_t> extractLandmarks(const Frame &frame, const cv::Mat &desc, const std::vector<cv::KeyPoint>& kpts, const std::vector<float>& depth);
       std::map<size_t, size_t> getMatches(const cv::Mat& desc, const Rect &query);
       std::string getPathPrefix(int id, std::string directory);
   };

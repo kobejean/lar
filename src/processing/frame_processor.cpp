@@ -37,9 +37,9 @@ namespace lar {
     auto depth_values = depth.depthAt(kpts);
     auto confidence_values = depth.confidenceAt(kpts);
     auto surface_normals = depth.surfaceNormaslAt(kpts);
-    auto landmark_ids = getLandmarkIds(frame, desc, kpts, depth_values);
+    auto landmark_ids = extractLandmarks(frame, desc, kpts, depth_values);
 
-    // Create landmark observations
+    // Create record observations
     for (size_t i=0; i<kpts.size(); i++) {
       Landmark::Observation obs{
         .frame_id=frame.id,
@@ -60,7 +60,7 @@ namespace lar {
   // Private methods
 
   // TODO: See if there is a better way to deal with the side effect of inserting into map.landmarks
-  std::vector<size_t> FrameProcessor::getLandmarkIds(const Frame &frame, const cv::Mat &desc, const std::vector<cv::KeyPoint>& kpts, const std::vector<float>& depth) {
+  std::vector<size_t> FrameProcessor::extractLandmarks(const Frame &frame, const cv::Mat &desc, const std::vector<cv::KeyPoint>& kpts, const std::vector<float>& depth) {
     // Filter out features that have been matched
     double query_diameter = 50.0;
     Rect query = Rect(Point(frame.extrinsics(0,3), frame.extrinsics(2,3)), query_diameter, query_diameter);
@@ -82,7 +82,6 @@ namespace lar {
 
         landmark_ids.push_back(new_landmark_id);
         new_landmarks.push_back(landmark);
-        // std::cout << "new landmark: " << new_landmark_id << std::endl;
         new_landmark_id++;
       } else {
         // We have a match so just push the match index

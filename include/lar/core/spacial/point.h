@@ -1,6 +1,7 @@
 #ifndef LAR_CORE_SPACIAL_POINT_H
 #define LAR_CORE_SPACIAL_POINT_H
 
+#include <nlohmann/json.hpp>
 #include <iostream>
 
 namespace lar {
@@ -14,6 +15,8 @@ namespace lar {
     double dist2(Point &other) const;
     double l1() const;
   };
+
+  NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Point, x, y)
 
 }
 
