@@ -16,13 +16,19 @@ namespace lar {
       static constexpr std::size_t MAX_CHILDREN = 50;
       std::unordered_map<size_t, T> entities;
 
+      // lifecycle
       RegionTree();
 
+      // operations
       T& operator[](size_t id);
       void insert(T value, Rect bounds, size_t id);
       void erase(size_t id);
       std::vector<T> find(const Rect &query) const;
       void print(std::ostream &os);
+
+      // collection
+      size_t size() const;
+      std::vector<T> all() const;
 
     private:
       std::shared_ptr<void> root;

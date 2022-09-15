@@ -6,6 +6,7 @@
 #include "lar/core/spacial/region_tree.h"
 #include "lar/core/landmark.h"
 
+// import rtree node implementation in same translation unit
 #include "_node.cpp"
 
 namespace lar {
@@ -69,6 +70,21 @@ void RegionTree<T>::print(std::ostream &os) {
   _Node<T> *root = static_cast<_Node<T>*>(this->root.get());
 
   root->print(os, 0);
+}
+
+template <typename T>
+size_t RegionTree<T>::size() const {
+  return entities.size();
+}
+
+template <typename T>
+std::vector<T> RegionTree<T>::all() const {
+  std::vector<T> all;
+  all.reserve(entities.size());
+  for(auto kv : entities) {
+    all.push_back(kv.second);  
+  }
+  return all;
 }
 
 // explicit instantiations
