@@ -32,6 +32,10 @@ namespace lar {
     return all.size();
   }
 
+  size_t LandmarkDatabase::createID() {
+    return next_id++;
+  }
+
 #ifndef LAR_COMPACT_BUILD
 
   void LandmarkDatabase::cull() {

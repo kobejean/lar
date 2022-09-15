@@ -3,6 +3,7 @@
 
 #include <array>
 #include <vector>
+#include <unordered_map>
 #include <memory>
 #include <iostream>
 #include "lar/core/spacial/rect.h"
@@ -13,14 +14,19 @@ namespace lar {
   class RegionTree {
     public: 
       static constexpr std::size_t MAX_CHILDREN = 50;
-      
+      std::unordered_map<size_t, T> entities;
+
       RegionTree();
+
+      T& operator[](size_t id);
       void insert(T value, Rect bounds, size_t id);
+      void erase(size_t id);
       std::vector<T> find(const Rect &query) const;
       void print(std::ostream &os);
 
     private:
       std::shared_ptr<void> root;
+      std::unordered_map<size_t, void*> leaf_map;
   };
 
 }

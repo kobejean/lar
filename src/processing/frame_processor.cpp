@@ -73,16 +73,15 @@ namespace lar {
     std::vector<size_t> landmark_ids;
     landmark_ids.reserve(landmark_count);
     
-    size_t new_landmark_id = data->map.landmarks.size();
     for (size_t i = 0; i < landmark_count; i++) {
       if (matches.find(i) == matches.end()) {
+        size_t new_landmark_id = data->map.landmarks.createID();
         // No match so create landmark
         Eigen::Vector3d pt3d = projection.projectToWorld(kpts[i].pt, depth[i]);
         Landmark landmark(pt3d, desc.row(i), new_landmark_id);
 
         landmark_ids.push_back(new_landmark_id);
         new_landmarks.push_back(landmark);
-        new_landmark_id++;
       } else {
         // We have a match so just push the match index
         landmark_ids.push_back(matches[i]);

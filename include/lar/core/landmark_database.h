@@ -7,6 +7,7 @@
 namespace lar {
 
   class LandmarkDatabase {
+      size_t next_id = 0;
     public:
       std::vector<Landmark> all;
 
@@ -18,6 +19,7 @@ namespace lar {
       void insert(const std::vector<Landmark>& landmarks);
       std::vector<Landmark> find(const Rect &query) const;
       size_t size() const;
+      size_t createID();
 
 #ifndef LAR_COMPACT_BUILD
       void cull();
