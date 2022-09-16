@@ -12,7 +12,6 @@ namespace lar {
 
 namespace {
 
-
 template <typename T>
 using overflow_collection = unordered_array<_Node<T>*, RegionTree<T>::MAX_CHILDREN+1>;
 
@@ -39,35 +38,36 @@ void _Node<T>::partition(overflow_collection &nodes, _Node *lower_split, _Node *
 
 // linearPickSeeds()
 
+template <typename T, typename Score, typename Compare>
+void _extractSeed(overflow_collection<T> &nodes, _Node<T> **seed, Score score, Compare comp);
+
 template <typename T>
 void _linearPickSeeds(overflow_collection<T> &nodes, _Node<T> **seed1, _Node<T> **seed2) {
+  _extractSeed(nodes, seed1,
+    [](const _Node<T> *node) { return node->bounds.lower.l1(); },
+    [](double value, double best) { return value < best; }
+  );
+  _extractSeed(nodes, seed2,
+    [](const _Node<T> *node) { return node->bounds.upper.l1(); },
+    [](double value, double best) { return value > best; }
+  );
+}
 
-  double lowest = nodes[0]->bounds.lower.l1();
-  size_t lx = 0;
+// extractSeed()
+
+template <typename T, typename Score, typename Compare>
+void _extractSeed(overflow_collection<T> &nodes, _Node<T> **seed, Score score, Compare comp) {
+  double best = score(nodes[0]);
+  size_t index = 0;
   for (size_t i = 1; i < nodes.size(); i++) {
-    double lowxy = nodes[i]->bounds.lower.l1();
-    if (lowxy < lowest) {
-      lowest = lowxy;
-      lx = i;
+    double value = score(nodes[i]);
+    if (comp(value, best)) {
+      best = value;
+      index = i;
     }
   }
-
-  *seed1 = nodes[lx];
-  nodes.erase(lx);
-  
-  double highest = nodes[0]->bounds.upper.l1();
-  size_t hx = 0;
-
-  for (size_t i = 1; i < nodes.size(); i++) {
-    double highxy = nodes[i]->bounds.upper.l1();
-    if (highxy > highest) {
-      highest = highxy;
-      hx = i;
-    }
-  }
-
-  *seed2 = nodes[hx];
-  nodes.erase(hx);
+  *seed = nodes[index];
+  nodes.erase(index);
 }
 
 
@@ -117,13 +117,9 @@ void _populateSplit(overflow_collection<T> &nodes, size_t m, _Node<T> *split, Co
     split->bounds = split->bounds.minBoundingBox(node->bounds);
     split->linkChild(node);
   }
-  for (size_t i = 0; i < nodes.size()-m; i++) {
-    nodes[i] = nodes[i+m];
-  }
-  nodes.pop_back(m);
-  // nodes.erase(nodes.begin(), nodes.begin() + m);
-}
 
+  nodes.pop_front(m);
+}
 
 } // namespace
 

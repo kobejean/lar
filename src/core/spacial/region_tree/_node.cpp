@@ -1,6 +1,5 @@
 #include <iostream>
 #include <algorithm>
-#include <array>
 #include <vector>
 #include <cassert>
 #include "lar/core/spacial/region_tree.h"
