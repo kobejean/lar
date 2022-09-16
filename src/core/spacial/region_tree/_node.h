@@ -16,8 +16,8 @@ namespace {
 template <typename T>
 class _Node {
   public:
-    typedef unordered_array<_Node*, RegionTree<T>::MAX_CHILDREN> child_collection;
-    typedef unordered_array<_Node*, RegionTree<T>::MAX_CHILDREN+1> overflow_collection;
+    typedef unordered_array<_Node*, RegionTree<T>::MAX_CHILDREN*2> child_collection;
+    typedef unordered_array<_Node*, RegionTree<T>::MAX_CHILDREN*2+1> overflow_collection;
 
     Rect bounds;
     T value;
