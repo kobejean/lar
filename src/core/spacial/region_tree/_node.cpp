@@ -45,6 +45,14 @@ _Node<T>* _Node<T>::insert(_Node *node) {
 }
 
 template <typename T>
+void _Node<T>::erase() {
+  // if (this->parent != nullptr) {
+
+  // }
+  delete this;
+}
+
+template <typename T>
 void _Node<T>::find(const Rect &query, std::vector<T> &result) const { 
   if (this->isLeaf()) {
     result.push_back(this->value);
@@ -118,7 +126,8 @@ _Node<T> *_Node<T>::addChild(_Node *child) {
     linkChild(child);
     return nullptr;
   } else {
-    std::vector<_Node<T>*> nodes(this->children);
+    overflow_collection nodes;
+    for (auto &child : this->children) nodes.push_back(child);
     nodes.push_back(child);
     _Node<T> *split = new _Node<T>();
     // reset parent

@@ -11,16 +11,20 @@
 namespace lar {
 
 namespace {
-  
-template <typename T>
-void _linearPickSeeds(std::vector<_Node<T>*> &nodes, _Node<T> **seed1, _Node<T> **seed2);
+
 
 template <typename T>
-void _distribute(std::vector<_Node<T>*> &nodes, _Node<T> *lower_split, _Node<T> *upper_split);
+using overflow_collection = unordered_array<_Node<T>*, RegionTree<T>::MAX_CHILDREN+1>;
+
+template <typename T>
+void _linearPickSeeds(overflow_collection<T> &nodes, _Node<T> **seed1, _Node<T> **seed2);
+
+template <typename T>
+void _distribute(overflow_collection<T> &nodes, _Node<T> *lower_split, _Node<T> *upper_split);
 
 // partition strategy based on: https://www.just.edu.jo/~qmyaseen/rtree1.pdf
 template <typename T>
-void _Node<T>::partition(std::vector<_Node*> &nodes, _Node *lower_split, _Node *upper_split) {
+void _Node<T>::partition(overflow_collection &nodes, _Node *lower_split, _Node *upper_split) {
   _Node *seed1, *seed2;
   _linearPickSeeds<T>(nodes, &seed1, &seed2);
 
@@ -36,67 +40,44 @@ void _Node<T>::partition(std::vector<_Node*> &nodes, _Node *lower_split, _Node *
 // linearPickSeeds()
 
 template <typename T>
-void _linearPickSeeds(std::vector<_Node<T>*> &nodes, _Node<T> **seed1, _Node<T> **seed2) {
-  double lowest = nodes[0]->bounds.lower.l1();
-  double highest = nodes[0]->bounds.upper.l1();
-  size_t lx = 0;
-  size_t hx = 0;
+void _linearPickSeeds(overflow_collection<T> &nodes, _Node<T> **seed1, _Node<T> **seed2) {
 
+  double lowest = nodes[0]->bounds.lower.l1();
+  size_t lx = 0;
   for (size_t i = 1; i < nodes.size(); i++) {
     double lowxy = nodes[i]->bounds.lower.l1();
-    double highxy = nodes[i]->bounds.upper.l1();
-    
     if (lowxy < lowest) {
       lowest = lowxy;
       lx = i;
     }
+  }
+
+  *seed1 = nodes[lx];
+  nodes.erase(lx);
+  
+  double highest = nodes[0]->bounds.upper.l1();
+  size_t hx = 0;
+
+  for (size_t i = 1; i < nodes.size(); i++) {
+    double highxy = nodes[i]->bounds.upper.l1();
     if (highxy > highest) {
       highest = highxy;
       hx = i;
     }
   }
 
-  // break tie
-  if (lx == hx) {
-    double lowest2 = nodes[0]->bounds.lower.l1();
-    size_t original_lx = lx;
-    lx = 0;
-    if (original_lx == 0) {
-      lowest2 = nodes[1]->bounds.lower.l1();
-      lx = 1;
-    }
-    for (size_t i = 1; i < nodes.size(); i++) {
-      double lowxy = nodes[i]->bounds.lower.l1();
-      if (i != original_lx && lowxy < lowest2) {
-        lowest2 = lowxy;
-        lx = i;
-      }
-    }
-  }
-
-  *seed1 = nodes[lx];
   *seed2 = nodes[hx];
-  // remove seeds from node by swapping in the last child
-  if (hx == nodes.size() - 1) {
-    nodes.pop_back();
-    nodes[lx] = nodes.back();
-    nodes.pop_back();
-  } else {
-    nodes[lx] = nodes.back();
-    nodes.pop_back();
-    nodes[hx] = nodes.back();
-    nodes.pop_back();
-  }
+  nodes.erase(hx);
 }
 
 
 // distribute()
 
 template <typename T, typename Comparator>
-void _populateSplit(std::vector<_Node<T>*> &nodes, size_t m, _Node<T> *split, Comparator comp);
+void _populateSplit(overflow_collection<T> &nodes, size_t m, _Node<T> *split, Comparator comp);
 
 template <typename T>
-void _distribute(std::vector<_Node<T>*> &nodes, _Node<T> *lower_split, _Node<T> *upper_split) {
+void _distribute(overflow_collection<T> &nodes, _Node<T> *lower_split, _Node<T> *upper_split) {
   Point lower_vert = lower_split->children[0]->bounds.lower; // lower vertex of seed seed1
   Point upper_vert = upper_split->children[0]->bounds.upper; // upper vertex of seed seed2
   size_t m = nodes.size() / 2;
@@ -128,7 +109,7 @@ void _distribute(std::vector<_Node<T>*> &nodes, _Node<T> *lower_split, _Node<T> 
 // populateSplit()
 
 template <typename T, typename Comparator>
-void _populateSplit(std::vector<_Node<T>*> &nodes, size_t m, _Node<T> *split, Comparator comp) {
+void _populateSplit(overflow_collection<T> &nodes, size_t m, _Node<T> *split, Comparator comp) {
   std::partial_sort(nodes.begin(), nodes.begin() + m, nodes.end(), comp);
   // add the closest m nodes to split
   for (size_t i = 0; i < m; i++) {
@@ -136,7 +117,11 @@ void _populateSplit(std::vector<_Node<T>*> &nodes, size_t m, _Node<T> *split, Co
     split->bounds = split->bounds.minBoundingBox(node->bounds);
     split->linkChild(node);
   }
-  nodes.erase(nodes.begin(), nodes.begin() + m);
+  for (size_t i = 0; i < nodes.size()-m; i++) {
+    nodes[i] = nodes[i+m];
+  }
+  nodes.pop_back(m);
+  // nodes.erase(nodes.begin(), nodes.begin() + m);
 }
 
 

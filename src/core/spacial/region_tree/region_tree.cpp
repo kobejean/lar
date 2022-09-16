@@ -12,10 +12,15 @@
 namespace lar {
 
 
+// lifecycle
+
 template <typename T>
 RegionTree<T>::RegionTree() : root(new _Node<T>()) {
   
 }
+
+
+// operations
 
 template <typename T>
 T& RegionTree<T>::operator[](size_t id) {
@@ -53,7 +58,7 @@ template <typename T>
 void RegionTree<T>::erase(size_t id) {
   entities.erase(id);
   _Node<T> *node = static_cast<_Node<T>*>(leaf_map.extract(id).mapped());
-  delete node;
+  node->erase();
 }
 
 template <typename T>
@@ -72,6 +77,9 @@ void RegionTree<T>::print(std::ostream &os) {
   root->print(os, 0);
 }
 
+
+// collection
+
 template <typename T>
 size_t RegionTree<T>::size() const {
   return entities.size();
@@ -86,6 +94,7 @@ std::vector<T> RegionTree<T>::all() const {
   }
   return all;
 }
+
 
 // explicit instantiations
 template class RegionTree<size_t>;
