@@ -43,13 +43,13 @@ void _extractSeed(overflow_collection<T> &nodes, _Node<T> **seed, Score score, C
 
 template <typename T>
 void _linearPickSeeds(overflow_collection<T> &nodes, _Node<T> **seed1, _Node<T> **seed2) {
-  _extractSeed(nodes, seed2,
-    [](const _Node<T> *node) { return node->bounds.upper.l1(); },
-    [](double value, double best) { return value > best; }
-  );
   _extractSeed(nodes, seed1,
     [](const _Node<T> *node) { return node->bounds.lower.l1(); },
     [](double value, double best) { return value < best; }
+  );
+  _extractSeed(nodes, seed2,
+    [](const _Node<T> *node) { return node->bounds.upper.l1(); },
+    [](double value, double best) { return value > best; }
   );
 }
 
