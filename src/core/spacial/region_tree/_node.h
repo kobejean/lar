@@ -26,7 +26,7 @@ class _Node {
     size_t id;
     _Node<T> *parent;
     // TODO: use better choice of container
-    child_collection children;
+    child_collection children{};
 
     // lifecycle
     _Node();

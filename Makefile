@@ -20,7 +20,7 @@ fast: CMAKE_ARGS = -DCMAKE_BUILD_TYPE=Release
 fast: configure
 	$(MAKE) $(QUIET) -C build -j 8
 
-tests: CMAKE_ARGS = -DLAR_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug
+tests: CMAKE_ARGS = -DLAR_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
 tests: configure
 	$(MAKE) $(QUIET) -C build -j 8
 
