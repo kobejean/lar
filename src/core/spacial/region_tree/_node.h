@@ -18,7 +18,7 @@ template <typename T>
 class _Node {
   public:
     using child_collection = unordered_array<_Node*, RegionTree<T>::MAX_CHILDREN>;
-    using overflow_collection = unordered_vector<_Node<T>*>;
+    using overflow_collection = unordered_vector<_Node*>;
 
     Rect bounds;
     T value;
