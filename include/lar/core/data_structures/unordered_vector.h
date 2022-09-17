@@ -10,8 +10,6 @@ namespace lar {
       using iterator = typename std::vector<T>::iterator;
       using const_iterator = typename std::vector<T>::const_iterator;
 
-      unordered_vector() : _data() {}
-
       T& operator[](std::size_t index) { return _data[index]; }
       const T& operator[](std::size_t index) const { return _data[index]; }
 

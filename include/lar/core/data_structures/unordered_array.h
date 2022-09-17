@@ -8,7 +8,7 @@ namespace lar {
       std::array<T, N> _data;
       std::size_t _size;
     public:
-      unordered_array() : _data(), _size(0) {}
+      unordered_array() : _size(0) {}
 
       using iterator = typename std::array<T, N>::iterator;
       using const_iterator = typename std::array<T, N>::const_iterator;
@@ -21,10 +21,13 @@ namespace lar {
 
       void pop_front() { _data[0] = _data[_size--]; }
       void pop_front(std::size_t k) {
-        auto end = _data.begin() + _size;
+        // auto end = _data.begin() + _size;
         _size -= k;
-        std::size_t offset = std::max(k, _size);
-        std::copy(_data.begin() + offset, end, _data.begin());
+        for (size_t i = 0; i < _size; ++i) {
+          _data[i] = _data[i + k];
+        }
+        // std::size_t offset = std::max(k, _size);
+        // std::copy(_data.begin() + offset, end, _data.begin());
       }
       
       void pop_back() { _size--; }
