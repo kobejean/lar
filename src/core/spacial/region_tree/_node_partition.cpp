@@ -13,7 +13,7 @@ namespace lar {
 namespace {
 
 template <typename T>
-using overflow_collection = unordered_array<_Node<T>*, RegionTree<T>::MAX_CHILDREN+1>;
+using overflow_collection = unordered_vector<_Node<T>*>;
 
 template <typename T>
 void _linearPickSeeds(overflow_collection<T> &nodes, _Node<T> **seed1, _Node<T> **seed2);

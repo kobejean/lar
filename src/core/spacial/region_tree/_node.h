@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <vector>
 #include "lar/core/data_structures/unordered_array.h"
+#include "lar/core/data_structures/unordered_vector.h"
 #include "lar/core/spacial/region_tree.h"
 #include "lar/core/landmark.h"
 
@@ -16,8 +17,8 @@ namespace {
 template <typename T>
 class _Node {
   public:
-    typedef unordered_array<_Node*, RegionTree<T>::MAX_CHILDREN> child_collection;
-    typedef unordered_array<_Node*, RegionTree<T>::MAX_CHILDREN+1> overflow_collection;
+    using child_collection = unordered_array<_Node*, RegionTree<T>::MAX_CHILDREN>;
+    using overflow_collection = unordered_vector<_Node<T>*>;
 
     Rect bounds;
     T value;
