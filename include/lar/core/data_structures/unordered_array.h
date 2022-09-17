@@ -6,8 +6,10 @@ namespace lar {
   template <class T, std::size_t N>
   struct unordered_array {
       std::array<T, N> _data;
-      std::size_t _size{0};
+      std::size_t _size;
     public:
+      unordered_array() : _data(), _size(0) {}
+
       using iterator = typename std::array<T, N>::iterator;
       using const_iterator = typename std::array<T, N>::const_iterator;
 

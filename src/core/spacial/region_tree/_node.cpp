@@ -14,12 +14,12 @@ namespace {
 
 
 template <typename T>
-_Node<T>::_Node() {
-
+_Node<T>::_Node() : children(), parent(nullptr) {
+  
 }
 
 template <typename T>
-_Node<T>::_Node(T value, Rect bounds, size_t id) : bounds(bounds), value(value), id(id) {
+_Node<T>::_Node(T value, Rect bounds, size_t id) : children(), bounds(bounds), value(value), id(id) {
 
 };
 
