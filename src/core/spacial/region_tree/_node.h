@@ -19,7 +19,8 @@ class _Node {
   public:
     using child_collection = unordered_array<_Node*, RegionTree<T>::MAX_CHILDREN>;
     // using child_collection = unordered_vector<_Node*>;
-    using overflow_collection = unordered_vector<_Node*>;
+    using overflow_collection = unordered_array<_Node*, RegionTree<T>::MAX_CHILDREN+1>;
+    // using overflow_collection = unordered_vector<_Node*>;
 
     Rect bounds;
     T value;

@@ -13,7 +13,7 @@ namespace lar {
   template <typename T>
   class RegionTree {
     public: 
-      static constexpr std::size_t MAX_CHILDREN = 50;
+      static constexpr std::size_t MAX_CHILDREN = 5;
       std::unordered_map<size_t, T> entities;
 
       // lifecycle
