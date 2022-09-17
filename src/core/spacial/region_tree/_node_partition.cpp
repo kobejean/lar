@@ -13,7 +13,7 @@ namespace lar {
 namespace {
 
 template <typename T>
-using overflow_collection = unordered_vector<_Node<T>*>;
+using overflow_collection = typename _Node<T>::overflow_collection;
 
 template <typename T>
 void _linearPickSeeds(overflow_collection<T> &nodes, _Node<T> **seed1, _Node<T> **seed2);
