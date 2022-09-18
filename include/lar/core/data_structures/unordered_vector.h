@@ -18,17 +18,17 @@ namespace lar {
 
       void push_back(T value) { _data.push_back(value); }
 
-      // void pop_front() { _data[0] = _data.back(); pop_back(); }
-      // void pop_front(std::size_t k) {
-      //   size_t offset = std::max(k, size() - k);
-      //   std::copy(offset, _data.end(), _data.begin());
-      //   pop_back(k);
-      // }
+      void pop_front() { _data[0] = _data.back(); pop_back(); }
+      void pop_front(std::size_t k) {
+        auto offset = begin() + std::max(k, size() - k);
+        std::copy(offset, end(), begin());
+        pop_back(k);
+      }
       
-      // void pop_back() { _data.pop_back(); }
-      // void pop_back(std::size_t k) { _data.resize(_data.size() - k); }
+      void pop_back() { _data.pop_back(); }
+      void pop_back(std::size_t k) { _data.resize(_data.size() - k); }
 
-      // void erase(std::size_t index) { _data[index] = _data.back(); pop_back(); }
+      void erase(std::size_t index) { _data[index] = _data.back(); pop_back(); }
 
       iterator clear() { _data.clear(); }
 
