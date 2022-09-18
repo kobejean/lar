@@ -5,13 +5,13 @@ namespace lar {
 
   template <class T, std::size_t N>
   struct unordered_array {
-      std::array<T, N> _data;
+      T _data[N];
       std::size_t _size;
     public:
-      unordered_array() : _data(), _size(0) {}
+      unordered_array() : _size(0) {}
 
-      using iterator = typename std::array<T, N>::iterator;
-      using const_iterator = typename std::array<T, N>::const_iterator;
+      using iterator = T*;
+      using const_iterator = const T*;
 
       T& operator[](std::size_t index) { return _data[index]; }
       const T& operator[](std::size_t index) const { return _data[index]; }
@@ -21,13 +21,13 @@ namespace lar {
 
       void pop_front() { _data[0] = _data[_size--]; }
       void pop_front(std::size_t k) {
-        auto end = _data.begin() + _size;
+        auto end = _data + _size;
         _size -= k;
         // for (size_t i = 0; i < _size; ++i) {
         //   _data[i] = _data[i + k];
         // }
         std::size_t offset = std::max(k, _size);
-        std::copy(_data.begin() + offset, end, _data.begin());
+        std::copy(_data + offset, end, _data);
       }
       
       void pop_back() { _size--; }
@@ -39,11 +39,11 @@ namespace lar {
 
       std::size_t size() const { return _size; }
 
-      iterator begin() noexcept { return _data.begin(); }
-      constexpr const_iterator begin() const noexcept { return _data.begin(); }
+      iterator begin() noexcept { return _data; }
+      constexpr const_iterator begin() const noexcept { return _data; }
 
-      iterator end() noexcept { return _data.begin() + _size; }
-      constexpr const_iterator end() const noexcept { return _data.begin() + _size; }
+      iterator end() noexcept { return _data + _size; }
+      constexpr const_iterator end() const noexcept { return _data + _size; }
   };
   
 }
