@@ -17,8 +17,8 @@ namespace {
 template <typename T>
 class _Node {
   public:
-    using child_collection = std::vector<_Node*>;
-    // using child_collection = unordered_vector<_Node*>;
+    // using child_collection = std::vector<_Node*>;
+    using child_collection = unordered_vector<_Node*>;
     using overflow_collection = unordered_array<_Node*, RegionTree<T>::MAX_CHILDREN+1>;
     // using overflow_collection = unordered_vector<_Node*>;
 

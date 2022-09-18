@@ -19,10 +19,7 @@ namespace lar {
       void pop_front() { _data[0] = _data.back(); pop_back(); }
       void pop_front(std::size_t k) {
         size_t offset = std::max(k, size() - k);
-        for (size_t i = 0; i < std::min(k, size() - k); i++) {
-          _data[i] = _data[i + offset];
-        }
-        // std::copy(offset, _data.end(), _data.begin());
+        std::copy(offset, _data.end(), _data.begin());
         pop_back(k);
       }
       
