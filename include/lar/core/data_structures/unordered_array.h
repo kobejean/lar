@@ -35,7 +35,7 @@ namespace lar {
 
       void erase(std::size_t index) { _data[index] = _data[--_size]; }
 
-      iterator clear() { _size = 0; }
+      void clear() { _size = 0; }
 
       std::size_t size() const { return _size; }
 

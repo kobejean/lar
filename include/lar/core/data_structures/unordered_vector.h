@@ -24,7 +24,7 @@ namespace lar {
 
       void push_back(T value) { _data.push_back(value); }
 
-      iterator clear() { _data.clear(); }
+      void clear() { _data.clear(); }
 
       std::size_t size() const { return _data.size(); }
 
