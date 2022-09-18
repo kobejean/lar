@@ -2,7 +2,7 @@
 
 namespace lar {
 
-  LandmarkDatabase::LandmarkDatabase() {
+  LandmarkDatabase::LandmarkDatabase() : _rtree() {
   }
 
   Landmark& LandmarkDatabase::operator[](size_t id) {
@@ -38,7 +38,7 @@ namespace lar {
     RegionTree<Landmark> rtree;
     for (Landmark& landmark : all()) {
       if (landmark.isUseable()) {
-        _rtree.insert(landmark, landmark.bounds, landmark.id);
+        rtree.insert(landmark, landmark.bounds, landmark.id);
       }
     }
     _rtree = rtree;

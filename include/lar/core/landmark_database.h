@@ -36,7 +36,7 @@ namespace lar {
     std::sort(landmarks.begin(), landmarks.end(), [](const Landmark& a, const Landmark& b) {
       return a.id < b.id;
     });
-    j = static_cast<nlohmann::json>(landmarks);
+    j = landmarks;
   }
 
   static void from_json(const nlohmann::json& j, LandmarkDatabase& l) {

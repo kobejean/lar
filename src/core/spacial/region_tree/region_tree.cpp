@@ -33,8 +33,8 @@ void RegionTree<T>::insert(T value, Rect bounds, size_t id) {
 
   // create new leaf node
   _Node<T> *node = new _Node<T>(value, bounds, id);
-  entities[id] = value;
-  leaf_map[id] = node;
+  entities.emplace(id, value);
+  leaf_map.emplace(id, node);
 
   if (root->children.size() == 0) {
     // if tree is empty

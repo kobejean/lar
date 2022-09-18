@@ -126,7 +126,7 @@ TEST(MapTest, JSONDeserialization) {
   lar::Map map = map_json;
   // Then
   std::vector<uint8_t> expected_desc = {32, 190, 108,   0, 128,  17,   0, 193,  63,   0, 128, 129, 197,  49, 254, 199,  29,   1,   0,  32,   0,   6, 112,   4,   0,   0,   0,  60, 134,   0,  72, 247,  31,   0, 248, 255,  66,  16,   2,   0, 254,  59,  92,   7,   0,  55,   0,   0,   0, 200, 241,  24, 227, 255, 255, 199,  67,  96, 120, 255,   0};
-  cv::Mat actual_desc = map.landmarks[0].desc;
+  cv::Mat actual_desc = map.landmarks[19].desc;
 
   // Check `desc` values
   for (int i = 0; i < 61; ++i) {
@@ -136,7 +136,7 @@ TEST(MapTest, JSONDeserialization) {
   EXPECT_EQ(actual_desc.cols, expected_desc.size());
 
   EXPECT_EQ(map.landmarks[19].id, 19);
-  EXPECT_NEAR(map.landmarks[19].position.x(), 28.857031185262336, 1e-10);
-  EXPECT_NEAR(map.landmarks[19].position.y(), -1.176110619504187, 1e-10);
-  EXPECT_NEAR(map.landmarks[19].position.z(), -17.927518450636445, 1e-10);
+  EXPECT_NEAR(map.landmarks[19].position.x(), 28.93247239591809, 1e-10);
+  EXPECT_NEAR(map.landmarks[19].position.y(), 8.7041057413508671, 1e-10);
+  EXPECT_NEAR(map.landmarks[19].position.z(), -17.020310022134733, 1e-10);
 }
