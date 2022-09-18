@@ -126,10 +126,13 @@ _Node<T> *_Node<T>::addChild(_Node *child) {
     return nullptr;
   } else {
     overflow_collection nodes;
+    std::cout << "overflow " << child->id << std::endl;
     for (auto &child : this->children) nodes.push_back(child);
     nodes.push_back(child);
+    std::cout << "copy " << child->id << std::endl;
     _Node<T> *split = new _Node<T>();
     // reset parent
+    std::cout << "clear " << child->id << std::endl;
     this->children.clear();
     partition(nodes, this, split);
     return split;
