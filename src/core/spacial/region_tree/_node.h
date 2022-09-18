@@ -4,6 +4,8 @@
 #include <iostream>
 #include <algorithm>
 #include <vector>
+#include "lar/core/data_structures/unordered_array.h"
+#include "lar/core/data_structures/unordered_vector.h"
 #include "lar/core/spacial/region_tree.h"
 #include "lar/core/landmark.h"
 
@@ -15,6 +17,10 @@ namespace {
 template <typename T>
 class _Node {
   public:
+    static const size_t MAX_CHILDREN = RegionTree<T>::MAX_CHILDREN;
+    // using child_collection = unordered_array<_Node*, MAX_CHILDREN>;
+    using overflow_collection = unordered_vector<_Node*>;
+
     Rect bounds;
     T value;
     size_t id;
@@ -38,7 +44,7 @@ class _Node {
     _Node *addChild(_Node *child);
     void linkChild(_Node *child);
 
-    static void partition(std::vector<_Node*> &children, _Node *lower_split, _Node *upper_split);
+    static void partition(overflow_collection &children, _Node *lower_split, _Node *upper_split);
 };
 
 } // namespace

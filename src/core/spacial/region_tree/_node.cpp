@@ -118,8 +118,8 @@ _Node<T> *_Node<T>::addChild(_Node *child) {
     linkChild(child);
     return nullptr;
   } else {
-    std::vector<_Node<T>*> nodes(this->children);
-    nodes.push_back(child);
+    overflow_collection nodes;
+    nodes.insert(nodes.end(), this->children.begin(), this->children.end());
     _Node<T> *split = new _Node<T>();
     // reset parent
     this->children.clear();
