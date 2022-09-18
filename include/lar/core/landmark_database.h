@@ -44,6 +44,7 @@ namespace lar {
   static void from_json(const nlohmann::json& j, LandmarkDatabase& l) {
     std::vector<Landmark> landmarks = j;
     std::cout << "From JSON " << landmarks.size() << std::endl;
+    l = LandmarkDatabase();
     l.insert(landmarks);
   }
   
