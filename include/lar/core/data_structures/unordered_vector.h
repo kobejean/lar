@@ -5,8 +5,8 @@ namespace lar {
 
   template <class T>
   struct unordered_vector {
-      std::vector<T> _data;
     public:
+      std::vector<T> _data;
       using iterator = typename std::vector<T>::iterator;
       using const_iterator = typename std::vector<T>::const_iterator;
 
@@ -25,7 +25,7 @@ namespace lar {
       //   pop_back(k);
       // }
       
-      void pop_back() { _data.pop_back(); }
+      // void pop_back() { _data.pop_back(); }
       // void pop_back(std::size_t k) { _data.resize(_data.size() - k); }
 
       // void erase(std::size_t index) { _data[index] = _data.back(); pop_back(); }
