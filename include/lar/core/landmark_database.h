@@ -33,7 +33,6 @@ namespace lar {
   static void to_json(nlohmann::json& j, const LandmarkDatabase& l) {
     std::vector<Landmark> landmarks = l.all();
 
-    std::cout << "To JSON " << landmarks.size() << std::endl;
     // TODO: use hilbert curve ordering to improve bulk insert performance
     std::sort(landmarks.begin(), landmarks.end(), [](const Landmark& a, const Landmark& b) {
       return a.id < b.id;
@@ -43,9 +42,7 @@ namespace lar {
 
   static void from_json(const nlohmann::json& j, LandmarkDatabase& l) {
     std::vector<Landmark> landmarks = j;
-    std::cout << "From JSON " << landmarks.size() << std::endl;
     l = LandmarkDatabase();
-    std::cout << "Inserting " << std::endl;
     l.insert(landmarks);
   }
   

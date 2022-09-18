@@ -35,7 +35,6 @@ void RegionTree<T>::insert(T value, Rect bounds, size_t id) {
   _Node<T> *node = new _Node<T>(value, bounds, id);
   entities.emplace(id, value);
   leaf_map.emplace(id, node);
-  std::cout << "emplaced " << id << std::endl;
 
   if (root->children.size() == 0) {
     // if tree is empty
@@ -46,7 +45,6 @@ void RegionTree<T>::insert(T value, Rect bounds, size_t id) {
 
   _Node<T> *split = root->insert(node);
   if (split != nullptr) {
-    std::cout << "split " << id << std::endl;
     // if we have a spit at root, create a new root
     // with a copy of the old root and the split as a children
     _Node<T> *copy = new _Node<T>(*root);

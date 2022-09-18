@@ -18,9 +18,7 @@ template <typename T>
 class _Node {
   public:
     static constexpr std::size_t MAX_CHILDREN = RegionTree<T>::MAX_CHILDREN;
-    // using child_collection = std::vector<_Node*>;
-    using child_collection = unordered_vector<_Node*>;
-    // using child_collection = unordered_array<_Node*, MAX_CHILDREN>;
+    using child_collection = unordered_array<_Node*, MAX_CHILDREN>;
     using overflow_collection = unordered_array<_Node*, MAX_CHILDREN+1>;
     // using overflow_collection = unordered_vector<_Node*>;
 
@@ -28,7 +26,6 @@ class _Node {
     T value;
     size_t id;
     _Node<T> *parent;
-    // TODO: use better choice of container
     child_collection children;
 
     // lifecycle

@@ -11,7 +11,6 @@ namespace lar {
 
   void LandmarkDatabase::insert(const std::vector<Landmark>& landmarks) {
     for (const Landmark& landmark : landmarks) {
-      std::cout << "Inserting " << landmark.id << std::endl;
       _rtree.insert(landmark, landmark.bounds, landmark.id);
     }
   }
