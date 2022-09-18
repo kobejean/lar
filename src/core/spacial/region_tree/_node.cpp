@@ -14,12 +14,12 @@ namespace {
 
 
 template <typename T>
-_Node<T>::_Node() {
+_Node<T>::_Node() : parent(nullptr), children() {
   
 }
 
 template <typename T>
-_Node<T>::_Node(T value, Rect bounds, size_t id) : bounds(bounds), value(value), id(id) {
+_Node<T>::_Node(T value, Rect bounds, size_t id) : parent(nullptr), children(), bounds(bounds), value(value), id(id) {
 
 };
 
@@ -121,7 +121,7 @@ _Node<T> *_Node<T>::findBestInsertChild(const Rect &bounds) const {
 
 template <typename T>
 _Node<T> *_Node<T>::addChild(_Node *child) {
-  if (this->children.size() < RegionTree<T>::MAX_CHILDREN) {
+  if (this->children.size() < MAX_CHILDREN) {
     linkChild(child);
     return nullptr;
   } else {
