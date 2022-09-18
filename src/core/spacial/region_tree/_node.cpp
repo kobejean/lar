@@ -25,12 +25,9 @@ _Node<T>::_Node(T value, Rect bounds, size_t id) : bounds(bounds), value(value),
 
 template <typename T>
 _Node<T>::~_Node() {
-  for (size_t i = 0; i < children.size(); i++) {
-    delete children[i];
+  for (auto &child : children) {
+    delete child;
   }
-  // for (auto &child : children) {
-  //   delete child;
-  // }
 };
 
 template <typename T>
