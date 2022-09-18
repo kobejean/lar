@@ -21,8 +21,8 @@ class _Node {
     // using child_collection = std::vector<_Node*>;
     using child_collection = unordered_vector<_Node*>;
     // using child_collection = unordered_array<_Node*, MAX_CHILDREN>;
-    // using overflow_collection = unordered_array<_Node*, MAX_CHILDREN+1>;
-    using overflow_collection = unordered_vector<_Node*>;
+    using overflow_collection = unordered_array<_Node*, MAX_CHILDREN+1>;
+    // using overflow_collection = unordered_vector<_Node*>;
 
     Rect bounds;
     T value;
