@@ -45,6 +45,7 @@ namespace lar {
     std::vector<Landmark> landmarks = j;
     std::cout << "From JSON " << landmarks.size() << std::endl;
     l = LandmarkDatabase();
+    std::cout << "Inserting " << std::endl;
     l.insert(landmarks);
   }
   

@@ -110,7 +110,6 @@ TEST(MapTest, JSONSerialization) {
   // Given
   std::ifstream ifs("./test/_fixture/processed_map_data/map.json");
   std::string json_string((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
-  std::cout << "Parsing JSON string " << std::endl;
   lar::Map map = nlohmann::json::parse(json_string);
   // When
   std::cout << "Serializing to JSON string " << std::endl;
