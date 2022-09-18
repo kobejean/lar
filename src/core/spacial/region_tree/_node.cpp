@@ -134,6 +134,7 @@ _Node<T> *_Node<T>::addChild(_Node *child) {
     // reset parent
     std::cout << "clear " << child->id << std::endl;
     this->children.clear();
+    std::cout << "partition " << child->id << std::endl;
     partition(nodes, this, split);
     return split;
   }
