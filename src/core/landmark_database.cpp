@@ -34,14 +34,11 @@ namespace lar {
 #ifndef LAR_COMPACT_BUILD
 
   void LandmarkDatabase::cull() {
-    // TODO: cull rtree nodes as well
-    RegionTree<Landmark> rtree;
     for (Landmark& landmark : all()) {
-      if (landmark.isUseable()) {
-        rtree.insert(landmark, landmark.bounds, landmark.id);
+      if (!landmark.isUseable()) {
+        _rtree.erase(landmark.id);
       }
     }
-    _rtree = rtree;
   }
   
 #endif

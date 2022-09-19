@@ -10,10 +10,10 @@
 
 namespace lar {
 
-  template <typename T>
+  template <typename T, std::size_t N = 25>
   class RegionTree {
     public: 
-      static constexpr std::size_t MAX_CHILDREN = 5;
+      static constexpr std::size_t MAX_CHILDREN = N;
       std::unordered_map<size_t, T> entities;
 
       // lifecycle
@@ -34,7 +34,6 @@ namespace lar {
       std::shared_ptr<void> root;
       std::unordered_map<size_t, void*> leaf_map;
   };
-
 }
 
 #endif /* LAR_CORE_SPACIAL_REGION_TREE_H */
