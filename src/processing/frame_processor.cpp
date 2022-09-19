@@ -50,8 +50,7 @@ namespace lar {
         .depth_confidence=confidence_values[i],
         .surface_normal=surface_normals[i],
       };
-      Landmark& landmark = data->map.landmarks[landmark_ids[i]];
-      landmark.recordObservation(obs);
+      data->map.landmarks.addObservation(landmark_ids[i], obs);
     }
 
     frame.processed = true;

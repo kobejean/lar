@@ -137,7 +137,7 @@ TEST(MapTest, JSONDeserialization) {
   EXPECT_EQ(actual_desc.cols, expected_desc.size());
 
   EXPECT_EQ(map.landmarks[19].id, 19);
-  EXPECT_NEAR(map.landmarks[19].position.x(), 28.93247239591809, 1e-10);
-  EXPECT_NEAR(map.landmarks[19].position.y(), 8.7041057413508671, 1e-10);
-  EXPECT_NEAR(map.landmarks[19].position.z(), -17.020310022134733, 1e-10);
+  EXPECT_NEAR(map.landmarks[19].position.x(), 28.99345023444182, 1e-10);
+  EXPECT_NEAR(map.landmarks[19].position.y(), 8.76631960321935, 1e-10);
+  EXPECT_NEAR(map.landmarks[19].position.z(), -17.06995683511346, 1e-10);
 }

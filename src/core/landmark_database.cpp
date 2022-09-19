@@ -40,6 +40,13 @@ namespace lar {
       }
     }
   }
+
+  void LandmarkDatabase::addObservation(size_t id, Landmark::Observation observation) {
+    Landmark landmark = _rtree[id];
+    _rtree.erase(id);
+    landmark.recordObservation(observation);
+    _rtree.insert(landmark, landmark.bounds, id);
+  }
   
 #endif
 

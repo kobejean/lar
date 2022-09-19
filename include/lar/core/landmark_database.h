@@ -23,6 +23,7 @@ namespace lar {
 
 #ifndef LAR_COMPACT_BUILD
       void cull();
+      void addObservation(size_t id, Landmark::Observation observation);
 #endif
     private:
       RegionTree<Landmark> _rtree;
