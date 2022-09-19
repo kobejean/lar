@@ -22,4 +22,5 @@ target_link_libraries(lar_core
   nlohmann_json::nlohmann_json
 )
 
+add_subdirectory(data_structures)
 add_subdirectory(spacial)

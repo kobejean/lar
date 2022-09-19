@@ -1,6 +1,7 @@
 #ifndef LAR_CORE_SPACIAL_RECT_H
 #define LAR_CORE_SPACIAL_RECT_H
 
+#include <nlohmann/json.hpp>
 #include <iostream>
 #include "lar/core/spacial/point.h"
 
@@ -22,6 +23,8 @@ namespace lar {
     Rect intersection(const Rect &other) const;
     double overlap(const Rect &other) const;
   };
+
+  NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Rect, lower, upper)
 
 }
 

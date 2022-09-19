@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <fstream>
 #include "lar/core/map.h"
 
 using namespace lar;
@@ -107,22 +108,26 @@ TEST(MapTest, RelativePointFromExample2) {
 
 TEST(MapTest, JSONSerialization) {
   // Given
-  std::string json_string = "{\"anchors\":[],\"landmarks\":[{\"cam_position\":[-0.04407598823308945,0.009304665960371494,-0.17797423899173737],\"desc\":\"IL5sAIARAME/AICBxTH+xx0BACAABnAEAAAAPIYASPcfAPj/QhACAP47XAcANwAAAMjxGOP//8dDYHj/AA==\",\"distance\":17.1650337905356,\"id\":0,\"orientation\":[-0.9356593489646912,-0.1166483536362648,0.3330685794353485],\"position\":[28.888938033904257,8.998288591372056,-16.944010774289747],\"sightings\":3}],\"origin\":[6.8809217119334465e-06,-7.301688203222498e-06,0.0,0.0,0.0,0.0,-0.9999999999999998,0.0,5.815545820003996e-06,8.639317176128355e-06,0.0,0.0,37.5238410882608,139.93789921827917,-0.07738707319710071,1.0]}";
+  std::ifstream ifs("./test/_fixture/processed_map_data/map.json");
+  std::string json_string((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
   lar::Map map = nlohmann::json::parse(json_string);
   // When
+  std::cout << "Serializing to JSON string " << std::endl;
   nlohmann::json map_json = map;
   // Then
-  EXPECT_EQ(map_json.dump(), json_string);
+  EXPECT_EQ(map_json.dump(2).substr(0,1000), json_string.substr(0,1000));
 }
 
 TEST(MapTest, JSONDeserialization) {
   // Given
-  nlohmann::json map_json = nlohmann::json::parse("{\"anchors\":[],\"landmarks\":[{\"cam_position\":[-0.04407598823308945,0.009304665960371494,-0.17797423899173737],\"desc\":\"IL5sAIARAME/AICBxTH+xx0BACAABnAEAAAAPIYASPcfAPj/QhACAP47XAcANwAAAMjxGOP//8dDYHj/AA==\",\"distance\":17.1650337905356,\"id\":19,\"orientation\":[-0.9356593489646912,-0.1166483536362648,0.3330685794353485],\"position\":[28.888938033904257,8.998288591372056,-16.944010774289747],\"sightings\":3}],\"origin\":[6.8809217119334465e-06,-7.301688203222498e-06,0.0,0.0,0.0,0.0,-0.9999999999999998,0.0,5.815545820003996e-06,8.639317176128355e-06,0.0,0.0,37.5238410882608,139.93789921827917,-0.07738707319710071,1.0]}");
+  std::ifstream ifs("./test/_fixture/processed_map_data/map.json");
+  std::string json_string((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
+  nlohmann::json map_json = nlohmann::json::parse(json_string);
   // When
   lar::Map map = map_json;
   // Then
   std::vector<uint8_t> expected_desc = {32, 190, 108,   0, 128,  17,   0, 193,  63,   0, 128, 129, 197,  49, 254, 199,  29,   1,   0,  32,   0,   6, 112,   4,   0,   0,   0,  60, 134,   0,  72, 247,  31,   0, 248, 255,  66,  16,   2,   0, 254,  59,  92,   7,   0,  55,   0,   0,   0, 200, 241,  24, 227, 255, 255, 199,  67,  96, 120, 255,   0};
-  cv::Mat actual_desc = map.landmarks[0].desc;
+  cv::Mat actual_desc = map.landmarks[19].desc;
 
   // Check `desc` values
   for (int i = 0; i < 61; ++i) {
@@ -131,8 +136,8 @@ TEST(MapTest, JSONDeserialization) {
   EXPECT_EQ(actual_desc.rows, 1);
   EXPECT_EQ(actual_desc.cols, expected_desc.size());
 
-  EXPECT_EQ(map.landmarks[0].id, 19);
-  EXPECT_NEAR(map.landmarks[0].position.x(), 28.888938033904257, 1e-10);
-  EXPECT_NEAR(map.landmarks[0].position.y(), 8.998288591372056, 1e-10);
-  EXPECT_NEAR(map.landmarks[0].position.z(), -16.944010774289747, 1e-10);
+  EXPECT_EQ(map.landmarks[19].id, 19);
+  EXPECT_NEAR(map.landmarks[19].position.x(), 28.99345023444182, 1e-10);
+  EXPECT_NEAR(map.landmarks[19].position.y(), 8.76631960321935, 1e-10);
+  EXPECT_NEAR(map.landmarks[19].position.z(), -17.06995683511346, 1e-10);
 }

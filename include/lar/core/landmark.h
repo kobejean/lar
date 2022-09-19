@@ -15,14 +15,10 @@ namespace lar {
       Eigen::Vector3d position;
       Eigen::Vector3f orientation;
       cv::Mat desc;
-
-      // For r-tree indexing
-      double distance;
-      Eigen::Vector3d cam_position;
+      Rect bounds;
 
       Landmark();
       Landmark(const Eigen::Vector3d& position, const cv::Mat& desc, size_t id);
-      Rect bounds() const;
 
       static cv::Mat concatDescriptions(const std::vector<Landmark>& landmarks);
 
@@ -58,8 +54,7 @@ namespace lar {
       {"desc", desc64},
       {"position", l.position},
       {"orientation", l.orientation},
-      {"distance", l.distance},
-      {"cam_position", l.cam_position},
+      {"bounds", l.bounds},
       {"sightings", l.sightings}
     };
   }
@@ -71,8 +66,7 @@ namespace lar {
     l.desc = base64::base64_decode(desc64, 1, 61, CV_8UC1);
     j.at("position").get_to(l.position);
     j.at("orientation").get_to(l.orientation);
-    j.at("distance").get_to(l.distance);
-    j.at("cam_position").get_to(l.cam_position);
+    j.at("bounds").get_to(l.bounds);
     j.at("sightings").get_to(l.sightings);
   }
 
