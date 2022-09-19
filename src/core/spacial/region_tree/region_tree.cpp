@@ -64,8 +64,8 @@ void RegionTree<T,N>::erase(size_t id) {
 
   entities.erase(id);
   _Node<T,N> *node = static_cast<_Node<T,N>*>(leaf_map.extract(id).mapped());
-  _Node<T,N> *underflow = node->erase();
-  if (root->children.size() == 1) {
+  node->erase();
+  if (root->children.size() == 1 && root->height > 1) {
     root->children.clear();
     // if root has only one child, replace root with child
     _Node<T,N> *child = root->children[0];
@@ -110,8 +110,7 @@ std::vector<T> RegionTree<T,N>::all() const {
 
 
 // explicit instantiations
-template class RegionTree<size_t, 5>;
-// template class RegionTree<size_t>;
+template class RegionTree<size_t, 4>;
 template class RegionTree<Landmark>;
 
 } // namespace lar

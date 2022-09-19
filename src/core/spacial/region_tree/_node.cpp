@@ -98,7 +98,7 @@ void _Node<T,N>::print(std::ostream &os, int depth) const {
 
 template <typename T, std::size_t N>
 inline bool _Node<T,N>::isLeaf() const {
-  return this->children.size() == 0;
+  return this->height == 0;
 }
 
 template <typename T, std::size_t N>
