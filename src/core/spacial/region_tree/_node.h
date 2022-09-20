@@ -8,12 +8,15 @@
 #include "lar/core/spacial/region_tree.h"
 #include "lar/core/landmark.h"
 
+#include "_node_traits.h"
+
 namespace lar {
 
 // internal RegionTree node class
 template <typename T>
 class RegionTree<T>::_Node {
   public:
+    static constexpr std::size_t MAX_CHILDREN = _NodeTraits<T>::MAX_CHILDREN;
     using children_container = unordered_array<_Node*, MAX_CHILDREN>;
     using overflow_container = unordered_array<_Node*, MAX_CHILDREN+1>;
 

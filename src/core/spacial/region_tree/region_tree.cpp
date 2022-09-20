@@ -6,16 +6,6 @@
 #include "lar/core/spacial/region_tree.h"
 #include "lar/core/landmark.h"
 
-namespace lar {
-  // RegionTree<size_t> is used for testing purposes
-  // MAX_CHILDREN is set to 4 to make testing easier
-  template<>
-  const std::size_t RegionTree<size_t>::MAX_CHILDREN = 4;
-
-  // RegionTree<Landmark> is used in the landmark database
-  template<>
-  const std::size_t RegionTree<Landmark>::MAX_CHILDREN = 25;
-}
 // import rtree node implementation in same translation unit
 #include "_node.cpp"
 

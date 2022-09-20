@@ -6,14 +6,12 @@
 #include <memory>
 #include <iostream>
 #include "lar/core/spacial/rect.h"
-#include "lar/core/landmark.h"
 
 namespace lar {
 
   template <typename T>
   class RegionTree {
-    public: 
-      static const std::size_t MAX_CHILDREN;
+    public:
       std::unordered_map<size_t, T> entities;
 
       // lifecycle
