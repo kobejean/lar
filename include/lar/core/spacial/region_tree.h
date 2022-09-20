@@ -1,7 +1,6 @@
 #ifndef LAR_CORE_SPACIAL_REGION_TREE_H
 #define LAR_CORE_SPACIAL_REGION_TREE_H
 
-#include <array>
 #include <vector>
 #include <unordered_map>
 #include <memory>
@@ -10,12 +9,9 @@
 
 namespace lar {
 
-  template <typename T, std::size_t N = 25>
+  template <typename T>
   class RegionTree {
-    public: 
-      static constexpr std::size_t MAX_CHILDREN = N;
-      std::unordered_map<size_t, T> entities;
-
+    public:
       // lifecycle
       RegionTree();
 
@@ -28,12 +24,16 @@ namespace lar {
 
       // collection
       size_t size() const;
-      std::vector<T> all() const;
+      std::vector<T*> all() const;
 
     private:
-      std::shared_ptr<void> root;
-      std::unordered_map<size_t, void*> leaf_map;
+      class Node;
+      class LeafNode;
+      std::shared_ptr<Node> root;
+      using leaf_container = std::unordered_map<size_t, LeafNode*>;
+      leaf_container leaf_map;
   };
+
 }
 
 #endif /* LAR_CORE_SPACIAL_REGION_TREE_H */

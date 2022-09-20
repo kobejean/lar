@@ -29,7 +29,10 @@ namespace lar {
   bool Tracker::localize(cv::InputArray image, const cv::Mat& intrinsics, const cv::Mat& dist_coeffs, cv::Mat &rvec, cv::Mat &tvec, bool use_extrinsic_guess) {
     // get map descriptors
     if (tvec.empty()) {
-      local_landmarks = map.landmarks.all();
+      local_landmarks.clear();
+      for (Landmark *landmark : map.landmarks.all()) {
+        local_landmarks.push_back(*landmark);
+      }
     } else {
       double query_diameter = 50;
       Rect query = Rect(Point(tvec.at<double>(0), tvec.at<double>(2)), query_diameter, query_diameter);

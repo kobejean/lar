@@ -5,5 +5,4 @@ set(HEADER_LIST
 
 target_sources(lar_core PRIVATE 
   ${HEADER_LIST}
-  unordered_array.cpp
 )

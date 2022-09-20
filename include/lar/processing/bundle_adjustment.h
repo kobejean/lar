@@ -31,13 +31,13 @@ namespace lar {
       };
       Stats _stats;
       
-      bool addLandmark(const Landmark& landmark, size_t id);
+      bool addLandmark(const Landmark *landmark, size_t id);
       void addPose(const Eigen::Matrix4d& extrinsics, size_t id, bool fixed);
       void addOdometry(size_t frame_id);
       void addIntrinsics(const Eigen::Matrix3d& intrinsics, size_t id);
-      void addLandmarkMeasurements(const Landmark& landmark, size_t id);
+      void addLandmarkMeasurements(const Landmark *landmark, size_t id);
 
-      void updateLandmark(size_t landmark_id);
+      void updateLandmark(Landmark *landmark);
   };
 
 }

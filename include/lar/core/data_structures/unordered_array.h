@@ -1,5 +1,4 @@
 #include <algorithm>
-#include <array>
 
 namespace lar {
 
