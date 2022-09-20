@@ -11,21 +11,18 @@
 
 namespace lar {
 
-namespace {
-  
 // internal RegionTree node class
-template <typename T, std::size_t N>
-class _Node {
+template <typename T>
+class RegionTree<T>::_Node {
   public:
-    static constexpr std::size_t MAX_CHILDREN = N;
-    using child_collection = unordered_array<_Node*, N>;
-    using overflow_collection = unordered_array<_Node*, N+1>;
+    using child_collection = unordered_array<_Node*, MAX_CHILDREN>;
+    using overflow_collection = unordered_array<_Node*, MAX_CHILDREN+1>;
 
     Rect bounds;
     T value;
     size_t id;
     uint8_t height;
-    _Node<T,N> *parent;
+    _Node *parent;
     child_collection children;
 
     // lifecycle
@@ -34,8 +31,8 @@ class _Node {
     ~_Node();
 
     // operations
-    _Node* insert(_Node *node);
-    _Node* erase();
+    _Node *insert(_Node *node);
+    _Node *erase();
     void find(const Rect &query, std::vector<T> &result) const;
     void print(std::ostream &os, int depth) const;
 
@@ -48,9 +45,10 @@ class _Node {
     void subtractBounds(const Rect &bounds);
 
     static void partition(overflow_collection &children, _Node *lower_split, _Node *upper_split);
+  private:
+    struct _InsertScore;
+    class _Partition;
 };
-
-} // namespace
 
 } // namespace lar
 

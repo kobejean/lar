@@ -6,7 +6,7 @@ using namespace lar;
 TEST(RegionTreeTest, Print) {
   // Given
   std::ostringstream output;
-  RegionTree<size_t, 4> tree;
+  RegionTree<size_t> tree;
   tree.insert(1, Rect(1, 2, 3, 4), 1);
   // When
   tree.print(output);
@@ -19,7 +19,7 @@ TEST(RegionTreeTest, Print) {
 TEST(RegionTreeTest, Insert) {
   // Given
   std::ostringstream output;
-  RegionTree<size_t, 4> tree;
+  RegionTree<size_t> tree;
   // When
   tree.insert(1, lar::Rect(12, 4, 24, 15), 1);
   tree.insert(2, lar::Rect(23, 24, 26, 26), 2);
@@ -43,7 +43,7 @@ TEST(RegionTreeTest, Insert) {
 TEST(RegionTreeTest, Erase) {
   // Given
   std::ostringstream output;
-  RegionTree<size_t, 4> tree;
+  RegionTree<size_t> tree;
   // When
   tree.insert(1, lar::Rect(12, 4, 24, 15), 1);
   tree.insert(2, lar::Rect(23, 24, 26, 26), 2);
@@ -68,7 +68,7 @@ TEST(RegionTreeTest, Erase) {
 TEST(RegionTreeTest, Find) {
   // Given
   std::ostringstream output;
-  RegionTree<size_t, 4> tree;
+  RegionTree<size_t> tree;
   // When
   tree.insert(1, lar::Rect(12, 4, 24, 15), 1);
   tree.insert(2, lar::Rect(23, 24, 26, 26), 2);

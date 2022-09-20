@@ -7,7 +7,7 @@ using namespace std;
 
 
 int main(int argc, const char* argv[]){
-  lar::RegionTree<size_t, 4> tree;
+  lar::RegionTree<size_t> tree;
 
   tree.insert(1, lar::Rect(12, 4, 24, 15), 1);
   tree.print(std::cout);
