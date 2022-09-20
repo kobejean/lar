@@ -1,6 +1,8 @@
 set(HEADER_LIST
   "${PROJECT_SOURCE_DIR}/include/lar/core/spacial/region_tree.h"
   node.h
+  node_traits.h
+  node_partition.h
 )
 
 target_sources(lar_core PRIVATE 

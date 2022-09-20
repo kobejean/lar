@@ -6,7 +6,8 @@
 #include "lar/core/spacial/region_tree.h"
 #include "lar/core/landmark.h"
 
-// import rtree node implementation in same translation unit
+// import node implementation in same translation unit
+// for template instantiation
 #include "node.cpp"
 
 namespace lar {

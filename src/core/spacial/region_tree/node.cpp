@@ -6,6 +6,9 @@
 #include "lar/core/landmark.h"
 
 #include "node.h"
+
+// import node partition implementation in same translation unit
+// for template instantiation
 #include "node_partition.cpp"
 
 namespace lar {
@@ -98,17 +101,17 @@ inline bool RegionTree<T>::Node::isLeaf() const {
 }
 
 template <typename T>
-struct RegionTree<T>::Node::_InsertScore {
+struct RegionTree<T>::Node::InsertScore {
   double overlap, expansion, area;
 
-  _InsertScore() : overlap(0), expansion(0), area(0) {}
-  _InsertScore(const Node *parent, const Rect &bounds) :
+  InsertScore() : overlap(0), expansion(0), area(0) {}
+  InsertScore(const Node *parent, const Rect &bounds) :
     overlap(parent->bounds.overlap(bounds)),
     area(parent->bounds.area()) {
     expansion = parent->bounds.minBoundingBox(bounds).area() - area;
   }
 
-  bool operator<(const _InsertScore &other) const {
+  bool operator<(const InsertScore &other) const {
     if (overlap < other.overlap) return true;
     if (expansion > other.expansion) return true;
     if (area < other.area) return true;
@@ -118,11 +121,11 @@ struct RegionTree<T>::Node::_InsertScore {
 
 template <typename T>
 typename RegionTree<T>::Node *RegionTree<T>::Node::findBestInsertChild(const Rect &bounds) const {
-  _InsertScore best_score(children[0], bounds);
+  InsertScore best_score(children[0], bounds);
   Node *best_child = children[0];
   // find the best child to insert into
   for (auto &child : children) {
-    _InsertScore score(child, bounds);
+    InsertScore score(child, bounds);
     if (best_score < score ) {
       best_score = score;
       best_child = child;

@@ -15,6 +15,7 @@ namespace lar {
 // internal RegionTree node class
 template <typename T>
 class RegionTree<T>::Node {
+    friend class RegionTree<T>;
   public:
     static constexpr std::size_t MAX_CHILDREN = NodeTraits<T>::MAX_CHILDREN;
     using children_container = unordered_array<Node*, MAX_CHILDREN>;
@@ -43,7 +44,7 @@ class RegionTree<T>::Node {
     std::size_t findChildIndex(Node *child) const;
     void subtractBounds(const Rect &bounds);
   private:
-    struct _InsertScore;
+    struct InsertScore;
     class Partition;
 };
 
@@ -52,7 +53,6 @@ template <typename T>
 class RegionTree<T>::LeafNode : Node {
     friend class RegionTree<T>;
   public:
-
     size_t id;
     T value;
     LeafNode(T value, Rect bounds, size_t id);
