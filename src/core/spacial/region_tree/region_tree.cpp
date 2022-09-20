@@ -7,14 +7,14 @@
 #include "lar/core/landmark.h"
 
 // import rtree node implementation in same translation unit
-#include "_node.cpp"
+#include "node.cpp"
 
 namespace lar {
 
 // lifecycle
 
 template <typename T>
-RegionTree<T>::RegionTree() : root(new _Node(1)) {
+RegionTree<T>::RegionTree() : root(new Node(1)) {
   
 }
 
@@ -23,14 +23,13 @@ RegionTree<T>::RegionTree() : root(new _Node(1)) {
 
 template <typename T>
 T& RegionTree<T>::operator[](size_t id) {
-  return entities[id];
+  return leaf_map[id]->value;
 }
 
 template <typename T>
 void RegionTree<T>::insert(T value, Rect bounds, size_t id) {
   // create new leaf node
-  _Node *node = new _LeafNode(value, bounds, id);
-  entities.emplace(id, value);
+  LeafNode *node = new LeafNode(value, bounds, id);
   leaf_map.emplace(id, node);
 
   if (root->children.size() == 0) {
@@ -40,11 +39,11 @@ void RegionTree<T>::insert(T value, Rect bounds, size_t id) {
     return;
   }
 
-  _Node *split = root->insert(node);
+  Node *split = root->insert(node);
   if (split != nullptr) {
     // if we have a spit at root, create a new root
     // with a copy of the old root and the split as a children
-    _Node *copy = new _Node(*root);
+    Node *copy = new Node(*root);
     for (auto &child : root->children) {
       child->parent = copy;
     }
@@ -57,12 +56,11 @@ void RegionTree<T>::insert(T value, Rect bounds, size_t id) {
 
 template <typename T>
 void RegionTree<T>::erase(size_t id) {
-  entities.erase(id);
-  _Node *node = leaf_map.extract(id).mapped();
+  Node *node = leaf_map.extract(id).mapped();
   node->erase();
   if (root->children.size() == 1 && root->height > 1) {
     // if root has only one child, replace root with child
-    _Node *child = root->children[0];
+    Node *child = root->children[0];
     child->parent = nullptr;
     // clear children of root so that it doesn't delete them
     // when the root is deleted
@@ -88,15 +86,15 @@ void RegionTree<T>::print(std::ostream &os) {
 
 template <typename T>
 size_t RegionTree<T>::size() const {
-  return entities.size();
+  return leaf_map.size();
 }
 
 template <typename T>
 std::vector<T> RegionTree<T>::all() const {
   std::vector<T> all;
-  all.reserve(entities.size());
-  for(auto kv : entities) {
-    all.push_back(kv.second);  
+  all.reserve(leaf_map.size());
+  for(auto kv : leaf_map) {
+    all.push_back(kv.second->value);  
   }
   return all;
 }

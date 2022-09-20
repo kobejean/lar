@@ -12,8 +12,6 @@ namespace lar {
   template <typename T>
   class RegionTree {
     public:
-      std::unordered_map<size_t, T> entities;
-
       // lifecycle
       RegionTree();
 
@@ -29,10 +27,10 @@ namespace lar {
       std::vector<T> all() const;
 
     private:
-      class _Node;
-      class _LeafNode;
-      std::shared_ptr<_Node> root;
-      std::unordered_map<size_t, _Node*> leaf_map;
+      class Node;
+      class LeafNode;
+      std::shared_ptr<Node> root;
+      std::unordered_map<size_t, LeafNode*> leaf_map;
   };
 
 }
