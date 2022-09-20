@@ -11,17 +11,9 @@
 namespace lar {
 
 template <typename T>
-using _Node = typename RegionTree<T>::_Node;
-
-template <typename T>
 RegionTree<T>::_Node::_Node(std::size_t height) : height(height), parent(nullptr) {
   
 }
-
-template <typename T>
-RegionTree<T>::_Node::_Node(T value, Rect bounds, size_t id) : bounds(bounds), value(value), id(id), height(0) {
-
-};
 
 template <typename T>
 RegionTree<T>::_Node::~_Node() {
@@ -31,7 +23,7 @@ RegionTree<T>::_Node::~_Node() {
 };
 
 template <typename T>
-_Node<T> *RegionTree<T>::_Node::insert(_Node *node) {
+typename RegionTree<T>::_Node *RegionTree<T>::_Node::insert(_Node *node) {
   bounds = bounds.minBoundingBox(node->bounds);
 
   if (height != node->height+1) {
@@ -44,7 +36,7 @@ _Node<T> *RegionTree<T>::_Node::insert(_Node *node) {
 }
 
 template <typename T>
-_Node<T> *RegionTree<T>::_Node::erase() {
+typename RegionTree<T>::_Node *RegionTree<T>::_Node::erase() {
   if (parent != nullptr) {
     _Node* insert_root = nullptr;
     size_t index = parent->findChildIndex(this);
@@ -71,7 +63,8 @@ _Node<T> *RegionTree<T>::_Node::erase() {
 template <typename T>
 void RegionTree<T>::_Node::find(const Rect &query, std::vector<T> &result) const { 
   if (this->isLeaf()) {
-    result.push_back(this->value);
+    const _LeafNode *leaf = static_cast<const _LeafNode*>(this);
+    result.push_back(leaf->value);
     return;
   }
 
@@ -89,7 +82,10 @@ void RegionTree<T>::_Node::print(std::ostream &os, int depth) const {
 
   // print node info
   this->bounds.print(os);
-  if (this->isLeaf()) os << " - #" << this->id;
+  if (this->isLeaf()) {
+    const _LeafNode *leaf = static_cast<const _LeafNode*>(this);
+    os << " - #" << leaf->id;
+  }
   os << "\n";
   
   // print children
@@ -121,7 +117,7 @@ struct RegionTree<T>::_Node::_InsertScore {
 };
 
 template <typename T>
-_Node<T> *RegionTree<T>::_Node::findBestInsertChild(const Rect &bounds) const {
+typename RegionTree<T>::_Node *RegionTree<T>::_Node::findBestInsertChild(const Rect &bounds) const {
   _InsertScore best_score(children[0], bounds);
   _Node *best_child = children[0];
   // find the best child to insert into
@@ -137,7 +133,7 @@ _Node<T> *RegionTree<T>::_Node::findBestInsertChild(const Rect &bounds) const {
 
 
 template <typename T>
-_Node<T> *RegionTree<T>::_Node::addChild(_Node *child) {
+typename RegionTree<T>::_Node *RegionTree<T>::_Node::addChild(_Node *child) {
   if (children.size() < MAX_CHILDREN) {
     linkChild(child);
     return nullptr;
@@ -182,5 +178,11 @@ void RegionTree<T>::_Node::subtractBounds(const Rect &bounds) {
     }
   }
 }
+
+template <typename T>
+RegionTree<T>::_LeafNode::_LeafNode(T value, Rect bounds, size_t id) : _Node(0), id(id), value(value) {
+  this->bounds = bounds;
+  this->height = 0;
+};
 
 } // namespace lar

@@ -29,7 +29,7 @@ T& RegionTree<T>::operator[](size_t id) {
 template <typename T>
 void RegionTree<T>::insert(T value, Rect bounds, size_t id) {
   // create new leaf node
-  _Node *node = new _Node(value, bounds, id);
+  _Node *node = new _LeafNode(value, bounds, id);
   entities.emplace(id, value);
   leaf_map.emplace(id, node);
 

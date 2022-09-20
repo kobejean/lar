@@ -30,6 +30,7 @@ namespace lar {
 
     private:
       class _Node;
+      class _LeafNode;
       std::shared_ptr<_Node> root;
       std::unordered_map<size_t, _Node*> leaf_map;
   };

@@ -21,15 +21,12 @@ class RegionTree<T>::_Node {
     using overflow_container = unordered_array<_Node*, MAX_CHILDREN+1>;
 
     Rect bounds;
-    T value;
-    size_t id;
     uint8_t height;
     _Node *parent;
     children_container children;
 
     // lifecycle
     _Node(std::size_t height);
-    _Node(T value, Rect bounds, size_t id);
     ~_Node();
 
     // operations
@@ -47,9 +44,22 @@ class RegionTree<T>::_Node {
     void subtractBounds(const Rect &bounds);
 
     static void partition(overflow_container &children, _Node *lower_split, _Node *upper_split);
+    friend class RegionTree<T>;
+    friend class RegionTree<T>::_LeafNode;
   private:
     struct _InsertScore;
     class _Partition;
+};
+
+
+template <typename T>
+class RegionTree<T>::_LeafNode : RegionTree<T>::_Node {
+  public:
+    size_t id;
+    T value;
+    _LeafNode(T value, Rect bounds, size_t id);
+    friend class RegionTree<T>;
+    friend class RegionTree<T>::_Node;
 };
 
 } // namespace lar
