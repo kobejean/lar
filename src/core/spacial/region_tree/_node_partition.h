@@ -12,14 +12,14 @@ namespace lar {
 
 template <typename T>
 class RegionTree<T>::_Node::_Partition {
-  static void linearPickSeeds(overflow_collection &nodes, _Node **seed1, _Node **seed2);
-  static void distribute(overflow_collection &nodes, _Node *lower_split, _Node *upper_split);
+  static void linearPickSeeds(overflow_container &nodes, _Node **seed1, _Node **seed2);
+  static void distribute(overflow_container &nodes, _Node *lower_split, _Node *upper_split);
 
   template <typename Score, typename Compare>
-  static void extractSeed(overflow_collection &nodes, _Node **seed, Score score, Compare comp);
+  static void extractSeed(overflow_container &nodes, _Node **seed, Score score, Compare comp);
 
   template <typename Comparator>
-  static void populateSplit(overflow_collection &nodes, size_t m, _Node *split, Comparator comp);
+  static void populateSplit(overflow_container &nodes, size_t m, _Node *split, Comparator comp);
 
   friend class RegionTree<T>::_Node;
 };

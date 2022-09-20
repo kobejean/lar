@@ -5,7 +5,6 @@
 #include <algorithm>
 #include <vector>
 #include "lar/core/data_structures/unordered_array.h"
-#include "lar/core/data_structures/unordered_vector.h"
 #include "lar/core/spacial/region_tree.h"
 #include "lar/core/landmark.h"
 
@@ -15,15 +14,15 @@ namespace lar {
 template <typename T>
 class RegionTree<T>::_Node {
   public:
-    using child_collection = unordered_array<_Node*, MAX_CHILDREN>;
-    using overflow_collection = unordered_array<_Node*, MAX_CHILDREN+1>;
+    using children_container = unordered_array<_Node*, MAX_CHILDREN>;
+    using overflow_container = unordered_array<_Node*, MAX_CHILDREN+1>;
 
     Rect bounds;
     T value;
     size_t id;
     uint8_t height;
     _Node *parent;
-    child_collection children;
+    children_container children;
 
     // lifecycle
     _Node(std::size_t height);
@@ -44,7 +43,7 @@ class RegionTree<T>::_Node {
     std::size_t findChildIndex(_Node *child) const;
     void subtractBounds(const Rect &bounds);
 
-    static void partition(overflow_collection &children, _Node *lower_split, _Node *upper_split);
+    static void partition(overflow_container &children, _Node *lower_split, _Node *upper_split);
   private:
     struct _InsertScore;
     class _Partition;

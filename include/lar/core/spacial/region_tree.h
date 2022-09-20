@@ -1,12 +1,12 @@
 #ifndef LAR_CORE_SPACIAL_REGION_TREE_H
 #define LAR_CORE_SPACIAL_REGION_TREE_H
 
-#include <array>
 #include <vector>
 #include <unordered_map>
 #include <memory>
 #include <iostream>
 #include "lar/core/spacial/rect.h"
+#include "lar/core/landmark.h"
 
 namespace lar {
 
@@ -35,6 +35,7 @@ namespace lar {
       std::shared_ptr<_Node> root;
       std::unordered_map<size_t, _Node*> leaf_map;
   };
+
 }
 
 #endif /* LAR_CORE_SPACIAL_REGION_TREE_H */

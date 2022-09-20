@@ -32,38 +32,38 @@ RegionTree<T>::_Node::~_Node() {
 
 template <typename T>
 _Node<T> *RegionTree<T>::_Node::insert(_Node *node) {
-  this->bounds = this->bounds.minBoundingBox(node->bounds);
+  bounds = bounds.minBoundingBox(node->bounds);
 
-  if (this->height != node->height+1) {
-    _Node *best_child = this->findBestInsertChild(node->bounds);
+  if (height != node->height+1) {
+    _Node *best_child = findBestInsertChild(node->bounds);
     _Node *child_split = best_child->insert(node);
-    return child_split == nullptr ? nullptr : this->addChild(child_split);
+    return child_split == nullptr ? nullptr : addChild(child_split);
   } else {
-    return this->addChild(node);
+    return addChild(node);
   }
 }
 
 template <typename T>
 _Node<T> *RegionTree<T>::_Node::erase() {
-  if (this->parent != nullptr) {
-    _Node* underflow = nullptr;
-    size_t index = this->parent->findChildIndex(this);
-    this->parent->children.erase(index);
-    this->parent->subtractBounds(this->bounds);
+  if (parent != nullptr) {
+    _Node* insert_root = nullptr;
+    size_t index = parent->findChildIndex(this);
+    parent->children.erase(index);
+    parent->subtractBounds(bounds);
 
-    if (this->parent->children.size() < (MAX_CHILDREN / 2) && this->parent->parent != nullptr) {
-      child_collection children = this->parent->children;
-      this->parent->children.clear();
-      underflow = this->parent->erase();
-      this->parent = nullptr;
-      for (auto &child : children) {
-        underflow->insert(child);
+    if (parent->children.size() < (MAX_CHILDREN / 2) && parent->parent != nullptr) {
+      children_container siblings = parent->children;
+      parent->children.clear();
+      insert_root = parent->erase();
+      parent = nullptr;
+      for (auto &sibling : siblings) {
+        insert_root->insert(sibling);
       }
     } else {
-      underflow = this->parent;
+      insert_root = parent;
     }
     delete this;
-    return underflow;
+    return insert_root;
   }
   return nullptr;
 }
@@ -113,19 +113,19 @@ struct RegionTree<T>::_Node::_InsertScore {
   }
 
   bool operator<(const _InsertScore &other) const {
-    if (this->overlap < other.overlap) return true;
-    if (this->expansion > other.expansion) return true;
-    if (this->area < other.area) return true;
+    if (overlap < other.overlap) return true;
+    if (expansion > other.expansion) return true;
+    if (area < other.area) return true;
     return false;
   }
 };
 
 template <typename T>
 _Node<T> *RegionTree<T>::_Node::findBestInsertChild(const Rect &bounds) const {
-  _InsertScore best_score(this->children[0], bounds);
-  _Node *best_child = this->children[0];
+  _InsertScore best_score(children[0], bounds);
+  _Node *best_child = children[0];
   // find the best child to insert into
-  for (auto &child : this->children) {
+  for (auto &child : children) {
     _InsertScore score(child, bounds);
     if (best_score < score ) {
       best_score = score;
@@ -138,16 +138,16 @@ _Node<T> *RegionTree<T>::_Node::findBestInsertChild(const Rect &bounds) const {
 
 template <typename T>
 _Node<T> *RegionTree<T>::_Node::addChild(_Node *child) {
-  if (this->children.size() < MAX_CHILDREN) {
+  if (children.size() < MAX_CHILDREN) {
     linkChild(child);
     return nullptr;
   } else {
-    overflow_collection nodes;
-    for (auto &child : this->children) nodes.push_back(child);
+    overflow_container nodes;
+    for (auto &child : children) nodes.push_back(child);
     nodes.push_back(child);
-    RegionTree<T>::_Node *split = new RegionTree<T>::_Node(this->height);
+    RegionTree<T>::_Node *split = new RegionTree<T>::_Node(height);
     // reset parent
-    this->children.clear();
+    children.clear();
     partition(nodes, this, split);
     return split;
   }
@@ -156,15 +156,15 @@ _Node<T> *RegionTree<T>::_Node::addChild(_Node *child) {
 
 template <typename T>
 void RegionTree<T>::_Node::linkChild(_Node *child) {
-  this->children.push_back(child);
+  children.push_back(child);
   child->parent = this;
 }
 
 
 template <typename T>
 std::size_t RegionTree<T>::_Node::findChildIndex(_Node *child) const {
-  for (size_t i = 0; i < this->children.size(); i++) {
-    if (this->children[i] == child) return i;
+  for (size_t i = 0; i < children.size(); i++) {
+    if (children[i] == child) return i;
   }
   return -1;
 }
@@ -177,8 +177,8 @@ void RegionTree<T>::_Node::subtractBounds(const Rect &bounds) {
     for (size_t i = 1; i < children.size(); i++) {
       this->bounds = this->bounds.minBoundingBox(children[i]->bounds);
     }
-    if (this->parent != nullptr) {
-      this->parent->subtractBounds(bounds);
+    if (parent != nullptr) {
+      parent->subtractBounds(bounds);
     }
   }
 }

@@ -12,7 +12,7 @@ namespace lar {
 
 // partition strategy based on: https://www.just.edu.jo/~qmyaseen/rtree1.pdf
 template <typename T>
-void RegionTree<T>::_Node::partition(overflow_collection &nodes, _Node *lower_split, _Node *upper_split) {
+void RegionTree<T>::_Node::partition(overflow_container &nodes, _Node *lower_split, _Node *upper_split) {
   _Node *seed1, *seed2;
   _Partition::linearPickSeeds(nodes, &seed1, &seed2);
 
@@ -28,7 +28,7 @@ void RegionTree<T>::_Node::partition(overflow_collection &nodes, _Node *lower_sp
 // linearPickSeeds()
 
 template <typename T>
-void RegionTree<T>::_Node::_Partition::linearPickSeeds(overflow_collection &nodes, _Node **seed1, _Node **seed2) {
+void RegionTree<T>::_Node::_Partition::linearPickSeeds(overflow_container &nodes, _Node **seed1, _Node **seed2) {
   extractSeed(nodes, seed1,
     [](const _Node *node) { return node->bounds.lower.l1(); },
     [](double value, double best) { return value < best; }
@@ -42,7 +42,7 @@ void RegionTree<T>::_Node::_Partition::linearPickSeeds(overflow_collection &node
 // extractSeed()
 template <typename T>
 template <typename Score, typename Compare>
-void RegionTree<T>::_Node::_Partition::extractSeed(overflow_collection &nodes, _Node **seed, Score score, Compare comp) {
+void RegionTree<T>::_Node::_Partition::extractSeed(overflow_container &nodes, _Node **seed, Score score, Compare comp) {
   double best = score(nodes[0]);
   size_t index = 0;
   for (size_t i = 1; i < nodes.size(); i++) {
@@ -60,7 +60,7 @@ void RegionTree<T>::_Node::_Partition::extractSeed(overflow_collection &nodes, _
 // distribute()
 
 template <typename T>
-void RegionTree<T>::_Node::_Partition::distribute(overflow_collection &nodes, _Node *lower_split, _Node *upper_split) {
+void RegionTree<T>::_Node::_Partition::distribute(overflow_container &nodes, _Node *lower_split, _Node *upper_split) {
   Point lower_vert = lower_split->children[0]->bounds.lower; // lower vertex of seed seed1
   Point upper_vert = upper_split->children[0]->bounds.upper; // upper vertex of seed seed2
   size_t m = nodes.size() / 2;
@@ -93,7 +93,7 @@ void RegionTree<T>::_Node::_Partition::distribute(overflow_collection &nodes, _N
 
 template <typename T>
 template <typename Comparator>
-void RegionTree<T>::_Node::_Partition::populateSplit(overflow_collection &nodes, size_t m, _Node *split, Comparator comp) {
+void RegionTree<T>::_Node::_Partition::populateSplit(overflow_container &nodes, size_t m, _Node *split, Comparator comp) {
   std::partial_sort(nodes.begin(), nodes.begin() + m, nodes.end(), comp);
   // add the closest m nodes to split
   for (size_t i = 0; i < m; i++) {
