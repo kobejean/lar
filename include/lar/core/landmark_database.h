@@ -19,7 +19,7 @@ namespace lar {
       std::vector<Landmark> find(const Rect &query) const;
       size_t size() const;
       size_t createID();
-      std::vector<Landmark> all() const;
+      std::vector<Landmark*> all() const;
 
 #ifndef LAR_COMPACT_BUILD
       void cull();
@@ -32,7 +32,10 @@ namespace lar {
   
 
   static void to_json(nlohmann::json& j, const LandmarkDatabase& l) {
-    std::vector<Landmark> landmarks = l.all();
+    std::vector<Landmark> landmarks;
+    for (Landmark* landmark : l.all()) {
+      landmarks.push_back(*landmark);
+    }
 
     // TODO: use hilbert curve ordering to improve bulk insert performance
     std::sort(landmarks.begin(), landmarks.end(), [](const Landmark& a, const Landmark& b) {

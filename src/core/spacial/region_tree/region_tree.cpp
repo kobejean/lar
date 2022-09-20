@@ -91,11 +91,11 @@ size_t RegionTree<T>::size() const {
 }
 
 template <typename T>
-std::vector<T> RegionTree<T>::all() const {
-  std::vector<T> all;
+std::vector<T*> RegionTree<T>::all() const {
+  std::vector<T*> all;
   all.reserve(leaf_map.size());
   for(auto kv : leaf_map) {
-    all.push_back(kv.second->value);  
+    all.push_back(&kv.second->value);  
   }
   return all;
 }

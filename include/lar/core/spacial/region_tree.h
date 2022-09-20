@@ -24,13 +24,14 @@ namespace lar {
 
       // collection
       size_t size() const;
-      std::vector<T> all() const;
+      std::vector<T*> all() const;
 
     private:
       class Node;
       class LeafNode;
       std::shared_ptr<Node> root;
-      std::unordered_map<size_t, LeafNode*> leaf_map;
+      using leaf_container = std::unordered_map<size_t, LeafNode*>;
+      leaf_container leaf_map;
   };
 
 }

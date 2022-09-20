@@ -27,14 +27,19 @@ namespace lar {
     return next_id++;
   }
 
-  std::vector<Landmark> LandmarkDatabase::all() const {
+  std::vector<Landmark*> LandmarkDatabase::all() const {
     return _rtree.all();
   }
 
 #ifndef LAR_COMPACT_BUILD
 
   void LandmarkDatabase::cull() {
-    for (Landmark& landmark : all()) {
+    // TODO: find better way to do this
+    std::vector<Landmark> landmarks;
+    for (Landmark* landmark : all()) {
+      landmarks.push_back(*landmark);
+    }
+    for (Landmark landmark : landmarks) {
       if (!landmark.isUseable()) {
         _rtree.erase(landmark.id);
       }
