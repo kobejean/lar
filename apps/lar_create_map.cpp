@@ -22,6 +22,18 @@ int main(int argc, const char* argv[]){
 
   lar::Mapper mapper(input);
   mapper.readMetadata();
+
+  Eigen::Matrix4d transform;
+  transform << 1., 0., 0., 4.,
+               0., 1., 0., 3.,
+               0., 0., 1., 1.,
+               0., 0., 0., 1.;
+  lar::Anchor anchor;
+  anchor.id = 0;
+  anchor.transform = transform;
+  mapper.addAnchor(anchor);
+
+
   lar::MapProcessor processor(mapper.data);
   processor.process();
   processor.saveMap(output);

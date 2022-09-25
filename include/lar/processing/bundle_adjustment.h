@@ -4,6 +4,7 @@
 #include <Eigen/Core>
 
 #include "g2o/core/sparse_optimizer.h"
+#include "g2o/types/sba/types_six_dof_expmap.h"
 
 #include "lar/core/landmark.h"
 #include "lar/mapping/frame.h"
@@ -20,6 +21,7 @@ namespace lar {
       void construct();
       void reset();
       void optimize();
+      void update();
 
     private:
       struct Stats {
@@ -38,6 +40,10 @@ namespace lar {
       void addLandmarkMeasurements(const Landmark *landmark, size_t id);
 
       void updateLandmark(Landmark *landmark);
+      void updateAnchor(Anchor *anchor);
+
+      static g2o::SE3Quat poseFromExtrinsics(const Eigen::Matrix4d& extrinsics);
+      static Eigen::Matrix4d extrinsicsFromPose(const g2o::SE3Quat& pose);
   };
 
 }

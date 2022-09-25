@@ -73,9 +73,16 @@ namespace lar {
     optimizer.initializeOptimization();
     optimizer.setVerbose(true);
     optimizer.optimize(50);
+    update();
+  }
 
+
+  void BundleAdjustment::update() {
     for (Landmark *landmark : data->map.landmarks.all()) {
       updateLandmark(landmark);
+    }
+    for (auto& it: data->map.anchors) {
+      updateAnchor(&it.second);
     }
   }
 
@@ -94,12 +101,7 @@ namespace lar {
   }
 
   void BundleAdjustment::addPose(Eigen::Matrix4d const &extrinsics, size_t id, bool fixed) {
-    Eigen::Matrix3d rot = extrinsics.block<3,3>(0,0);
-    // Flipping y and z axis to align with image coordinates and depth direction
-    rot(Eigen::indexing::all, 1) = -rot(Eigen::indexing::all, 1);
-    rot(Eigen::indexing::all, 2) = -rot(Eigen::indexing::all, 2);
-    g2o::SE3Quat pose = g2o::SE3Quat(rot, extrinsics.block<3,1>(0,3)).inverse();
-
+    g2o::SE3Quat pose = poseFromExtrinsics(extrinsics);
     g2o::VertexSE3Expmap * vertex = new g2o::VertexSE3Expmap();
     vertex->setId(id);
     vertex->setEstimate(pose);
@@ -159,6 +161,29 @@ namespace lar {
       g2o::VertexPointXYZ* v = dynamic_cast<g2o::VertexPointXYZ*>(optimizer.vertex(vertex_id));
       landmark->position = v->estimate();
     }
+  }
+
+  void BundleAdjustment::updateAnchor(Anchor *anchor) {
+    size_t vertex_id = anchor->frame_id;
+    g2o::VertexSE3Expmap* v = dynamic_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(vertex_id));
+    Eigen::Matrix4d extrinsics = extrinsicsFromPose(v->estimate());
+    anchor->transform = extrinsics * anchor->relative_transform;
+  }
+
+  g2o::SE3Quat BundleAdjustment::poseFromExtrinsics(Eigen::Matrix4d const &extrinsics) {
+    Eigen::Matrix3d rot = extrinsics.block<3,3>(0,0);
+    // Flipping y and z axis to align with image coordinates and depth direction
+    rot(Eigen::indexing::all, 1) = -rot(Eigen::indexing::all, 1);
+    rot(Eigen::indexing::all, 2) = -rot(Eigen::indexing::all, 2);
+    return g2o::SE3Quat(rot, extrinsics.block<3,1>(0,3)).inverse();
+  }
+
+  Eigen::Matrix4d BundleAdjustment::extrinsicsFromPose(g2o::SE3Quat const &pose) {
+    Eigen::Matrix4d extrinsics = pose.inverse().to_homogeneous_matrix();
+    // Flipping y and z axis to align with image coordinates and depth direction
+    extrinsics(Eigen::indexing::all, 1) = -extrinsics(Eigen::indexing::all, 1);
+    extrinsics(Eigen::indexing::all, 2) = -extrinsics(Eigen::indexing::all, 2);
+    return extrinsics;
   }
 
   void BundleAdjustment::Stats::print() {

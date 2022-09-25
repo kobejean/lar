@@ -9,7 +9,12 @@ namespace lar {
   struct Anchor {
     public: 
       int id;
-      Eigen::Transform<double,3,Eigen::Affine> transform{Eigen::Transform<double,3,Eigen::Affine>::Identity()};
+      Eigen::Transform<double,4,Eigen::Affine> transform{Eigen::Transform<double,4,Eigen::Affine>::Identity()};
+  
+#ifndef LAR_COMPACT_BUILD
+      std::size_t frame_id;
+      Eigen::Transform<double,4,Eigen::Affine> relative_transform{Eigen::Transform<double,4,Eigen::Affine>::Identity()};
+#endif
   };
   
   NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Anchor, id, transform)
