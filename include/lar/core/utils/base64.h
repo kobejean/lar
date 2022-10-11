@@ -1,6 +1,7 @@
 #ifndef LAR_CORE_UTILS_BASE64_H
 #define LAR_CORE_UTILS_BASE64_H
 
+#include <iostream>
 #include <opencv2/features2d.hpp>
 
 namespace lar {
@@ -99,12 +100,23 @@ namespace lar {
     }
 
     static std::string base64_encode(const cv::Mat& mat) {
-      std::vector<uchar> contiguous = mat.isContinuous()? mat : mat.clone();
-      return base64_encode(&contiguous[0], static_cast<int>(contiguous.size()));
+      std::vector<uchar> data;
+      data.reserve(mat.rows * mat.cols);
+
+      for (int i = 0; i < mat.rows; i++) {
+        const uchar *segment_start = mat.ptr(i);
+        data.insert(data.end(), segment_start, segment_start + mat.cols * mat.elemSize());
+      }
+      return base64_encode(&data[0], data.size());
     }
 
     static cv::Mat base64_decode(std::string const& encoded_string, int rows, int cols, int type) {
       std::vector<uchar> data = base64_decode(encoded_string);
+      if (cols <= 0) {
+        // TODO: surely there is a better way to get the element size
+        int elemSize = cv::Mat(1, 1, type).elemSize();
+        cols = data.size() / rows / elemSize;
+      }
       return cv::Mat(rows, cols, type, &data[0]).clone();
     }
 

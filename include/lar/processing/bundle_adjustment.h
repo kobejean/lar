@@ -5,6 +5,7 @@
 
 #include "g2o/core/sparse_optimizer.h"
 #include "g2o/types/sba/types_six_dof_expmap.h"
+#include "g2o/types/slam3d/se3quat.h"
 
 #include "lar/core/landmark.h"
 #include "lar/mapping/frame.h"
@@ -32,12 +33,15 @@ namespace lar {
         void print();
       };
       Stats _stats;
+      std::vector<g2o::EdgeProjectXYZ2UVD*> _landmark_edges;
       
       bool addLandmark(const Landmark *landmark, size_t id);
       void addPose(const Eigen::Matrix4d& extrinsics, size_t id, bool fixed);
       void addOdometry(size_t frame_id);
       void addIntrinsics(const Eigen::Matrix3d& intrinsics, size_t id);
       void addLandmarkMeasurements(const Landmark *landmark, size_t id);
+
+      void markOutliers(double chi_threshold);
 
       void updateLandmark(Landmark *landmark);
       void updateAnchor(Anchor *anchor);

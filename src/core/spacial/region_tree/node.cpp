@@ -26,15 +26,15 @@ RegionTree<T>::Node::~Node() {
 };
 
 template <typename T>
-typename RegionTree<T>::Node *RegionTree<T>::Node::insert(Node *node) {
+void RegionTree<T>::Node::insert(Node *node) {
   bounds = bounds.minBoundingBox(node->bounds);
 
-  if (height != node->height+1) {
+  if (height > node->height+1) {
     Node *best_child = findBestInsertChild(node->bounds);
-    Node *child_split = best_child->insert(node);
-    return child_split == nullptr ? nullptr : addChild(child_split);
+    best_child->insert(node);
   } else {
-    return addChild(node);
+    assert(height == node->height+1);
+    addChild(node);
   }
 }
 
@@ -44,10 +44,12 @@ typename RegionTree<T>::Node *RegionTree<T>::Node::erase() {
     Node* insert_root = nullptr;
     size_t index = parent->findChildIndex(this);
     parent->children.erase(index);
+    assert(parent != nullptr);
     parent->subtractBounds(bounds);
 
-    if (parent->children.size() < (MAX_CHILDREN / 2) && parent->parent != nullptr) {
+    if (parent->children.size() < (MAX_CHILDREN / 2)) {
       children_container siblings = parent->children;
+      // unlink from parent
       parent->children.clear();
       insert_root = parent->erase();
       parent = nullptr;
@@ -59,8 +61,11 @@ typename RegionTree<T>::Node *RegionTree<T>::Node::erase() {
     }
     delete this;
     return insert_root;
+  } else {
+    // we will not delete the root
+    // we will just return the root as the insert root
+    return this;
   }
-  return nullptr;
 }
 
 template <typename T>
@@ -136,10 +141,9 @@ typename RegionTree<T>::Node *RegionTree<T>::Node::findBestInsertChild(const Rec
 
 
 template <typename T>
-typename RegionTree<T>::Node *RegionTree<T>::Node::addChild(Node *child) {
+void RegionTree<T>::Node::addChild(Node *child) {
   if (children.size() < MAX_CHILDREN) {
     linkChild(child);
-    return nullptr;
   } else {
     overflow_container nodes;
     for (auto &child : children) nodes.push_back(child);
@@ -148,7 +152,20 @@ typename RegionTree<T>::Node *RegionTree<T>::Node::addChild(Node *child) {
     // reset parent
     children.clear();
     Partition::partition(nodes, this, split);
-    return split;
+    if (this->parent != nullptr) {
+      this->parent->addChild(split);
+    } else {
+      // if we have a spit at root, create a new root
+      // with a copy of the old root and the split as a children
+      Node *copy = new Node(*this);
+      for (auto &child : children) {
+        child->parent = copy;
+      }
+      children.clear();
+      linkChild(copy);
+      linkChild(split);
+      this->height++;
+    }
   }
 }
 

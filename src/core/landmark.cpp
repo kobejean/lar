@@ -26,13 +26,13 @@ namespace lar {
     // TODO: find a good way to estimate the region where the landmark can be seen for good indexing
     Eigen::Vector2d position2(position.x(), position.z());
     Eigen::Vector2d cam_position2(observation.cam_position.x(), observation.cam_position.z());
-    double distance = (position2 - cam_position2).norm();
+    double bounds_diameter = (position2 - cam_position2).norm() * 2;
     orientation = observation.surface_normal;
     Point center = Point(observation.cam_position.x(), observation.cam_position.y());
     if (sightings == 0) {
-      bounds = Rect(center, distance, distance);
+      bounds = Rect(center, bounds_diameter, bounds_diameter);
     } else {
-      Rect new_bounds(center, distance, distance);
+      Rect new_bounds(center, bounds_diameter, bounds_diameter);
       bounds = bounds.minBoundingBox(new_bounds);
     }
     sightings++;

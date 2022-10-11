@@ -6,7 +6,7 @@
 #include <nlohmann/json.hpp>
 
 #include "lar/mapping/frame.h"
-#include "lar/processing/map_processor.h"
+#include "lar/mapping/mapper.h"
 #include "lar/tracking/vision.h"
 
 namespace lar {
@@ -15,6 +15,7 @@ namespace lar {
     public:
       std::shared_ptr<Mapper::Data> data;
       Vision vision;
+      std::vector<Landmark> local_landmarks;
 
       FrameProcessor(std::shared_ptr<Mapper::Data> data);
       void process(Frame& frame);

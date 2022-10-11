@@ -40,19 +40,7 @@ void RegionTree<T>::insert(T value, Rect bounds, size_t id) {
     return;
   }
 
-  Node *split = root->insert(node);
-  if (split != nullptr) {
-    // if we have a spit at root, create a new root
-    // with a copy of the old root and the split as a children
-    Node *copy = new Node(*root);
-    for (auto &child : root->children) {
-      child->parent = copy;
-    }
-    root->children.clear();
-    root->linkChild(copy);
-    root->linkChild(split);
-    root->height++;
-  }
+  root->insert(node);
 }
 
 template <typename T>

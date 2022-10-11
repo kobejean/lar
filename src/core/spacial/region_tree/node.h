@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <vector>
 #include "lar/core/data_structures/unordered_array.h"
+#include "lar/core/data_structures/unordered_vector.h"
 #include "lar/core/spacial/region_tree.h"
 #include "lar/core/landmark.h"
 
@@ -31,7 +32,7 @@ class RegionTree<T>::Node {
     ~Node();
 
     // operations
-    Node *insert(Node *node);
+    void insert(Node *node);
     Node *erase();
     void find(const Rect &query, std::vector<T> &result) const;
     void print(std::ostream &os, int depth) const;
@@ -39,7 +40,7 @@ class RegionTree<T>::Node {
     // helpers
     inline bool isLeaf() const;
     Node *findBestInsertChild(const Rect &bounds) const;
-    Node *addChild(Node *child);
+    void addChild(Node *child);
     void linkChild(Node *child);
     std::size_t findChildIndex(Node *child) const;
     void subtractBounds(const Rect &bounds);

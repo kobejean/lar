@@ -18,7 +18,7 @@ namespace lar {
 
       void push_back(T value) { _data[_size++] = value; }
 
-      void pop_front() { _data[0] = _data[_size--]; }
+      void pop_front() { _data[0] = _data[--_size]; }
       void pop_front(std::size_t k) {
         auto end = _data + _size;
         _size -= k;

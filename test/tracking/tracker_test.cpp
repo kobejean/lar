@@ -25,18 +25,22 @@ TEST(TrackerTest, LocalizeWithTransform) {
   // Then
   EXPECT_NEAR(transform.at<double>(0,0), -0.27073314785957336, 1e-2);
   EXPECT_NEAR(transform.at<double>(0,1), 0.05986318364739418, 1e-2);
-  EXPECT_NEAR(transform.at<double>(0,2), -0.96079128980636597, 1e-2);
+  EXPECT_NEAR(transform.at<double>(0,2), -0.960791289806366, 1e-2);
   EXPECT_NEAR(transform.at<double>(0,3), -2.8749935626983643, 1e+0);
   EXPECT_NEAR(transform.at<double>(1,0), -0.021625135093927383, 1e-2);
-  EXPECT_NEAR(transform.at<double>(1,1), 0.99743443727493286, 1e-2);
-  EXPECT_NEAR(transform.at<double>(1,2), 0.068239845335483551, 1e-2);
-  EXPECT_NEAR(transform.at<double>(1,3), 0.084447085857391357, 1e+0);
-  EXPECT_NEAR(transform.at<double>(2,0), 0.96241146326065063, 1e-2);
+  EXPECT_NEAR(transform.at<double>(1,1), 0.9974344372749329, 1e-2);
+  EXPECT_NEAR(transform.at<double>(1,2), 0.06823984533548355, 1e-2);
+  EXPECT_NEAR(transform.at<double>(1,3), 0.08444708585739136, 1e+0);
+  EXPECT_NEAR(transform.at<double>(2,0), 0.9624114632606506, 1e-2);
   EXPECT_NEAR(transform.at<double>(2,1), 0.03925202414393425, 1e-2);
   EXPECT_NEAR(transform.at<double>(2,2), -0.26874402165412903, 1e-2);
-  EXPECT_NEAR(transform.at<double>(2,3), -27.358242034912109, 1e+0);
+  EXPECT_NEAR(transform.at<double>(2,3), -27.35824203491211, 1e+0);
   EXPECT_NEAR(transform.at<double>(3,0), 0., 1e-5);
   EXPECT_NEAR(transform.at<double>(3,1), 0., 1e-5);
   EXPECT_NEAR(transform.at<double>(3,2), 0., 1e-5);
   EXPECT_NEAR(transform.at<double>(3,3), 1., 1e-5);
+  // -0.27073314785957336,-0.021625135093927383,0.9624114632606506,0.0,
+  // 0.05986318364739418,0.9974344372749329,0.03925202414393425,0.0,
+  // -0.960791289806366,0.06823984533548355,-0.26874402165412903,0.0,
+  // -2.8749935626983643,0.08444708585739136,-27.35824203491211,0.9999999403953552
 }

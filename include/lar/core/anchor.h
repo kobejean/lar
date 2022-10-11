@@ -8,12 +8,16 @@ namespace lar {
 
   struct Anchor {
     public: 
+      using Transform = Eigen::Transform<double,4,Eigen::Affine>;
       int id;
-      Eigen::Transform<double,4,Eigen::Affine> transform{Eigen::Transform<double,4,Eigen::Affine>::Identity()};
+      Transform transform;
+
+      Anchor();
+      Anchor(int id, Transform transform);
   
 #ifndef LAR_COMPACT_BUILD
       std::size_t frame_id;
-      Eigen::Transform<double,4,Eigen::Affine> relative_transform{Eigen::Transform<double,4,Eigen::Affine>::Identity()};
+      Transform relative_transform;
 #endif
   };
   
