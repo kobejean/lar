@@ -71,20 +71,15 @@ namespace lar {
     float x_scale = (float) image.size().width / (float) _img_size.width;
     float y_scale = (float) image.size().height / (float) _img_size.height;
 
-    cv::Mat map(cv::Size(keypoint_count,1), CV_32FC2);
-    for (size_t i = 0; i < keypoint_count; i++) {
-      cv::Vec2f & pt = map.at<cv::Vec2f>(i);
-      pt[0] = x_scale * kpts[i].pt.x;
-      pt[1] = y_scale * kpts[i].pt.y;
-    }
+    std::vector<float> values(keypoint_count);
 
-    cv::Mat output;
-    cv::remap(image, output, map, cv::noArray(), interpolation);
+    for (size_t i = 0; i < keypoint_count; i++) {
+      cv::Vec2f pt(x_scale * kpts[i].pt.x, y_scale * kpts[i].pt.y);
+      cv::Mat patch;
+      cv::getRectSubPix(image, cv::Size(1,1), pt, patch);
+      values[i] = patch.at<float>(0,0);
+    }
     
-    // Convert `output` to `std::vector`
-    float *data = (float*)(output.isContinuous() ? output.data : output.clone().data);
-    std::vector<float> values;
-    values.assign(data, data + output.total());
     return values;
   }
 
@@ -105,9 +100,9 @@ namespace lar {
     cv::Mat confidence = cv::imread(confidence_filepath, cv::IMREAD_UNCHANGED);
     _confidence = cv::Mat(confidence.size(), CV_32FC1);
     // Estimated inverse variance
-    _confidence.setTo(0.001f, confidence == 0);
-    _confidence.setTo(1.0f, confidence == 1);
-    _confidence.setTo(50.0f, confidence == 2);
+    _confidence.setTo(0.f, confidence == 0);
+    _confidence.setTo(1e0f, confidence == 1);
+    _confidence.setTo(1e2f, confidence == 2);
   }
 
 }

@@ -1,29 +1,26 @@
 #include <filesystem>
 
-#include "lar/processing/bundle_adjustment.h"
-#include "lar/processing/frame_processor.h"
-#include "lar/processing/global_alignment.h"
 #include "lar/processing/map_processor.h"
 #include "lar/core/utils/json.h"
 
 namespace lar {
 
   MapProcessor::MapProcessor(std::shared_ptr<Mapper::Data> data) :
-    data(data), bundle_adjustment(data) {
+    data(data), bundle_adjustment(data), global_alignment(data), frame_processor(data) {
   }
 
   void MapProcessor::process() {
     // Update GPS alignment
-    GlobalAlignment global_alignment(data);
     global_alignment.updateAlignment();
     std::cout << data->map.origin.matrix() << std::endl;
 
     // Process frames
-    FrameProcessor frame_processor(data);
     for (Frame& frame : data->frames) {
       frame_processor.process(frame);
     }
+  }
 
+  void MapProcessor::optimize() {
     // Optimize
     bundle_adjustment.reset();
     bundle_adjustment.construct();

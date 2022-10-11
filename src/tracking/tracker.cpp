@@ -34,7 +34,7 @@ namespace lar {
         local_landmarks.push_back(*landmark);
       }
     } else {
-      double query_diameter = 50;
+      double query_diameter = 25.0;
       Rect query = Rect(Point(tvec.at<double>(0), tvec.at<double>(2)), query_diameter, query_diameter);
       local_landmarks = map.landmarks.find(query);
     }

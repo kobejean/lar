@@ -3,7 +3,7 @@
 
 #include "g2o/core/factory.h"
 #include "g2o/core/optimization_algorithm_factory.h"
-// #include "g2o/core/robust_kernel_impl.h"
+#include "g2o/core/robust_kernel_impl.h"
 #include "g2o/types/sba/types_six_dof_expmap.h"
 
 #include "lar/processing/bundle_adjustment.h"
@@ -70,12 +70,46 @@ namespace lar {
   }
 
   void BundleAdjustment::optimize() {
-    optimizer.initializeOptimization();
-    optimizer.setVerbose(true);
-    optimizer.optimize(50);
+
+    constexpr size_t rounds = 4;
+    double chi_threshold[rounds] = { 5.991, 5.991, 5.991, 5.991 };
+    size_t iteration[rounds] = { 30, 20, 10, 10 };
+
+    for (size_t i = 0; i < rounds; i++) {
+      optimizer.initializeOptimization(0);
+      optimizer.optimize(iteration[i]);
+      markOutliers(chi_threshold[i]);
+    }
+
+    for (auto edge : _landmark_edges) {
+      if (edge->robustKernel() != nullptr) {
+        edge->setRobustKernel(nullptr);
+      }
+    }
+
+    optimizer.initializeOptimization(0);
+    optimizer.optimize(10);
+    markOutliers(5.991);
+
+    update();
+  }
+
+
+  void BundleAdjustment::update() {
 
     for (Landmark *landmark : data->map.landmarks.all()) {
       updateLandmark(landmark);
+    }
+    // TODO: find better wau to discard outliers
+    for (auto edge : _landmark_edges) {
+      if (edge->level() == 1) {
+        g2o::VertexPointXYZ* v = dynamic_cast<g2o::VertexPointXYZ*>(edge->vertex(0));
+        size_t landmark_id = v->id() - data->frames.size();
+        data->map.landmarks[landmark_id].sightings--;
+      }
+    }
+    for (auto& it: data->map.anchors) {
+      updateAnchor(&it.second);
     }
   }
 
@@ -94,12 +128,7 @@ namespace lar {
   }
 
   void BundleAdjustment::addPose(Eigen::Matrix4d const &extrinsics, size_t id, bool fixed) {
-    Eigen::Matrix3d rot = extrinsics.block<3,3>(0,0);
-    // Flipping y and z axis to align with image coordinates and depth direction
-    rot(Eigen::indexing::all, 1) = -rot(Eigen::indexing::all, 1);
-    rot(Eigen::indexing::all, 2) = -rot(Eigen::indexing::all, 2);
-    g2o::SE3Quat pose = g2o::SE3Quat(rot, extrinsics.block<3,1>(0,3)).inverse();
-
+    g2o::SE3Quat pose = poseFromExtrinsics(extrinsics);
     g2o::VertexSE3Expmap * vertex = new g2o::VertexSE3Expmap();
     vertex->setId(id);
     vertex->setEstimate(pose);
@@ -117,7 +146,7 @@ namespace lar {
     e->setVertex(1, v2);
     e->setMeasurement(pose_change);
     // TODO: Find a better estimate
-    e->information() = Eigen::MatrixXd::Identity(6,6) * 80000000;
+    e->information() = Eigen::MatrixXd::Identity(6,6) * 9000000000;
     optimizer.addEdge(e);
   }
 
@@ -142,14 +171,28 @@ namespace lar {
         edge->setMeasurement(kp);
         edge->information() = Eigen::Vector3d(1.,1., obs.depth_confidence).asDiagonal();
         edge->setParameterId(0, frame_id+1);
-        // g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
-        // rk->setDelta(2.5);
-        // edge->setRobustKernel(rk);
+        g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
+        rk->setDelta(sqrt(5.991));
+        edge->setRobustKernel(rk);
         optimizer.addEdge(edge);
+        _landmark_edges.push_back(edge);
 
         _stats.usable_landmarks[frame_id]++;
       }
       _stats.landmarks[frame_id]++;
+    }
+  }
+
+  void BundleAdjustment::markOutliers(double chi_threshold) {
+    for (auto edge : _landmark_edges) {
+      if (edge->level() == 1 || edge->chi2() == 0) {
+        edge->computeError();
+      }
+      if (edge->chi2() > chi_threshold) {
+        edge->setLevel(1);
+      } else {
+        edge->setLevel(0);
+      }
     }
   }
 
@@ -158,7 +201,31 @@ namespace lar {
       size_t vertex_id = landmark->id + data->frames.size();
       g2o::VertexPointXYZ* v = dynamic_cast<g2o::VertexPointXYZ*>(optimizer.vertex(vertex_id));
       landmark->position = v->estimate();
+      landmark->sightings = landmark->obs.size();
     }
+  }
+
+  void BundleAdjustment::updateAnchor(Anchor *anchor) {
+    size_t vertex_id = anchor->frame_id;
+    g2o::VertexSE3Expmap* v = dynamic_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(vertex_id));
+    Eigen::Matrix4d extrinsics = extrinsicsFromPose(v->estimate());
+    anchor->transform = extrinsics * anchor->relative_transform;
+  }
+
+  g2o::SE3Quat BundleAdjustment::poseFromExtrinsics(Eigen::Matrix4d const &extrinsics) {
+    Eigen::Matrix3d rot = extrinsics.block<3,3>(0,0);
+    // Flipping y and z axis to align with image coordinates and depth direction
+    rot(Eigen::indexing::all, 1) = -rot(Eigen::indexing::all, 1);
+    rot(Eigen::indexing::all, 2) = -rot(Eigen::indexing::all, 2);
+    return g2o::SE3Quat(rot, extrinsics.block<3,1>(0,3)).inverse();
+  }
+
+  Eigen::Matrix4d BundleAdjustment::extrinsicsFromPose(g2o::SE3Quat const &pose) {
+    Eigen::Matrix4d extrinsics = pose.inverse().to_homogeneous_matrix();
+    // Flipping y and z axis to align with image coordinates and depth direction
+    extrinsics(Eigen::indexing::all, 1) = -extrinsics(Eigen::indexing::all, 1);
+    extrinsics(Eigen::indexing::all, 2) = -extrinsics(Eigen::indexing::all, 2);
+    return extrinsics;
   }
 
   void BundleAdjustment::Stats::print() {

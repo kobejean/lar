@@ -37,6 +37,18 @@ namespace lar {
     data->gps_obs = location_matcher.matches;
   }
 
+  void Mapper::addAnchor(Anchor anchor) {
+#ifndef LAR_COMPACT_BUILD
+    if (data->frames.size() > 0) {
+      anchor.frame_id = data->frames.back().id;
+      anchor.relative_transform = data->frames.back().extrinsics.inverse() * anchor.transform;
+    } else {
+      anchor.frame_id = 0;
+    }
+#endif
+    data->map.anchors.insert({anchor.id, anchor});
+  }
+
   void Mapper::writeMetadata() {
     nlohmann::json frames_json = data->frames;
     std::ofstream(data->directory / "frames.json") << frames_json << std::endl;

@@ -6,6 +6,8 @@
 #include "lar/core/map.h"
 #include "lar/mapping/mapper.h"
 #include "lar/processing/bundle_adjustment.h"
+#include "lar/processing/frame_processor.h"
+#include "lar/processing/global_alignment.h"
 
 namespace lar {
 
@@ -15,9 +17,12 @@ namespace lar {
       
       MapProcessor(std::shared_ptr<Mapper::Data> data);
       void process();
+      void optimize();
       void saveMap(std::string dir);
-    private:
+    // private:
       BundleAdjustment bundle_adjustment;
+      GlobalAlignment global_alignment;
+      FrameProcessor frame_processor;
   };
 }
 

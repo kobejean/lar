@@ -1,6 +1,7 @@
 #ifndef LAR_CORE_MAP_H
 #define LAR_CORE_MAP_H
 
+#include <unordered_map>
 #include <nlohmann/json.hpp>
 #include <Eigen/Dense>
 #include "lar/core/utils/json.h"
@@ -13,7 +14,7 @@ namespace lar {
     public: 
       LandmarkDatabase landmarks;
       Eigen::Transform<double,3,Eigen::Affine> origin{Eigen::Transform<double,3,Eigen::Affine>::Identity()};
-      std::vector<Anchor> anchors;
+      std::unordered_map<std::size_t, Anchor> anchors;
 
       Map();
       bool globalPointFrom(const Eigen::Vector3d& relative, Eigen::Vector3d& global);

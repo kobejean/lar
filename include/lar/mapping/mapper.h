@@ -42,6 +42,7 @@ namespace lar {
       void addFrame(Frame frame, cv::InputArray image, cv::InputArray depth, cv::InputArray confidence);
       void addPosition(Eigen::Vector3d position, long long timestamp);
       void addLocation(Eigen::Vector3d location, Eigen::Vector3d accuracy, long long timestamp);
+      void addAnchor(Anchor anchor);
       void writeMetadata();
       void readMetadata();
   };

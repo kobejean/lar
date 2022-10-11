@@ -7,7 +7,7 @@ namespace lar {
 
   class Vision {
     public:
-      cv::Ptr<cv::AKAZE> detector;
+      cv::Ptr<cv::Feature2D> detector;
       cv::BFMatcher matcher;
 
       Vision();

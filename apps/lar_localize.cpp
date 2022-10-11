@@ -28,7 +28,7 @@ int main(int argc, const char* argv[]){
   nlohmann::json map_data = nlohmann::json::parse(map_data_ifs);
   lar::Map map = map_data;
 
-  cv::Mat image = cv::imread(input + "/00000001_image.jpeg", cv::IMREAD_GRAYSCALE);
+  cv::Mat image = cv::imread(input + "/00000004_image.jpeg", cv::IMREAD_GRAYSCALE);
   cv::Mat intrinsics(3, 3, CV_32FC1);
   intrinsics.at<float>(0,0) = 1594.2728271484375;
   intrinsics.at<float>(1,1) = 1594.2728271484375;

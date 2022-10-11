@@ -26,7 +26,7 @@ tests: configure
 
 debug: CMAKE_ARGS = -DCMAKE_BUILD_TYPE=Debug
 debug: configure
-	$(MAKE) $(QUIET) -C build
+	$(MAKE) $(QUIET) -C build -j 8
 
 clean: CMAKE_ARGS =
 clean: configure
