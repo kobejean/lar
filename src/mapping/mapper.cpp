@@ -41,7 +41,7 @@ namespace lar {
 #ifndef LAR_COMPACT_BUILD
     if (data->frames.size() > 0) {
       anchor.frame_id = data->frames.back().id;
-      anchor.relative_transform = data->frames.back().extrinsics.inverse() * anchor.transform;
+      anchor.relative_transform = data->frames.back().extrinsics.inverse() * anchor.transform.matrix();
     } else {
       anchor.frame_id = 0;
     }

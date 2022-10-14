@@ -209,7 +209,7 @@ namespace lar {
     size_t vertex_id = anchor->frame_id;
     g2o::VertexSE3Expmap* v = dynamic_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(vertex_id));
     Eigen::Matrix4d extrinsics = extrinsicsFromPose(v->estimate());
-    anchor->transform = extrinsics * anchor->relative_transform;
+    anchor->transform = extrinsics * anchor->relative_transform.matrix();
   }
 
   g2o::SE3Quat BundleAdjustment::poseFromExtrinsics(Eigen::Matrix4d const &extrinsics) {

@@ -8,7 +8,7 @@ namespace lar {
 
   struct Anchor {
     public: 
-      using Transform = Eigen::Transform<double,4,Eigen::Affine>;
+      using Transform = Eigen::Transform<double,3,Eigen::Affine>;
       int id;
       Transform transform;
 
