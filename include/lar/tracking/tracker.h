@@ -13,6 +13,9 @@ namespace lar {
       Vision vision;
       Map map;
       std::vector<Landmark> local_landmarks;
+      std::vector<cv::KeyPoint> kpts;
+      std::vector<cv::DMatch> matches;
+      cv::Mat inliers;
 
       Tracker(Map map);
       bool localize(cv::InputArray image, const cv::Mat& intrinsics, cv::Mat &transform);

@@ -12,3 +12,5 @@ target_link_libraries(lar_tracking
   opencv_core opencv_calib3d
   lar_core
 )
+
+add_subdirectory(detectors)

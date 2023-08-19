@@ -9,6 +9,19 @@ set_target_properties(lar_create_map
   # EXCLUDE_FROM_ALL ON
 )
 
+# Create lar_iimoriyama executable
+add_executable(lar_iimoriyama lar_iimoriyama.cpp)
+target_link_libraries(lar_iimoriyama
+  lar_tracking
+  lar_mapping
+  opencv_core opencv_features2d opencv_imgcodecs
+)
+set_target_properties(lar_iimoriyama
+  PROPERTIES
+  XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER com.local-ar.iimoriyama
+  # EXCLUDE_FROM_ALL ON
+)
+
 # Create lar_localize executable
 add_executable(lar_localize lar_localize.cpp)
 target_link_libraries(lar_localize

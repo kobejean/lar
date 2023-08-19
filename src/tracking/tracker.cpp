@@ -40,16 +40,16 @@ namespace lar {
     }
     cv::Mat map_desc = Landmark::concatDescriptions(local_landmarks);
     // Extract Features
-    std::vector<cv::KeyPoint> kpts;
+    kpts.clear();
     cv::Mat desc;
     vision.extractFeatures(image, cv::noArray(), kpts, desc);
-    std::vector<cv::DMatch> matches = vision.match(desc, map_desc);
+    matches = vision.match(desc, map_desc);
     std::cout << "matches.size()" << matches.size() << std::endl;
     if (matches.size() <= 3) return false; 
     
     cv::Mat object_points = objectPoints(local_landmarks, matches);
     cv::Mat image_points = imagePoints(matches, kpts);
-    cv::Mat inliers;
+    // cv::Mat inliers;
 
     bool success = cv::solvePnPRansac(object_points, image_points, intrinsics, dist_coeffs, rvec, tvec,
       use_extrinsic_guess, 100, 8.0, 0.99, inliers, cv::SolvePnPMethod::SOLVEPNP_ITERATIVE);
