@@ -44,3 +44,15 @@ set_target_properties(lar_rtree
   XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER com.local-ar.rtree
   # EXCLUDE_FROM_ALL ON
 )
+
+# Create lar_sift executable
+add_executable(lar_sift lar_sift.cpp)
+target_link_libraries(lar_sift
+  lar_tracking
+  opencv_core opencv_features2d opencv_imgcodecs
+)
+set_target_properties(lar_sift
+  PROPERTIES
+  XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER com.local-ar.sift
+  # EXCLUDE_FROM_ALL ON
+)

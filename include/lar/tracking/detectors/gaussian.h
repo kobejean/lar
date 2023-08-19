@@ -6,18 +6,18 @@
 
 namespace lar {
   constexpr double SQRT_2_PI = 2.5066282746;
-  constexpr double gaussian(int x, double sigma) {
+  constexpr double gaussian(double x, double sigma) {
     return (1.0 / (sigma * SQRT_2_PI)) * exp(-x * x / (2.0 * sigma * sigma));
   }
 
   template <size_t Size>
-  constexpr std::array<float, Size> computeGaussianKernel(double sigma) {
+  constexpr std::array<float, Size> computeGaussianKernel(double sigma, double center) {
     std::array<double, Size> kernel{};
     std::array<float, Size> normalized{};
-    int half_size = Size / 2;
     double sum = 0.0;
     for (size_t i = 0; i < Size; ++i) {
-      kernel[i] = gaussian(i - half_size, sigma);
+      double x = static_cast<double>(i) + 0.5 - center;
+      kernel[i] = gaussian(x, sigma);
       sum += kernel[i];
     }
 
@@ -27,15 +27,21 @@ namespace lar {
     return normalized;
   }
 
-  // template <size_t Size>
-  constexpr std::array<std::array<float, 9>, 6> computegaussian_kernels() {
-    return std::array<std::array<float, 9>, 6>{
-      computeGaussianKernel<9>(1.2699208416), // 1.6 * 2^(-1/3)
-      computeGaussianKernel<9>(0.9732939207), // sqrt(1.6^2-1.2699208416^2) = 0.9732939207
-      computeGaussianKernel<9>(1.2262734985), // sqrt(2.01587367983^2-1.6^2) = 1.2262734985
-      computeGaussianKernel<9>(1.5450077936), // sqrt(2.5398416831^2-2.01587367983^2) = 1.5450077936
-      computeGaussianKernel<9>(1.9465878415), // sqrt(3.2^2-2.5398416831^2) = 1.9465878415
-      computeGaussianKernel<9>(2.4525469969)  // sqrt(4.03174735966^2-3.2^2) = 2.4525469969
+  template <size_t kernel_size>
+  constexpr std::array<float, kernel_size> computeGaussianKernel(double sigma) {
+    double center = static_cast<double>(kernel_size) / 2.0;
+    return computeGaussianKernel<kernel_size>(sigma, center);
+  }
+
+  template <size_t kernel_size>
+  constexpr std::array<std::array<float, kernel_size>, 6> computeGaussianKernels() {
+    return std::array<std::array<float, kernel_size>, 6>{
+      computeGaussianKernel<kernel_size>(1.2699208416), // 1.6 * 2^(-1/3)
+      computeGaussianKernel<kernel_size>(0.9732939207), // sqrt(1.6^2-1.2699208416^2) = 0.9732939207
+      computeGaussianKernel<kernel_size>(1.2262734985), // sqrt(2.01587367983^2-1.6^2) = 1.2262734985
+      computeGaussianKernel<kernel_size>(1.5450077936), // sqrt(2.5398416831^2-2.01587367983^2) = 1.5450077936
+      computeGaussianKernel<kernel_size>(1.9465878415), // sqrt(3.2^2-2.5398416831^2) = 1.9465878415
+      computeGaussianKernel<kernel_size>(2.4525469969)  // sqrt(4.03174735966^2-3.2^2) = 2.4525469969
     };
   }
 

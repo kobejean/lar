@@ -11,7 +11,9 @@ namespace lar {
   class SIFT {
     public:
       SIFT();
-      void detect(cv::InputArray image, std::vector<cv::KeyPoint>& kpts);
+      void detect(cv::InputArray image, std::vector<cv::KeyPoint>& kpts, cv::Mat& desc);
+
+      template <size_t kernel_size>
       void processOctave(const cv::Mat& img, int octave);
       void computeDoG(const cv::Mat& img);
       void extractDescriptors(std::vector<cv::KeyPoint>& kpts, cv::Mat& desc, int start_idx);
@@ -22,9 +24,6 @@ namespace lar {
       static constexpr int num_scales = 3;
       static constexpr int num_octaves = 5;
       static constexpr uchar contrast_threshold = static_cast<uchar>(0.04 * 256);
-      static constexpr std::array<float, 6> scale_sizes = { 2.01587367983, 2.5398416831, 3.2 };
-      static constexpr std::array<std::array<float, 9>, 6> gaussian_kernels = computegaussian_kernels();
-      static constexpr std::array<int, 3> invalidation_sizes = computeInvalidationSizes<3>();
   };
 
 }

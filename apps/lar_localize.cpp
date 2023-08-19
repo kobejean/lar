@@ -49,29 +49,5 @@ int main(int argc, const char* argv[]){
   std::cout << "parse map" << std::endl;
   tracker.localize(image1, intrinsics, transform);
   std::cout << "transform:" << transform << std::endl;
-
-
-  lar::SIFT sift;
-  std::vector<cv::KeyPoint> kpts1;
-  cv::Mat desc1;
-  std::vector<cv::KeyPoint> kpts2;
-  cv::Mat desc2;
-
-  sift.detect(image1, kpts1);
-  std::string output_kpts1 = "./output/sift/kpts1.jpeg";
-  cv::Mat image_kpts1;
-  cv::drawKeypoints(image1, kpts1, image_kpts1, cv::Scalar::all(-1), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
-  cv::imwrite(output_kpts1, image_kpts1);
-
-
-  cv::Mat image2 = cv::imread(input + "/00000003_image.jpeg", cv::IMREAD_GRAYSCALE);
-  sift.detect(image2, kpts2);
-  std::string output_kpts2 = "./output/sift/kpts2.jpeg";
-  cv::Mat image_kpts2;
-  cv::drawKeypoints(image2, kpts2, image_kpts2, cv::Scalar::all(-1), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
-  cv::imwrite(output_kpts2, image_kpts2);
-
-  std::cout << "kpts1: " << kpts1.size() << std::endl;
-  std::cout << "kpts2: " << kpts2.size() << std::endl;
   return 0;
 }
