@@ -48,7 +48,6 @@ namespace lar {
     }
   }
 
-
   SIFT::SIFT() {
     
   }
@@ -116,12 +115,67 @@ namespace lar {
     return histogram;
   }
 
+  void derotatePatch(const cv::Mat& gradient, cv::Point2f pt, int patch_size, float angle_rad, cv::Mat& derotated_patch) {
+    // std::cout << "Point: (" << pt.x << ", " << pt.y << "), Patch Size: " << patch_size << ", Angle: " << angle_rad << "\n";
+
+    // Initialize the derotated patch
+    derotated_patch.create(cv::Size(patch_size,patch_size), CV_32FC2);
+
+    // Compute the derotated patch
+    for (int px = 0; px < patch_size; ++px) {
+      for (int py = 0; py < patch_size; ++py) {
+        float x_origin = px - patch_size / 2.0f;
+        float y_origin = py - patch_size / 2.0f;
+
+        // Rotate patch by angle angle_rad
+        float x_rotated = std::cos(angle_rad) * x_origin - std::sin(angle_rad) * y_origin;
+        float y_rotated = std::sin(angle_rad) * x_origin + std::cos(angle_rad) * y_origin;
+
+        // Move coordinates to patch
+        float x_patch_rotated = pt.x + x_rotated;
+        float y_patch_rotated = pt.y - y_rotated;
+
+        // Sample image (using nearest-neighbor sampling)
+        int y_img = std::ceil(y_patch_rotated);
+        int x_img = std::ceil(x_patch_rotated);
+
+        // Print debug information
+
+        // Ensure coordinates are within bounds (optional, for safety)
+        if (y_img < 0 || y_img >= gradient.rows || x_img < 0 || x_img >= gradient.cols) {
+          // std::cout << "Processing patch coordinate (" << px << ", " << py << ")\n";
+          // std::cout << "Original position: (" << x_origin << ", " << y_origin << ")\n";
+          // std::cout << "Rotated position: (" << x_rotated << ", " << y_rotated << ")\n";
+          // std::cout << "Image position: (" << x_img << ", " << y_img << ")\n";
+          // std::cerr << "Out-of-bounds access! Skipping this pixel.\n";
+          derotated_patch.at<cv::Vec2f>(py, px) = cv::Vec2f(0,0);
+        } else {
+          derotated_patch.at<cv::Vec2f>(py, px) = gradient.at<cv::Vec2f>(y_img, x_img);
+        }
+      }
+    }
+  }
+
+
+  template <size_t PATCH_SIZE>
+  void weightGradient(const cv::Mat& patch, cv::Mat& grad_dir, cv::Mat& grad_mag) {
+    static constexpr int HALF_SIZE = PATCH_SIZE / 2;
+    static constexpr std::array<float, PATCH_SIZE> gaussian_window = computeGaussianKernel<PATCH_SIZE>(1.5 * PATCH_SIZE, HALF_SIZE + 0.5); 
+    for (size_t i = 0; i < PATCH_SIZE; i++) {
+      for (size_t j = 0; j < PATCH_SIZE; j++) {
+        cv::Vec2f grad = patch.at<cv::Vec2f>(i,j);
+        float weight = gaussian_window[i] * gaussian_window[j];
+        grad_dir.at<float>(i,j) = std::atan2(grad[0], grad[1]);
+        grad_mag.at<float>(i,j) = weight * std::sqrt(grad[0]*grad[0] + grad[1]*grad[1]);
+      }
+    }
+  }
+
 
   void SIFT::extractDescriptors(std::vector<cv::KeyPoint>& kpts, cv::Mat& desc, int start_idx) {
     static constexpr int PATCH_SIZE = 16;
     static constexpr int HALF_SIZE = PATCH_SIZE / 2;
     static constexpr int QUART_SIZE = PATCH_SIZE / 4;
-    static constexpr std::array<float, PATCH_SIZE> gaussian_window = computeGaussianKernel<PATCH_SIZE>(1.5 * PATCH_SIZE, HALF_SIZE + 0.5); 
 
     if (kpts.begin() + start_idx == kpts.end()) return; // No keypoints in scale
 
@@ -134,26 +188,31 @@ namespace lar {
     computeGradients(gaussian, gradient);
     desc.reserve(kpts.size());
     for (auto it = kpts.begin() + start_idx; it != kpts.end(); ++it) {
-      const cv::KeyPoint& kpt = *it;
+      cv::KeyPoint& kpt = *it;
+      const cv::Point2f pt = kpt.pt / multiplier;
 
       // extract gradient
-      int left = static_cast<int>(kpt.pt.x / multiplier) - HALF_SIZE;
-      int top = static_cast<int>(kpt.pt.y / multiplier) - HALF_SIZE;
+      int left = static_cast<int>(pt.x) - HALF_SIZE;
+      int top = static_cast<int>(pt.y) - HALF_SIZE;
       cv::Rect roi(left, top, PATCH_SIZE, PATCH_SIZE);
       cv::Mat patch = gradient(roi);
       auto patch_size = cv::Size(PATCH_SIZE, PATCH_SIZE);
+
       cv::Mat grad_dir(patch_size, CV_32FC1);
       cv::Mat grad_mag(patch_size, CV_32FC1);
 
-      // weight gradiant values by distance from center using gausian σ = 1.5 * PATCH_SIZE
-      for (int i = 0; i < PATCH_SIZE; i++) {
-        for (int j = 0; j < PATCH_SIZE; j++) {
-          cv::Vec2f grad = patch.at<cv::Vec2f>(i,j);
-          float weight = gaussian_window[i] * gaussian_window[j];
-          grad_dir.at<float>(i,j) = std::atan2(grad[0], grad[1]);
-          grad_mag.at<float>(i,j) = weight * std::sqrt(grad[0]*grad[0] + grad[1]*grad[1]);
-        }
+      weightGradient<PATCH_SIZE>(patch, grad_dir, grad_mag);
+
+      auto patch_hist = weightedHistogram<36>(grad_dir, grad_mag);
+      size_t max_idx = 0;
+      for (size_t i = 1; i < patch_hist.size(); i++) {
+        if (patch_hist[i] > patch_hist[max_idx]) max_idx = i;
       }
+      float dom_angle = -M_PI + (static_cast<float>(max_idx) + 0.5) * 2 * M_PI / 36.0;
+      kpt.angle = 180 * dom_angle / M_PI;
+      derotatePatch(gradient, pt, PATCH_SIZE, dom_angle, patch);
+
+      weightGradient<PATCH_SIZE>(patch, grad_dir, grad_mag);
 
       // compute histograms
       cv::Mat desc_row(cv::Size(8,0), CV_32FC1);
@@ -169,13 +228,11 @@ namespace lar {
         }
       }
       desc.push_back(desc_row.reshape(1, 1));
-      // std::cout << desc_row << std::endl;
     }
   }
 
   void SIFT::extractFeatures(std::vector<cv::KeyPoint>& kpts, cv::Mat& desc) {
     static constexpr std::array<float, 3> scale_sizes = { 2.01587367983, 2.5398416831, 3.2 };
-    // static constexpr std::array<int, 3> invalidation_sizes = computeInvalidationSizes<3>();
     static constexpr int invalidation_size = 8;
 
     for (size_t octave = 0; octave < num_octaves; octave++) {
@@ -203,8 +260,8 @@ namespace lar {
               float multiplier = static_cast<float>(1 << octave);
               float y = i * multiplier;
               float x = j * multiplier;
-              // std::cout << "octave: " << octave << ", scale: " << scale << ", (" << x << ", " << y << ")" << std::endl;
-              auto kpt = cv::KeyPoint({x, y}, multiplier * scale_sizes[scale], -1, s1.at<uchar>(i, j), octave * num_scales + scale);
+              
+              auto kpt = cv::KeyPoint({x, y}, 2*multiplier * scale_sizes[scale], -1, s1.at<uchar>(i, j), octave * num_scales + scale);
               kpts.push_back(kpt);
             }
           }

@@ -2,7 +2,7 @@
 #define LAR_CORE_MATH_MATH_H
 
 namespace lar {
-  constexpr double epsilon = 1e-10;
+  constexpr double epsilon = 1e-21;
 
   constexpr double abs(double x) {
     return x < 0 ? -x : x;
