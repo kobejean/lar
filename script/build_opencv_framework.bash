@@ -15,14 +15,18 @@ BUILD_ARGS=(
   --without stitching
   --without video
   --without videoio
+  --cmake_args
+  "-DSIZEOF_SIZE_T=8"
+  "-DWITH_JPEG=OFF"
+  "-DBUILD_JPEG=OFF"
 )
 
 FRAMEWORKS_PATH=`pwd`/build/frameworks
 XCFRAMEWORK_PATH=$FRAMEWORKS_PATH/opencv2.xcframework
 RESOURCES_PATH=`pwd`/script/resources/apple/opencv2/Resources
-
 mkdir -p $FRAMEWORKS_PATH
-
+export IPHONEOS_DEPLOYMENT_TARGET=12.0
+export MACOSX_DEPLOYMENT_TARGET=10.15  # Also set macOS target
 python3 `pwd`/thirdparty/opencv/platforms/apple/build_xcframework.py --out $FRAMEWORKS_PATH ${BUILD_ARGS[@]}
 
 # Copy correct Resources folder to each platform variant
