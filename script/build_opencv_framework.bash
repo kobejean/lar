@@ -15,10 +15,6 @@ BUILD_ARGS=(
   --without stitching
   --without video
   --without videoio
-  --cmake_args
-  "-DSIZEOF_SIZE_T=8"
-  "-DWITH_JPEG=OFF"
-  "-DBUILD_JPEG=OFF"
 )
 
 FRAMEWORKS_PATH=`pwd`/build/frameworks

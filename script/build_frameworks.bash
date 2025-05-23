@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 if [[ ! -d build ]]; then
-    make all
+    make fast
 fi
 rm -rf build/frameworks
 mkdir build/frameworks
