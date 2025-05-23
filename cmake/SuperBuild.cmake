@@ -1,6 +1,12 @@
-
-include (ExternalProject)
+include(ExternalProject)
 include(FetchContent)
+
+# macOS-specific compiler flags
+if(APPLE)
+    set(MACOS_C_FLAGS "-Wno-macro-redefined -include alloca.h")
+    set(MACOS_CXX_FLAGS "-Wno-macro-redefined -include alloca.h")
+    set(MACOS_DEFINITIONS "-D_POSIX_C_SOURCE=200809L")
+endif()
 
 find_package(Git QUIET)
 if(GIT_FOUND AND EXISTS "${PROJECT_SOURCE_DIR}/.git")
@@ -17,28 +23,27 @@ if(GIT_FOUND AND EXISTS "${PROJECT_SOURCE_DIR}/.git")
     endif()
 endif()
 
-set (DEPENDENCIES)
-set (EXTRA_CMAKE_ARGS)
-
+set(DEPENDENCIES)
+set(EXTRA_CMAKE_ARGS)
 
 # Setup Eigen
-
-list (APPEND DEPENDENCIES Eigen3)
+list(APPEND DEPENDENCIES Eigen3)
 ExternalProject_Add(Eigen3
   SOURCE_DIR ${PROJECT_SOURCE_DIR}/thirdparty/eigen3
   BINARY_DIR Eigen3-build
   CMAKE_ARGS 
     -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/install
+    $<$<BOOL:${APPLE}>:-DCMAKE_C_FLAGS=${MACOS_C_FLAGS}>
+    $<$<BOOL:${APPLE}>:-DCMAKE_CXX_FLAGS=${MACOS_CXX_FLAGS}>
+    $<$<BOOL:${APPLE}>:-DCMAKE_CXX_FLAGS=${MACOS_CXX_FLAGS} ${MACOS_DEFINITIONS}>
 )
 list(APPEND EXTRA_CMAKE_ARGS
   -DEigen3_DIR=${CMAKE_BINARY_DIR}/Eigen3-build
   -DEIGEN3_INCLUDE_DIR=${CMAKE_BINARY_DIR}/install/include/eigen3
 )
 
-
 # Setup OpenCV
-
-list (APPEND DEPENDENCIES opencv)
+list(APPEND DEPENDENCIES opencv)
 ExternalProject_Add(opencv
   SOURCE_DIR ${PROJECT_SOURCE_DIR}/thirdparty/opencv
   BINARY_DIR opencv-build
@@ -68,25 +73,26 @@ ExternalProject_Add(opencv
     -DWITH_IMGCODEC_SUNRASTER=OFF
     -DWITH_IMGCODEC_PXM=OFF
     -DWITH_IMGCODEC_PFM=ON
+    $<$<BOOL:${APPLE}>:-DCMAKE_C_FLAGS=${MACOS_C_FLAGS}>
+    $<$<BOOL:${APPLE}>:-DCMAKE_CXX_FLAGS=${MACOS_CXX_FLAGS}>
+    $<$<BOOL:${APPLE}>:-DCMAKE_CXX_FLAGS=${MACOS_CXX_FLAGS} ${MACOS_DEFINITIONS}>
 )
 list(APPEND EXTRA_CMAKE_ARGS -DOpenCV_DIR=${CMAKE_BINARY_DIR}/opencv-build)
 
-
 # Setup nlohmann_json
-
-list (APPEND DEPENDENCIES nlohmann_json)
+list(APPEND DEPENDENCIES nlohmann_json)
 ExternalProject_Add(nlohmann_json
   SOURCE_DIR ${PROJECT_SOURCE_DIR}/thirdparty/json
   BINARY_DIR nlohmann_json-build
   CMAKE_ARGS 
     -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/install
+    $<$<BOOL:${APPLE}>:-DCMAKE_C_FLAGS=${MACOS_C_FLAGS}>
+    $<$<BOOL:${APPLE}>:-DCMAKE_CXX_FLAGS=${MACOS_CXX_FLAGS}>
 )
 list(APPEND EXTRA_CMAKE_ARGS -Dnlohmann_json_DIR=${CMAKE_BINARY_DIR}/nlohmann_json-build)
 
-
 # Setup g2o
-
-list (APPEND DEPENDENCIES g2o)
+list(APPEND DEPENDENCIES g2o)
 ExternalProject_Add(g2o
   DEPENDS Eigen3
   SOURCE_DIR ${PROJECT_SOURCE_DIR}/thirdparty/g2o
@@ -105,6 +111,9 @@ ExternalProject_Add(g2o
     -DG2O_BUILD_SCLAM2D_TYPES=OFF
     -DG2O_BUILD_ICP_TYPES=OFF
     -DG2O_BUILD_SIM3_TYPES=OFF
+    $<$<BOOL:${APPLE}>:-DCMAKE_C_FLAGS=${MACOS_C_FLAGS}>
+    $<$<BOOL:${APPLE}>:-DCMAKE_CXX_FLAGS=${MACOS_CXX_FLAGS}>
+    $<$<BOOL:${APPLE}>:-DCMAKE_CXX_FLAGS=${MACOS_CXX_FLAGS} ${MACOS_DEFINITIONS}>
   # BUILD_ALWAYS ON
 )
 list(APPEND EXTRA_CMAKE_ARGS
@@ -114,9 +123,7 @@ list(APPEND EXTRA_CMAKE_ARGS
   -DBUILD_SHARED_LIBS=OFF
 )
 
-
 # Inner build
-
 ExternalProject_Add(ep_lar
   DEPENDS ${DEPENDENCIES}
   SOURCE_DIR ${PROJECT_SOURCE_DIR}
