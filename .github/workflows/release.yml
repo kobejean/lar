@@ -3,17 +3,29 @@ on:
   push:
     tags:
       - "v*.*.*"
-
 jobs:
   build:
     runs-on: macos-latest
     steps:
-    - uses: actions/checkout@v2
-    - name: Update Submodules
-      run: git submodule update --init --recursive
-    - name: Build Artifacts
-      run: make artifacts
-    - name: Release
-      uses: softprops/action-gh-release@v1
-      with:
-        files: build/artifacts/*
+      - uses: actions/checkout@v4  # Updated to latest version
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'  # Use Python 3.11 which has distutils
+          
+      - name: Install Python dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          pip3 install setuptools  # Provides distutils functionality
+          
+      - name: Update Submodules
+        run: git submodule update --init --recursive
+        
+      - name: Build Artifacts
+        run: make artifacts
+        
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: build/artifacts/*
