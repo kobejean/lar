@@ -56,6 +56,7 @@ ExternalProject_Add(opencv
     -DBUILD_PERF_TESTS=OFF
     -DBUILD_EXAMPLES=OFF
     -DBUILD_opencv_apps=OFF
+    -DBUILD_opencv_world=OFF
     -DBUILD_PNG=OFF
     -DBUILD_TIFF=OFF
     -DBUILD_WEBP=OFF
@@ -63,7 +64,7 @@ ExternalProject_Add(opencv
     -DBUILD_JASPER=OFF
     -DBUILD_OPENEXR=OFF
     -DWITH_PNG=OFF
-    -DWITH_JPEG=ON
+    -DWITH_JPEG=OFF
     -DWITH_TIFF=OFF
     -DWITH_WEBP=OFF
     -DWITH_OPENJPEG=OFF
