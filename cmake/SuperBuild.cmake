@@ -1,13 +1,6 @@
 include(ExternalProject)
 include(FetchContent)
 
-# macOS-specific compiler flags
-if(APPLE)
-    set(MACOS_C_FLAGS "-Wno-macro-redefined -include alloca.h")
-    set(MACOS_CXX_FLAGS "-Wno-macro-redefined -include alloca.h")
-    set(MACOS_DEFINITIONS "-D_POSIX_C_SOURCE=200809L")
-endif()
-
 find_package(Git QUIET)
 if(GIT_FOUND AND EXISTS "${PROJECT_SOURCE_DIR}/.git")
 # Update submodules as needed
@@ -33,9 +26,6 @@ ExternalProject_Add(Eigen3
   BINARY_DIR Eigen3-build
   CMAKE_ARGS 
     -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/install
-    $<$<BOOL:${APPLE}>:-DCMAKE_C_FLAGS=${MACOS_C_FLAGS}>
-    $<$<BOOL:${APPLE}>:-DCMAKE_CXX_FLAGS=${MACOS_CXX_FLAGS}>
-    $<$<BOOL:${APPLE}>:-DCMAKE_CXX_FLAGS=${MACOS_CXX_FLAGS} ${MACOS_DEFINITIONS}>
 )
 list(APPEND EXTRA_CMAKE_ARGS
   -DEigen3_DIR=${CMAKE_BINARY_DIR}/Eigen3-build
@@ -74,21 +64,25 @@ ExternalProject_Add(opencv
     -DWITH_IMGCODEC_SUNRASTER=OFF
     -DWITH_IMGCODEC_PXM=OFF
     -DWITH_IMGCODEC_PFM=ON
-    $<$<BOOL:${APPLE}>:-DCMAKE_C_FLAGS=${MACOS_C_FLAGS}>
-    $<$<BOOL:${APPLE}>:-DCMAKE_CXX_FLAGS=${MACOS_CXX_FLAGS}>
-    $<$<BOOL:${APPLE}>:-DCMAKE_CXX_FLAGS=${MACOS_CXX_FLAGS} ${MACOS_DEFINITIONS}>
 )
 list(APPEND EXTRA_CMAKE_ARGS -DOpenCV_DIR=${CMAKE_BINARY_DIR}/opencv-build)
 
 # Setup nlohmann_json
 list(APPEND DEPENDENCIES nlohmann_json)
 ExternalProject_Add(nlohmann_json
-  SOURCE_DIR ${PROJECT_SOURCE_DIR}/thirdparty/json
-  BINARY_DIR nlohmann_json-build
-  CMAKE_ARGS 
-    -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/install
-    $<$<BOOL:${APPLE}>:-DCMAKE_C_FLAGS=${MACOS_C_FLAGS}>
-    $<$<BOOL:${APPLE}>:-DCMAKE_CXX_FLAGS=${MACOS_CXX_FLAGS}>
+    SOURCE_DIR ${PROJECT_SOURCE_DIR}/thirdparty/json
+    BINARY_DIR nlohmann_json-build
+    CMAKE_ARGS 
+        -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/install
+        -DJSON_BuildTests=OFF
+        -DJSON_Install=ON
+        -DJSON_MultipleHeaders=OFF
+        -DBUILD_TESTING=OFF
+        -DJSON_ImplicitConversions=ON
+        -DJSON_Diagnostics=OFF
+        -DJSON_SystemInclude=OFF
+    LOG_CONFIGURE ON
+    LOG_BUILD ON
 )
 list(APPEND EXTRA_CMAKE_ARGS -Dnlohmann_json_DIR=${CMAKE_BINARY_DIR}/nlohmann_json-build)
 
@@ -112,10 +106,6 @@ ExternalProject_Add(g2o
     -DG2O_BUILD_SCLAM2D_TYPES=OFF
     -DG2O_BUILD_ICP_TYPES=OFF
     -DG2O_BUILD_SIM3_TYPES=OFF
-    $<$<BOOL:${APPLE}>:-DCMAKE_C_FLAGS=${MACOS_C_FLAGS}>
-    $<$<BOOL:${APPLE}>:-DCMAKE_CXX_FLAGS=${MACOS_CXX_FLAGS}>
-    $<$<BOOL:${APPLE}>:-DCMAKE_CXX_FLAGS=${MACOS_CXX_FLAGS} ${MACOS_DEFINITIONS}>
-  # BUILD_ALWAYS ON
 )
 list(APPEND EXTRA_CMAKE_ARGS
   -Dg2o_DIR=${CMAKE_BINARY_DIR}/install/lib/cmake/g2o

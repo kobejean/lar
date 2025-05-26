@@ -53,10 +53,10 @@ namespace lar {
     }
 
     // Add landmarks to graph
-    for (Landmark *landmark : data->map.landmarks.all()) {
+    for (Landmark* landmark : data->map.landmarks.all()) {
       size_t id = landmark->id + data->frames.size();
-      _stats.total_usable_landmarks += addLandmark(landmark, id);
-      addLandmarkMeasurements(landmark, id);
+      _stats.total_usable_landmarks += addLandmark(*landmark, id);
+      addLandmarkMeasurements(*landmark, id);
     }
     
     // Print statistics for debuging purposes
@@ -97,10 +97,10 @@ namespace lar {
 
   void BundleAdjustment::update() {
 
-    for (Landmark *landmark : data->map.landmarks.all()) {
-      updateLandmark(landmark);
+    for (Landmark* landmark : data->map.landmarks.all()) {
+      updateLandmark(*landmark);
     }
-    // TODO: find better wau to discard outliers
+    // TODO: find better way to discard outliers
     for (auto edge : _landmark_edges) {
       if (edge->level() == 1) {
         g2o::VertexPointXYZ* v = dynamic_cast<g2o::VertexPointXYZ*>(edge->vertex(0));
@@ -109,18 +109,18 @@ namespace lar {
       }
     }
     for (auto& it: data->map.anchors) {
-      updateAnchor(&it.second);
+      updateAnchor(it.second);
     }
   }
 
   // Private methods
 
-  bool BundleAdjustment::addLandmark(Landmark const *landmark, size_t id) {
-    if (landmark->isUseable()) {
+  bool BundleAdjustment::addLandmark(Landmark const &landmark, size_t id) {
+    if (landmark.isUseable()) {
       g2o::VertexPointXYZ * vertex = new g2o::VertexPointXYZ();
       vertex->setId(id);
       vertex->setMarginalized(true);
-      vertex->setEstimate(landmark->position);
+      vertex->setEstimate(landmark.position);
       optimizer.addVertex(vertex);
       return true;
     }
@@ -159,12 +159,12 @@ namespace lar {
     }
   }
 
-  void BundleAdjustment::addLandmarkMeasurements(const Landmark *landmark, size_t id) {
-    for (auto const &obs : landmark->obs) {
+  void BundleAdjustment::addLandmarkMeasurements(const Landmark& landmark, size_t id) {
+    for (auto const &obs : landmark.obs) {
       size_t frame_id = obs.frame_id;
       Eigen::Vector3d kp(obs.kpt.pt.x, obs.kpt.pt.y, obs.depth);
       
-      if (landmark->isUseable()) {
+      if (landmark.isUseable()) {
         g2o::EdgeProjectXYZ2UVD * edge = new g2o::EdgeProjectXYZ2UVD();
         edge->setVertex(0, optimizer.vertex(id));
         edge->setVertex(1, optimizer.vertex(frame_id));
@@ -196,20 +196,21 @@ namespace lar {
     }
   }
 
-  void BundleAdjustment::updateLandmark(Landmark *landmark) {
-    if (landmark->isUseable()) {
-      size_t vertex_id = landmark->id + data->frames.size();
+  void BundleAdjustment::updateLandmark(Landmark& landmark) {
+    if (landmark.isUseable()) {
+      size_t vertex_id = landmark.id + data->frames.size();
       g2o::VertexPointXYZ* v = dynamic_cast<g2o::VertexPointXYZ*>(optimizer.vertex(vertex_id));
-      landmark->position = v->estimate();
-      landmark->sightings = landmark->obs.size();
+      landmark.position = v->estimate();
+      landmark.sightings = landmark.obs.size();
     }
   }
 
-  void BundleAdjustment::updateAnchor(Anchor *anchor) {
-    size_t vertex_id = anchor->frame_id;
+  void BundleAdjustment::updateAnchor(Anchor& anchor) {
+    size_t vertex_id = anchor.frame_id;
     g2o::VertexSE3Expmap* v = dynamic_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(vertex_id));
     Eigen::Matrix4d extrinsics = extrinsicsFromPose(v->estimate());
-    anchor->transform = extrinsics * anchor->relative_transform.matrix();
+    Anchor::Transform transform(extrinsics * anchor.relative_transform.matrix());
+    data->map.updateAnchor(anchor, transform);
   }
 
   g2o::SE3Quat BundleAdjustment::poseFromExtrinsics(Eigen::Matrix4d const &extrinsics) {

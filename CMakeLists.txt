@@ -25,13 +25,6 @@ endif()
 include(FetchContent)
 include(ExternalProject)
 
-# Fix for macOS compilation issues - must be set before any target compilation
-if(APPLE)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-macro-redefined -include alloca.h")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-macro-redefined -include alloca.h")
-    add_definitions(-D_POSIX_C_SOURCE=200809L)
-endif()
-
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -Wall -Wextra")
 set(CMAKE_CXX_STANDARD 17)
 

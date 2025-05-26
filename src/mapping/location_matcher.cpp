@@ -24,6 +24,7 @@ namespace lar {
   // Private Methods
       
   void LocationMatcher::updateMatches() {
+    // TODO: match location to frame
     if (locations.empty() || positions.size() < 2) return;
     
     auto location = locations.front();

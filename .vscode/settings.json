@@ -111,7 +111,12 @@
     "polynomials": "cpp",
     "*.inc": "cpp",
     "__memory": "cpp",
-    "memory_resource": "cpp"
+    "memory_resource": "cpp",
+    "regex": "cpp",
+    "any": "cpp",
+    "__verbose_abort": "cpp",
+    "charconv": "cpp",
+    "execution": "cpp"
   },
   "C_Cpp.default.cppStandard": "c++17",
   "C_Cpp.default.intelliSenseMode": "gcc-arm64",

@@ -36,8 +36,7 @@ int main(int argc, const char* argv[]){
                   0.0, 0.0, 1.0, -2588.11,
                   0.0, 0.0, 0.0, 1.0;
   lar::Anchor::Transform transform(transformMat);
-  lar::Anchor anchor(0, transform);
-  mapper.addAnchor(anchor);
+  mapper.createAnchor(transform);
   
   processor.saveMap(output);
   return 0;

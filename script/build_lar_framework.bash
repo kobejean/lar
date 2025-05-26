@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+export CC=/usr/bin/clang
+export CXX=/usr/bin/clang++
+export AR=/usr/bin/ar
+export RANLIB=/usr/bin/ranlib
 
 PROJECT_NAME=lar
 FRAMEWORK_BUILD_DIR=`pwd`/build/lar-framework

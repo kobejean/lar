@@ -25,7 +25,7 @@ namespace lar {
     Tmat.block<3,3>(0,0) = D.inverse() * R;
     Tmat.block<3,1>(0,3) = gc;
     Eigen::Transform<double, 3, Eigen::Affine> T = Eigen::Transform<double, 3, Eigen::Affine>(Tmat) * Eigen::Translation<double, 3>(-rc);
-    data->map.origin = T;
+    data->map.updateOrigin(T);
   }
 
   Eigen::Matrix3d GlobalAlignment::crossCovariance(const Eigen::Vector3d rc, const Eigen::Vector3d gc, const Eigen::DiagonalMatrix<double,3> D) {

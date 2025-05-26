@@ -6,6 +6,10 @@ RESOURCES_PATH=`pwd`/script/resources/apple/opencv2/Resources
 
 mkdir -p $FRAMEWORKS_PATH
 
+export CC=/usr/bin/clang
+export CXX=/usr/bin/clang++
+export AR=/usr/bin/ar
+export RANLIB=/usr/bin/ranlib
 export IPHONEOS_DEPLOYMENT_TARGET=12.0
 export MACOSX_DEPLOYMENT_TARGET=10.15 # Also set macOS target
 
@@ -25,9 +29,9 @@ python3 `pwd`/thirdparty/opencv/platforms/apple/build_xcframework.py \
     --iphonesimulator_archs=arm64 \
     --disable-bitcode \
     --build_only_specified_archs
-    # --without parallel \
     # --macos_archs=arm64 \
     # --catalyst_archs=arm64 \
+    # --without parallel \
 
 # Copy correct Resources folder to each platform variant
 copy_resources() {

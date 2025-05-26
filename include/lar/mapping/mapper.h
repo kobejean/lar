@@ -18,6 +18,8 @@ namespace lar {
 
   class Mapper {
     public:
+      using Transform = Eigen::Transform<double,3,Eigen::Affine>;
+
       class Data {
         public:
           Map map;
@@ -42,7 +44,7 @@ namespace lar {
       void addFrame(Frame frame, cv::InputArray image, cv::InputArray depth, cv::InputArray confidence);
       void addPosition(Eigen::Vector3d position, long long timestamp);
       void addLocation(Eigen::Vector3d location, Eigen::Vector3d accuracy, long long timestamp);
-      void addAnchor(Anchor anchor);
+      Anchor& createAnchor(Transform &transform);
       void writeMetadata();
       void readMetadata();
   };

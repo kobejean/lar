@@ -26,7 +26,6 @@ namespace lar {
     data->frames.push_back(frame);
   }
 
-
   void Mapper::addPosition(Eigen::Vector3d position, long long timestamp) {
     location_matcher.recordPosition(timestamp, position);
     data->gps_obs = location_matcher.matches;
@@ -37,16 +36,15 @@ namespace lar {
     data->gps_obs = location_matcher.matches;
   }
 
-  void Mapper::addAnchor(Anchor anchor) {
+  Anchor& Mapper::createAnchor(Transform &transform) {
+    Anchor& anchor = data->map.createAnchor(transform);
 #ifndef LAR_COMPACT_BUILD
     if (data->frames.size() > 0) {
       anchor.frame_id = data->frames.back().id;
-      anchor.relative_transform = data->frames.back().extrinsics.inverse() * anchor.transform.matrix();
-    } else {
-      anchor.frame_id = 0;
+      anchor.relative_transform = data->frames.back().extrinsics.inverse() * transform.matrix();
     }
 #endif
-    data->map.anchors.insert({anchor.id, anchor});
+    return anchor;
   }
 
   void Mapper::writeMetadata() {

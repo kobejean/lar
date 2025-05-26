@@ -9,7 +9,7 @@ namespace lar {
     relative_transform(Transform::Identity()) {
   }
 
-  Anchor::Anchor(int id, Transform transform) :
+  Anchor::Anchor(std::size_t id, Transform transform) :
     id(id),
     transform(transform),
     frame_id(0),

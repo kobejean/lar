@@ -9,11 +9,11 @@ namespace lar {
   struct Anchor {
     public: 
       using Transform = Eigen::Transform<double,3,Eigen::Affine>;
-      int id;
+      std::size_t id;
       Transform transform;
 
       Anchor();
-      Anchor(int id, Transform transform);
+      Anchor(std::size_t id, Transform transform);
   
 #ifndef LAR_COMPACT_BUILD
       std::size_t frame_id;

@@ -35,16 +35,16 @@ namespace lar {
       Stats _stats;
       std::vector<g2o::EdgeProjectXYZ2UVD*> _landmark_edges;
       
-      bool addLandmark(const Landmark *landmark, size_t id);
+      bool addLandmark(const Landmark &landmark, size_t id);
       void addPose(const Eigen::Matrix4d& extrinsics, size_t id, bool fixed);
       void addOdometry(size_t frame_id);
       void addIntrinsics(const Eigen::Matrix3d& intrinsics, size_t id);
-      void addLandmarkMeasurements(const Landmark *landmark, size_t id);
+      void addLandmarkMeasurements(const Landmark& landmark, size_t id);
 
       void markOutliers(double chi_threshold);
 
-      void updateLandmark(Landmark *landmark);
-      void updateAnchor(Anchor *anchor);
+      void updateLandmark(Landmark& landmark);
+      void updateAnchor(Anchor& anchor);
 
       static g2o::SE3Quat poseFromExtrinsics(const Eigen::Matrix4d& extrinsics);
       static Eigen::Matrix4d extrinsicsFromPose(const g2o::SE3Quat& pose);

@@ -1,9 +1,20 @@
 SHELL = /bin/bash
 VERBOSE = 0
 ifeq ($(VERBOSE), 1)
-	QUIET=
+ QUIET=
 else
-	QUIET=-s --no-print-directory
+ QUIET=-s --no-print-directory
+endif
+
+# Force Apple Clang on macOS
+ifeq ($(shell uname), Darwin)
+CMAKE_COMPILER_ARGS = -DCMAKE_C_COMPILER=/usr/bin/clang \
+                     -DCMAKE_CXX_COMPILER=/usr/bin/clang++ \
+                     -DCMAKE_AR=/usr/bin/ar \
+                     -DCMAKE_RANLIB=/usr/bin/ranlib \
+                     -DCMAKE_OSX_ARCHITECTURES=arm64
+else
+CMAKE_COMPILER_ARGS =
 endif
 
 CMAKE_ARGS=
@@ -39,7 +50,9 @@ frameworks:
 	./script/build_frameworks.bash
 
 configure:
-	@ echo "Running cmake to generate Makefile"; \
-	mkdir build; \
-	cd build && cmake .. $(CMAKE_ARGS); \
+	@echo "Running cmake to generate Makefile"; \
+	mkdir -p build; \
+	cd build && cmake .. $(CMAKE_COMPILER_ARGS) $(CMAKE_ARGS); \
 	cd -
+
+.PHONY: all compact fast tests debug clean artifacts frameworks configure
