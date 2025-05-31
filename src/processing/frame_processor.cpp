@@ -25,6 +25,7 @@ namespace lar {
     // Load image
     std::cout << "loading: " << img_filepath << std::endl;
     cv::Mat image = cv::imread(img_filepath, cv::IMREAD_GRAYSCALE);
+    std::cout << image.size() << std::endl;
 
     // Extract features
     cv::Mat desc;
@@ -45,7 +46,7 @@ namespace lar {
       Landmark::Observation obs{
         .frame_id=frame.id,
         .timestamp=frame.timestamp,
-        .cam_position=frame.extrinsics.block<3,1>(0,3),
+        .cam_pose=frame.extrinsics,
         .kpt=kpts[i],
         .depth=depth_values[i],
         .depth_confidence=confidence_values[i],
@@ -67,7 +68,7 @@ namespace lar {
   // TODO: See if there is a better way to deal with the side effect of inserting into map.landmarks
   std::vector<size_t> FrameProcessor::extractLandmarks(const Frame &frame, const cv::Mat &desc, const std::vector<cv::KeyPoint>& kpts, const std::vector<float>& depth) {
     // Filter out features that have been matched
-    double query_diameter = 25.0;
+    double query_diameter = 30.0;
     Rect query = Rect(Point(frame.extrinsics(0,3), frame.extrinsics(2,3)), query_diameter, query_diameter);
     std::map<size_t, size_t> matches = getMatches(desc, query);
     Projection projection(frame.intrinsics, frame.extrinsics);
@@ -109,6 +110,7 @@ namespace lar {
     }
     const cv::Mat &existing_desc = Landmark::concatDescriptions(local_landmarks);
     std::vector<cv::DMatch> matches = vision.match(desc, existing_desc);
+    std::cout << "local_landmarks: " << local_landmarks.size() << std::endl;
     std::cout << "matches: " << matches.size() << std::endl;
 
     // Populate `idx_matched` map

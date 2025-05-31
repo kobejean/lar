@@ -5,7 +5,7 @@
 #include "g2o/core/optimization_algorithm_factory.h"
 #include "g2o/core/robust_kernel_impl.h"
 #include "g2o/types/sba/types_six_dof_expmap.h"
-
+#include "g2o/types/sba/edge_se3_expmap_gravity.h"
 #include "lar/processing/bundle_adjustment.h"
 
 G2O_USE_OPTIMIZATION_LIBRARY(eigen);
@@ -15,6 +15,7 @@ namespace g2o {
   G2O_REGISTER_TYPE(PARAMS_CAMERAPARAMETERS, CameraParameters);
   G2O_REGISTER_TYPE(VERTEX_SE3:EXPMAP, VertexSE3Expmap);
   G2O_REGISTER_TYPE(EDGE_SE3:EXPMAP, EdgeSE3Expmap);
+  G2O_REGISTER_TYPE(EDGE_SE3:EXPMAP:GRAVITY, EdgeSE3ExpmapGravity);
   G2O_REGISTER_TYPE(EDGE_PROJECT_XYZ2UVD:EXPMAP, EdgeProjectXYZ2UVD);
 
   G2O_REGISTER_TYPE_GROUP(slam3d);
@@ -47,6 +48,10 @@ namespace lar {
         addOdometry(frame_id);
       }
 
+      if (frame_id < data->frames.size() - 1) {
+        addGravityConstraint(frame_id);
+      }
+
       // Add camera intrinsics parameters
       size_t params_id = frame_id+1;
       addIntrinsics(frame.intrinsics, params_id);
@@ -70,10 +75,9 @@ namespace lar {
   }
 
   void BundleAdjustment::optimize() {
-
     constexpr size_t rounds = 4;
-    double chi_threshold[rounds] = { 5.991, 5.991, 5.991, 5.991 };
-    size_t iteration[rounds] = { 30, 20, 10, 10 };
+    double chi_threshold[rounds] = { 5.991*100, 5.991*50, 5.991*2, 5.991 };
+    size_t iteration[rounds] = { 80, 60, 40, 40 };
 
     for (size_t i = 0; i < rounds; i++) {
       optimizer.initializeOptimization(0);
@@ -88,29 +92,15 @@ namespace lar {
     }
 
     optimizer.initializeOptimization(0);
-    optimizer.optimize(10);
-    markOutliers(5.991);
+    optimizer.optimize(40);
+    // markOutliers(5.991);
 
     update();
   }
 
-
   void BundleAdjustment::update() {
-
-    for (Landmark* landmark : data->map.landmarks.all()) {
-      updateLandmark(*landmark);
-    }
-    // TODO: find better way to discard outliers
-    for (auto edge : _landmark_edges) {
-      if (edge->level() == 1) {
-        g2o::VertexPointXYZ* v = dynamic_cast<g2o::VertexPointXYZ*>(edge->vertex(0));
-        size_t landmark_id = v->id() - data->frames.size();
-        data->map.landmarks[landmark_id].sightings--;
-      }
-    }
-    for (auto& it: data->map.anchors) {
-      updateAnchor(it.second);
-    }
+    updateLandmarks();
+    updateAnchors();
   }
 
   // Private methods
@@ -149,6 +139,32 @@ namespace lar {
     e->information() = Eigen::MatrixXd::Identity(6,6) * 9000000000;
     optimizer.addEdge(e);
   }
+  
+  void BundleAdjustment::addGravityConstraint(size_t frame_id) {
+    // Get the initial pose to compute gravity direction in camera coordinates
+    Frame const& frame = data->frames[frame_id];
+    g2o::SE3Quat initial_pose = poseFromExtrinsics(frame.extrinsics);
+    Eigen::Matrix3d R_initial = initial_pose.rotation().toRotationMatrix();
+    
+    // Compute gravity direction in this camera's coordinate frame
+    Eigen::Vector3d world_gravity(0, -1, 0);  // g2o world gravity direction
+    Eigen::Vector3d g_camera = R_initial.inverse() * world_gravity;
+    
+    g2o::EdgeSE3ExpmapGravity* gravity_edge = new g2o::EdgeSE3ExpmapGravity();
+    
+    // Connect to the pose vertex
+    gravity_edge->setVertex(0, optimizer.vertex(frame_id));
+    
+    // Set the computed gravity direction in camera coordinates
+    gravity_edge->setMeasurement(g_camera);
+    
+    // Set information matrix (weight of constraint)
+    Eigen::Matrix3d gravity_info = Eigen::Matrix3d::Identity() * 10000;
+    gravity_edge->setInformation(gravity_info);
+    
+    // Add to optimizer and keep track
+    optimizer.addEdge(gravity_edge);
+  }
 
   void BundleAdjustment::addIntrinsics(Eigen::Matrix3d const &intrinsics, size_t id) {
     Eigen::Vector2d principle_point(intrinsics.block<2,1>(0,2));
@@ -169,7 +185,7 @@ namespace lar {
         edge->setVertex(0, optimizer.vertex(id));
         edge->setVertex(1, optimizer.vertex(frame_id));
         edge->setMeasurement(kp);
-        edge->information() = Eigen::Vector3d(1.,1., obs.depth_confidence).asDiagonal();
+        edge->information() = Eigen::Vector3d(1.,1., obs.depth_confidence*0.0).asDiagonal();
         edge->setParameterId(0, frame_id+1);
         g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
         rk->setDelta(sqrt(5.991));
@@ -196,21 +212,34 @@ namespace lar {
     }
   }
 
-  void BundleAdjustment::updateLandmark(Landmark& landmark) {
-    if (landmark.isUseable()) {
-      size_t vertex_id = landmark.id + data->frames.size();
-      g2o::VertexPointXYZ* v = dynamic_cast<g2o::VertexPointXYZ*>(optimizer.vertex(vertex_id));
-      landmark.position = v->estimate();
-      landmark.sightings = landmark.obs.size();
+  void BundleAdjustment::updateLandmarks() {
+    for (Landmark* landmark : data->map.landmarks.all()) {
+      if (landmark->isUseable()) {
+        size_t vertex_id = landmark->id + data->frames.size();
+        g2o::VertexPointXYZ* v = dynamic_cast<g2o::VertexPointXYZ*>(optimizer.vertex(vertex_id));
+        landmark->position = v->estimate();
+        landmark->sightings = landmark->obs.size();
+      }
+    }
+    // TODO: find better way to discard outliers
+    for (auto edge : _landmark_edges) {
+      if (edge->level() == 1) {
+        g2o::VertexPointXYZ* v = dynamic_cast<g2o::VertexPointXYZ*>(edge->vertex(0));
+        size_t landmark_id = v->id() - data->frames.size();
+        data->map.landmarks[landmark_id].sightings--;
+      }
     }
   }
 
-  void BundleAdjustment::updateAnchor(Anchor& anchor) {
-    size_t vertex_id = anchor.frame_id;
-    g2o::VertexSE3Expmap* v = dynamic_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(vertex_id));
-    Eigen::Matrix4d extrinsics = extrinsicsFromPose(v->estimate());
-    Anchor::Transform transform(extrinsics * anchor.relative_transform.matrix());
-    data->map.updateAnchor(anchor, transform);
+  void BundleAdjustment::updateAnchors() {
+    for (auto& it: data->map.anchors) {
+      Anchor &anchor = it.second;
+      size_t vertex_id = anchor.frame_id;
+      g2o::VertexSE3Expmap* v = dynamic_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(vertex_id));
+      Eigen::Matrix4d extrinsics = extrinsicsFromPose(v->estimate());
+      Anchor::Transform transform(extrinsics * anchor.relative_transform.matrix());
+      data->map.updateAnchor(anchor, transform);
+    }
   }
 
   g2o::SE3Quat BundleAdjustment::poseFromExtrinsics(Eigen::Matrix4d const &extrinsics) {

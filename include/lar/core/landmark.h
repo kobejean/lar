@@ -27,7 +27,7 @@ namespace lar {
       struct Observation {
         size_t frame_id;
         long long timestamp;
-        Eigen::Vector3d cam_position;
+        Eigen::Matrix4d cam_pose;
         cv::KeyPoint kpt;
         float depth;
         float depth_confidence;

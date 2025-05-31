@@ -33,7 +33,8 @@ add_executable(g2o_viewer
 
 set_target_properties(g2o_viewer PROPERTIES OUTPUT_NAME g2o_viewer${EXE_POSTFIX})
 
-target_link_libraries(viewer_library core g2o_cli_library ${QGLVIEWER_LIBRARY} ${MY_QT_LIBRARIES} ${OPENGL_LIBRARY})
+# target_link_libraries(viewer_library core g2o_cli_library ${QGLVIEWER_LIBRARY} ${MY_QT_LIBRARIES} ${OPENGL_LIBRARY})
+target_link_libraries(viewer_library core g2o_cli_library types_sba types_slam3d types_slam2d ${QGLVIEWER_LIBRARY} ${MY_QT_LIBRARIES} ${OPENGL_LIBRARY})
 target_link_libraries(viewer_library core opengl_helper)
 target_link_libraries(g2o_viewer viewer_library)
 

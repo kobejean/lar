@@ -23,6 +23,7 @@ add_library(types_sba ${G2O_LIB_TYPE}
   edge_project_xyz2uvu.cpp edge_project_xyz2uvu.h
   edge_project_xyz.cpp edge_project_xyz.h
   edge_project_psi2uv.cpp edge_project_psi2uv.h
+  edge_se3_expmap_gravity.h
   edge_se3_expmap.cpp edge_se3_expmap.h
   edge_project_stereo_xyz.cpp edge_project_stereo_xyz.h
   # TBD

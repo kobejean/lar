@@ -37,14 +37,15 @@ namespace lar {
       
       bool addLandmark(const Landmark &landmark, size_t id);
       void addPose(const Eigen::Matrix4d& extrinsics, size_t id, bool fixed);
+      void addGravityConstraint(size_t frame_id);
       void addOdometry(size_t frame_id);
       void addIntrinsics(const Eigen::Matrix3d& intrinsics, size_t id);
       void addLandmarkMeasurements(const Landmark& landmark, size_t id);
 
       void markOutliers(double chi_threshold);
 
-      void updateLandmark(Landmark& landmark);
-      void updateAnchor(Anchor& anchor);
+      void updateLandmarks();
+      void updateAnchors();
 
       static g2o::SE3Quat poseFromExtrinsics(const Eigen::Matrix4d& extrinsics);
       static Eigen::Matrix4d extrinsicsFromPose(const g2o::SE3Quat& pose);

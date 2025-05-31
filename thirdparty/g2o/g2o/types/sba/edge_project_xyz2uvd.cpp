@@ -56,10 +56,19 @@ void EdgeProjectXYZ2UVD::computeError() {
   const VertexPointXYZ* v2 = static_cast<const VertexPointXYZ*>(_vertices[0]);
   const CameraParameters* cam = static_cast<const CameraParameters*>(parameter(0));
   const Vector3 cam_space = v1->estimate().map(v2->estimate());
+  
+  // Check if point is behind camera (negative Z)
+  if (cam_space[2] <= 0.0) {
+    const number_t large_error = 1e9;
+    _error = Vector3(large_error, large_error, large_error);
+    return;
+  }
+  
   const Vector2 img_coord = cam->cam_map(cam_space);
   const Vector3 img_space(img_coord[0], img_coord[1], cam_space[2]);
   _error = measurement() - img_space;
 }
+
 
 void EdgeProjectXYZ2UVD::linearizeOplus() {
   VertexSE3Expmap* vj = static_cast<VertexSE3Expmap*>(_vertices[1]);
@@ -71,8 +80,17 @@ void EdgeProjectXYZ2UVD::linearizeOplus() {
   number_t x = xyz_trans[0];
   number_t y = xyz_trans[1];
   number_t z = xyz_trans[2];
+  
+  // Check if point is behind camera
+  if (z <= 0.0) {
+    // Set zero Jacobians when point is behind camera
+    // This prevents the optimizer from using invalid gradients
+    _jacobianOplusXi.setZero();
+    _jacobianOplusXj.setZero();
+    return;
+  }
+  
   number_t z_2 = z * z;
-
   const CameraParameters* cam = static_cast<const CameraParameters*>(parameter(0));
 
   Eigen::Matrix<number_t, 3, 3, Eigen::ColMajor> J_intr;

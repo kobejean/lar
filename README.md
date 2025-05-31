@@ -54,3 +54,7 @@ make frameworks
 
 ![Graph After Optimization](/docs/media/optimize_graph.jpeg)
 
+```
+cd thirdparty/g2o/build
+cmake .. -DQt5_DIR=/opt/homebrew/opt/qt@5/lib/cmake/Qt5 -DQGLVIEWER_INCLUDE_DIR=/usr/local/lib/QGLViewer.framework/Headers -DQGLVIEWER_LIBRARY=/usr/local/lib/QGLViewer.framework/QGLViewer
+```

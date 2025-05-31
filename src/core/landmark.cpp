@@ -1,3 +1,4 @@
+#include <algorithm>
 #include "lar/core/landmark.h"
 
 namespace lar {
@@ -19,30 +20,44 @@ namespace lar {
     return desc;
   }
 
-#ifndef LAR_COMPACT_BUILD
+  #ifndef LAR_COMPACT_BUILD
 
   void Landmark::recordObservation(Observation observation) {
-    obs.push_back(observation);
-    // TODO: find a good way to estimate the region where the landmark can be seen for good indexing
-    Eigen::Vector2d position2(position.x(), position.z());
-    Eigen::Vector2d cam_position2(observation.cam_position.x(), observation.cam_position.z());
-    double bounds_diameter = (position2 - cam_position2).norm() * 2;
-    orientation = observation.surface_normal;
-    Point center = Point(observation.cam_position.x(), observation.cam_position.y());
-    if (sightings == 0) {
-      bounds = Rect(center, bounds_diameter, bounds_diameter);
-    } else {
-      Rect new_bounds(center, bounds_diameter, bounds_diameter);
-      bounds = bounds.minBoundingBox(new_bounds);
-    }
-    sightings++;
-    last_seen = observation.timestamp;
+      obs.push_back(observation);
+      
+      // Update position using triangulation when we have multiple observations
+      // if (obs.size() >= 2) {
+      //     position = triangulatePosition();
+      // }
+      
+      // Update orientation (surface normal)
+      orientation = observation.surface_normal;
+      
+      // Extract camera position from pose matrix (translation part)
+      Eigen::Vector3d cam_position = observation.cam_pose.block<3,1>(0,3);
+      
+      // Calculate bounds for indexing (2D projection)
+      Eigen::Vector2d position2(position.x(), position.z());
+      Eigen::Vector2d cam_position2(cam_position.x(), cam_position.z());
+      double bounds_diameter = (position2 - cam_position2).norm() * 2;
+      
+      // Create Point using 2D camera position for bounds calculation
+      Point center = Point(cam_position.x(), cam_position.z());
+      
+      if (sightings == 0) {
+          bounds = Rect(center, bounds_diameter, bounds_diameter);
+      } else {
+          Rect new_bounds(center, bounds_diameter, bounds_diameter);
+          bounds = bounds.minBoundingBox(new_bounds);
+      }
+      
+      sightings++;
+      last_seen = observation.timestamp;
   }
-
+  
   bool Landmark::isUseable() const {
     return sightings >= 3;
   }
-
-#endif
+  #endif
 
 }

@@ -85,24 +85,30 @@ namespace lar {
 
 
   // SavedDepth
-
   SavedDepth::SavedDepth(cv::Size img_size, Eigen::Matrix3d intrinsics, Eigen::Matrix4d extrinsics, std::string path_prefix):
-    Depth(img_size, intrinsics, extrinsics) {
+  Depth(img_size, intrinsics, extrinsics) {
     std::string depth_filepath = path_prefix + "depth.pfm";
     std::string confidence_filepath = path_prefix + "confidence.pfm";
-
+    
     // Load depth map
     std::cout << "loading: " << depth_filepath << std::endl;
     _depth = cv::imread(depth_filepath, cv::IMREAD_UNCHANGED);
-
+    
     // Load confidence map
     std::cout << "loading: " << confidence_filepath << std::endl;
     cv::Mat confidence = cv::imread(confidence_filepath, cv::IMREAD_UNCHANGED);
+    
     _confidence = cv::Mat(confidence.size(), CV_32FC1);
+    
     // Estimated inverse variance
     _confidence.setTo(0.f, confidence == 0);
     _confidence.setTo(1e0f, confidence == 1);
     _confidence.setTo(1e2f, confidence == 2);
+    
+    // Scale depth by 5x where confidence is 0
+    cv::Mat mask = (confidence == 0);
+    cv::Mat scaled_depth = _depth * 5.0;
+    scaled_depth.copyTo(_depth, mask);
   }
 
 }
