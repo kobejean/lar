@@ -1,7 +1,7 @@
 import json
 import numpy as np
 from database_operations import read_colmap_poses
-from feature_extraction import load_sift_descriptors, get_descriptor_for_3d_point
+from feature_extraction import get_descriptor_for_3d_point
 
 def calculate_spatial_bounds(landmark_position, camera_positions, max_distance_factor=2.0):
     """Calculate spatial bounds for a landmark based on camera positions that observe it"""
@@ -31,7 +31,7 @@ def calculate_spatial_bounds(landmark_position, camera_positions, max_distance_f
         "upper": {"x": max_x, "y": max_z}
     }
 
-def export_aligned_map_json(poses_dir, work_dir, output_file):
+def export_aligned_map_json(poses_dir, database_path, output_file):
     """Export landmarks in map.json format from aligned model with real SIFT descriptors"""
     try:
         # Read reconstruction files from aligned model
@@ -43,9 +43,6 @@ def export_aligned_map_json(poses_dir, work_dir, output_file):
             return False
         
         print("Exporting aligned map.json with real SIFT descriptors...")
-        
-        # Load SIFT descriptors
-        image_descriptors = load_sift_descriptors(work_dir)
         
         # Read poses from aligned model (already in correct coordinate system)
         colmap_poses = read_colmap_poses(images_file)
@@ -90,7 +87,7 @@ def export_aligned_map_json(poses_dir, work_dir, output_file):
                         
                         # Get descriptor
                         descriptor_b64 = get_descriptor_for_3d_point(
-                            track, colmap_images, image_descriptors
+                            track, colmap_images, database_path
                         )
                         if descriptor_b64 is None:
                             continue
@@ -106,7 +103,7 @@ def export_aligned_map_json(poses_dir, work_dir, output_file):
                             "bounds": bounds,
                             "desc": descriptor_b64,
                             "id": point3d_id,
-                            "orientation": [0.0, 0.0, 0.0],
+                            "orientation": [0.0, 0.0, 1.0],
                             "position": [x, y, z],
                             "sightings": sightings
                         }

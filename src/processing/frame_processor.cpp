@@ -57,7 +57,7 @@ namespace lar {
 
     local_landmarks.clear();
     for (size_t lansmark_id : landmark_ids) {
-      local_landmarks.push_back(data->map.landmarks[lansmark_id]);
+      local_landmarks.push_back(&data->map.landmarks[lansmark_id]);
     }
 
     frame.processed = true;
@@ -103,8 +103,8 @@ namespace lar {
     static const int MATCH_LIMIT = (1 << 17);
     local_landmarks = data->map.landmarks.find(query);
     if (local_landmarks.size() >= MATCH_LIMIT) {
-      std::partial_sort(local_landmarks.begin(), local_landmarks.begin() + MATCH_LIMIT, local_landmarks.end(), [](const Landmark& a, const Landmark& b) {
-        return a.sightings > b.sightings;
+      std::partial_sort(local_landmarks.begin(), local_landmarks.begin() + MATCH_LIMIT, local_landmarks.end(), [](const Landmark* a, const Landmark* b) {
+        return a->sightings > b->sightings;
       });
       local_landmarks.resize(MATCH_LIMIT);
     }
@@ -117,7 +117,7 @@ namespace lar {
     std::map<size_t, size_t> idx_matched;
     for (size_t i = 0; i < matches.size(); i++) {
       int idx = matches[i].queryIdx;
-      idx_matched[idx] = local_landmarks[matches[i].trainIdx].id;
+      idx_matched[idx] = local_landmarks[matches[i].trainIdx]->id;
     }
 
     // Populate unmatched descriptions

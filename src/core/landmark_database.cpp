@@ -15,7 +15,7 @@ namespace lar {
     }
   }
 
-  std::vector<Landmark> LandmarkDatabase::find(const Rect &query) const {
+  std::vector<Landmark*> LandmarkDatabase::find(const Rect &query) const {
     return _rtree.find(query);
   }
 

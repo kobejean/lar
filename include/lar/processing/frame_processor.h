@@ -15,7 +15,7 @@ namespace lar {
     public:
       std::shared_ptr<Mapper::Data> data;
       Vision vision;
-      std::vector<Landmark> local_landmarks;
+      std::vector<Landmark*> local_landmarks;
 
       FrameProcessor(std::shared_ptr<Mapper::Data> data);
       void process(Frame& frame);

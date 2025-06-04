@@ -19,7 +19,7 @@ namespace lar {
       T& operator[](size_t id);
       void insert(T value, Rect bounds, size_t id);
       void erase(size_t id);
-      std::vector<T> find(const Rect &query) const;
+      std::vector<T*> find(const Rect &query) const;
       void print(std::ostream &os);
 
       // collection

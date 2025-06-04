@@ -34,7 +34,7 @@ class RegionTree<T>::Node {
     // operations
     void insert(Node *node);
     Node *erase();
-    void find(const Rect &query, std::vector<T> &result) const;
+    void find(const Rect &query, std::vector<T*> &result);
     void print(std::ostream &os, int depth) const;
 
     // helpers

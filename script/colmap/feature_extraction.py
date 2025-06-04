@@ -2,20 +2,15 @@ import subprocess
 import numpy as np
 import cv2
 import base64
-import pickle
+import sqlite3
 from pathlib import Path
 
 def extract_colmap_sift_features(work_dir, database_path, max_num_features=8192):
     """Extract SIFT features using COLMAP's built-in feature extractor and export to text files"""
-    temp_db_path = work_dir / "temp_features.db"
-    
-    # Remove temp database if it exists
-    if temp_db_path.exists():
-        temp_db_path.unlink()
     
     cmd = [
         "colmap", "feature_extractor",
-        "--database_path", str(temp_db_path),
+        "--database_path", str(database_path),
         "--image_path", str(work_dir),
         "--ImageReader.camera_model", "PINHOLE",
         "--ImageReader.single_camera", "0",
@@ -33,14 +28,10 @@ def extract_colmap_sift_features(work_dir, database_path, max_num_features=8192)
         subprocess.run(cmd, check=True, text=True, capture_output=True)
         print("COLMAP feature extraction completed successfully")
         
-        # Export features from temporary database to text files
-        if not export_colmap_features_to_text(temp_db_path, work_dir):
+        # Export features from database to text files
+        if not export_colmap_features_to_text(database_path, work_dir):
             print("Failed to export COLMAP features to text files")
             return False
-        
-        # Clean up temporary database
-        if temp_db_path.exists():
-            temp_db_path.unlink()
             
         return True
     except subprocess.CalledProcessError as e:
@@ -49,9 +40,7 @@ def extract_colmap_sift_features(work_dir, database_path, max_num_features=8192)
         return False
 
 def export_colmap_features_to_text(database_path, work_dir):
-    """Export COLMAP features from database to text files and save descriptors for map export"""
-    import sqlite3
-    
+    """Export COLMAP features from database to text files"""
     print("Exporting COLMAP features to text files...")
     
     try:
@@ -62,7 +51,6 @@ def export_colmap_features_to_text(database_path, work_dir):
         cursor.execute("SELECT image_id, name FROM images")
         images = cursor.fetchall()
         
-        all_descriptors = {}
         total_features = 0
         
         for image_id, image_name in images:
@@ -113,12 +101,6 @@ def export_colmap_features_to_text(database_path, work_dir):
                     keypoints_array = keypoints_array[:min_count]
                     descriptors_array = descriptors_array[:min_count]
                 
-                # Save descriptors for later map export
-                all_descriptors[image_name] = {
-                    'keypoints': [(kp[0], kp[1], kp[2], kp[3]) for kp in keypoints_array],
-                    'descriptors': descriptors_array
-                }
-                
                 # Write features to text file in COLMAP format
                 image_path = Path(work_dir) / image_name
                 feature_file = image_path.with_suffix(image_path.suffix + '.txt')
@@ -129,13 +111,7 @@ def export_colmap_features_to_text(database_path, work_dir):
         
         conn.close()
         
-        # Save descriptors for later use in map export
-        descriptors_file = Path(work_dir) / "sift_descriptors.pkl"
-        with open(descriptors_file, 'wb') as f:
-            pickle.dump(all_descriptors, f)
-        print(f"Saved COLMAP SIFT descriptors to {descriptors_file}")
         print(f"Total features exported: {total_features}")
-        
         return True
         
     except Exception as e:
@@ -178,8 +154,6 @@ def extract_opencv_sift_features(work_dir, output_features=True, max_num_feature
         descriptorType=cv2.CV_8U
     )
     
-    # Dictionary to store all descriptors by image name and feature index
-    all_descriptors = {}
     features_extracted = 0
     
     for img_file in image_files:
@@ -228,13 +202,6 @@ def extract_opencv_sift_features(work_dir, output_features=True, max_num_feature
             
             features_extracted += len(filtered_keypoints)
             
-            # Store descriptors for later use in map.json creation
-            image_name = img_file.name
-            all_descriptors[image_name] = {
-                'keypoints': [(kp.pt[0], kp.pt[1], kp.size, kp.angle) for kp in filtered_keypoints],
-                'descriptors': filtered_descriptors.copy() if filtered_descriptors is not None else None
-            }
-            
             if output_features:
                 # Write features to text file in COLMAP format
                 feature_file = img_file.with_suffix(img_file.suffix + '.txt')
@@ -244,18 +211,7 @@ def extract_opencv_sift_features(work_dir, output_features=True, max_num_feature
             print(f"Error processing {img_file}: {e}")
             continue
     
-    # Save all descriptors to disk for later use
-    descriptors_file = work_path / "sift_descriptors.pkl"
-    with open(descriptors_file, 'wb') as f:
-        pickle.dump(all_descriptors, f)
-    print(f"Saved SIFT descriptors to {descriptors_file}")
-    
     print(f"Total features extracted: {features_extracted}")
-    return True
-
-def extract_colmap_descriptors_for_export(database_path, work_dir):
-    """This function is no longer needed since COLMAP features are exported to text during extraction"""
-    print("COLMAP descriptors already exported during feature extraction")
     return True
 
 def write_colmap_features(keypoints, descriptors, output_file):
@@ -281,31 +237,32 @@ def write_colmap_features(keypoints, descriptors, output_file):
             
             f.write(f"{x:.6f} {y:.6f} {scale:.6f} {orientation:.6f} {desc_str}\n")
 
-def load_sift_descriptors(work_dir):
-    """Load the saved SIFT descriptors"""
-    descriptors_file = Path(work_dir) / "sift_descriptors.pkl"
-    if not descriptors_file.exists():
-        print(f"Warning: SIFT descriptors file not found at {descriptors_file}")
-        return {}
-    
-    with open(descriptors_file, 'rb') as f:
-        return pickle.load(f)
-
-def get_descriptor_for_3d_point(track, colmap_images, image_descriptors):
-    """Get the SIFT descriptor for a 3D point by finding it in one of the observing images"""
-    for img_id, point2d_idx in track:
-        if img_id in colmap_images:
-            image_name = colmap_images[img_id]['name']
-            
-            if image_name in image_descriptors:
-                descriptors = image_descriptors[image_name]['descriptors']
+def get_descriptor_for_3d_point(track, colmap_images, database_path):
+    """Get the SIFT descriptor for a 3D point by reading directly from COLMAP database"""
+    try:
+        conn = sqlite3.connect(database_path)
+        cursor = conn.cursor()
+        
+        for img_id, point2d_idx in track:
+            if img_id in colmap_images:
+                # Get descriptors for this image
+                cursor.execute("SELECT rows, cols, data FROM descriptors WHERE image_id = ?", (img_id,))
+                descriptors_row = cursor.fetchone()
                 
-                if descriptors is not None and point2d_idx < len(descriptors):
-                    descriptor = descriptors[point2d_idx]
+                if descriptors_row:
+                    desc_rows, desc_cols, desc_data = descriptors_row
+                    descriptors_data = np.frombuffer(desc_data, dtype=np.uint8)
+                    descriptors_array = descriptors_data.reshape(desc_rows, desc_cols)
                     
-                    if descriptor.dtype != np.uint8:
-                        descriptor = (descriptor * 255).astype(np.uint8)
-                    
-                    descriptor_b64 = base64.b64encode(descriptor.tobytes()).decode('ascii')
-                    return descriptor_b64
-    return None
+                    if point2d_idx < len(descriptors_array):
+                        descriptor = descriptors_array[point2d_idx]
+                        descriptor_b64 = base64.b64encode(descriptor.tobytes()).decode('ascii')
+                        conn.close()
+                        return descriptor_b64
+        
+        conn.close()
+        return None
+        
+    except Exception as e:
+        print(f"Error reading descriptor from database: {e}")
+        return None

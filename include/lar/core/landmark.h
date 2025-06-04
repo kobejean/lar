@@ -20,7 +20,7 @@ namespace lar {
       Landmark();
       Landmark(const Eigen::Vector3d& position, const cv::Mat& desc, size_t id);
 
-      static cv::Mat concatDescriptions(const std::vector<Landmark>& landmarks);
+      static cv::Mat concatDescriptions(const std::vector<Landmark*>& landmarks);
 
 #ifndef LAR_COMPACT_BUILD
 
@@ -36,7 +36,7 @@ namespace lar {
       // Auxilary data
       int sightings{0};
       std::vector<Observation> obs;
-      long long last_seen;
+      long long last_seen{-1};
       bool is_matched{false};
       
       void recordObservation(Observation observation);
@@ -64,7 +64,6 @@ namespace lar {
   static void from_json(const nlohmann::json& j, Landmark& l) {
     std::string desc64 = j.at("desc").get<std::string>();
     cv::Mat desc = base64::base64_decode(desc64, 1, -1, CV_8U);
-    // desc.convertTo(desc, CV_32F);
 
     j.at("id").get_to(l.id);
     l.desc = desc;
@@ -72,6 +71,13 @@ namespace lar {
     j.at("orientation").get_to(l.orientation);
     j.at("bounds").get_to(l.bounds);
     j.at("sightings").get_to(l.sightings);
+       
+    #ifndef LAR_COMPACT_BUILD
+    // Initialize members not in JSON to default values
+    l.last_seen = -1;
+    l.is_matched = false;
+    l.obs.clear(); // Clear any existing observations
+    #endif
   }
 
 }

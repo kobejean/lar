@@ -27,11 +27,12 @@ namespace lar {
   }
 
   bool Tracker::localize(cv::InputArray image, const cv::Mat& intrinsics, const cv::Mat& dist_coeffs, cv::Mat &rvec, cv::Mat &tvec, bool use_extrinsic_guess) {
+    for (Landmark *landmark : local_landmarks) { landmark->is_matched = false; }
     // get map descriptors
     if (tvec.empty()) {
       local_landmarks.clear();
       for (Landmark *landmark : map.landmarks.all()) {
-        local_landmarks.push_back(*landmark);
+        local_landmarks.push_back(landmark);
       }
     } else {
       double query_diameter = 25.0;
@@ -60,7 +61,7 @@ namespace lar {
 #ifndef LAR_COMPACT_BUILD
     // mark matches
     for (auto &match : matches) {
-      local_landmarks[match.trainIdx].is_matched = true;
+      local_landmarks[match.trainIdx]->is_matched = true;
     }
 #endif
 
@@ -69,11 +70,11 @@ namespace lar {
 
   // Private Methods
 
-  cv::Mat Tracker::objectPoints(const std::vector<Landmark> &landmarks, const std::vector<cv::DMatch>& matches) {
+  cv::Mat Tracker::objectPoints(const std::vector<Landmark*> &landmarks, const std::vector<cv::DMatch>& matches) {
     cv::Mat object_points(matches.size(), 3, CV_32FC1);
     for (size_t i = 0; i < matches.size(); i++) {
       cv::DMatch match = matches[i];
-      const Eigen::Vector3d position = landmarks[match.trainIdx].position;
+      const Eigen::Vector3d position = landmarks[match.trainIdx]->position;
       object_points.at<float>(i,0) = position.x();
       object_points.at<float>(i,1) = position.y();
       object_points.at<float>(i,2) = position.z();

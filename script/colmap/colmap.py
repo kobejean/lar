@@ -2,7 +2,7 @@
 """
 Streamlined script to process stereo vision data:
 1. Copy *_image.jpeg files to a working directory
-2. Extract SIFT features using either OpenCV or COLMAP and write COLMAP-compatible text files
+2. Extract SIFT features using either OpenCV or COLMAP
 3. Run COLMAP to estimate camera positions using imported features
 4. Integrate ARKit data for accurate intrinsics and metric scale
 5. Export final scaled map.json with real SIFT descriptors
@@ -165,8 +165,8 @@ def main():
                        help="Use COLMAP's built-in SIFT extractor instead of OpenCV")
     parser.add_argument("--use_spatial_matching", action="store_true",
                        help="Use spatial matching instead of exhaustive matching")
-    parser.add_argument("--pose_prior_variance", type=float, default=25.0,
-                       help="Pose prior variance for spatial matching (default: 25.0)")
+    parser.add_argument("--pose_prior_variance", type=float, default=10.0,
+                       help="Pose prior variance for spatial matching (default: 10.0)")
     parser.add_argument("--max_num_features", type=int, default=8192,
                        help="Maximum number of features to extract per image (default: 8192)")
     parser.add_argument("--alignment_max_error", type=float, default=0.1,
@@ -198,7 +198,7 @@ def main():
                 arkit_frames, database_path, work_dir, 
                 pose_variance=args.pose_prior_variance
             )
-        elif not args.use_colmap_sift:
+        else:
             # Regular database creation for exhaustive matching
             create_colmap_database(arkit_frames, database_path, work_dir)
     else:
@@ -210,11 +210,11 @@ def main():
         print("Failed to copy images. Exiting.")
         return 1
     
-    # Step 2: Extract SIFT features to text files
+    # Step 2: Extract SIFT features
     if args.use_colmap_sift:
         print(f"\nExtracting SIFT features using COLMAP (max {args.max_num_features} per image)...")
         
-        # Run COLMAP feature extractor (saves to text files)
+        # Run COLMAP feature extractor
         if not extract_colmap_sift_features(work_dir, database_path, args.max_num_features):
             print("Failed to extract SIFT features using COLMAP")
             return 1
@@ -224,13 +224,13 @@ def main():
             print("Failed to extract SIFT features using OpenCV")
             return 1
     
-    # Step 3: Import features into COLMAP database (unified for both methods)
-    print("\nImporting features into COLMAP database...")
-    if not run_colmap_feature_import(work_dir, database_path):
-        print("COLMAP pipeline failed at feature import")
-        return 1
+        # Import features into COLMAP database
+        print("\nImporting features into COLMAP database...")
+        if not run_colmap_feature_import(work_dir, database_path):
+            print("COLMAP pipeline failed at feature import")
+            return 1
     
-    # Step 4: Feature matching (spatial vs exhaustive)
+    # Step 3: Feature matching (spatial vs exhaustive)
     if args.use_spatial_matching:
         print("\nRunning spatial feature matching...")
         if not run_colmap_spatial_matching(database_path):
@@ -242,7 +242,7 @@ def main():
             print("COLMAP pipeline failed at feature matching")
             return 1
     
-    # Step 5: Sparse reconstruction
+    # Step 4: Sparse reconstruction
     print("\nRunning sparse reconstruction...")
     if not run_colmap_mapping(database_path, sparse_dir):
         print("COLMAP pipeline failed at sparse reconstruction")
@@ -281,7 +281,7 @@ def main():
         return 1
     
     # Export final map
-    if not export_aligned_map_json(poses_dir, work_dir, map_json_file):
+    if not export_aligned_map_json(poses_dir, database_path, map_json_file):
         print("Failed to export aligned map.json")
         return 1
     

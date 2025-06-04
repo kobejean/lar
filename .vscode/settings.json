@@ -122,5 +122,6 @@
   "C_Cpp.default.intelliSenseMode": "gcc-arm64",
   "C_Cpp.intelliSenseEngine": "Tag Parser",
   "editor.tabSize": 2,
-  "cmake.configureOnEdit": false
+  "cmake.configureOnEdit": false,
+  "python.analysis.autoImportCompletions": true
 }

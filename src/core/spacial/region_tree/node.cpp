@@ -69,10 +69,10 @@ typename RegionTree<T>::Node *RegionTree<T>::Node::erase() {
 }
 
 template <typename T>
-void RegionTree<T>::Node::find(const Rect &query, std::vector<T> &result) const { 
+void RegionTree<T>::Node::find(const Rect &query, std::vector<T*> &result) { 
   if (this->isLeaf()) {
-    const LeafNode *leaf = static_cast<const LeafNode*>(this);
-    result.push_back(leaf->value);
+    LeafNode *leaf = static_cast<LeafNode*>(this);
+    result.push_back(&leaf->value);
     return;
   }
 

@@ -9,12 +9,10 @@
 using namespace std;
 
 int main(int argc, const char* argv[]){
-  // string input = "./input/snapshot";
-  // string input = "./input/iimori1";
-  // string input = "./input/student_hall_2023-03-27-0900";
-  // string input = "./input/u-aizu-out";
-  string input = "./input/aizu-park";
-  // string input = "./input/aizu-park-2";
+  string input = "./input/iimori1";
+  if (argc > 1) {
+    input = argv[1];
+  }
   string output = "./output/map";
 
   struct stat st;

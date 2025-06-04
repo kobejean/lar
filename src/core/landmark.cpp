@@ -12,10 +12,10 @@ namespace lar {
 
   // Static Methods
 
-  cv::Mat Landmark::concatDescriptions(const std::vector<Landmark>& landmarks) {
+  cv::Mat Landmark::concatDescriptions(const std::vector<Landmark*>& landmarks) {
     cv::Mat desc;
     for (size_t i = 0; i < landmarks.size(); i++) {
-      desc.push_back(landmarks[i].desc);
+      desc.push_back(landmarks[i]->desc);
     }
     return desc;
   }

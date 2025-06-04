@@ -16,7 +16,7 @@ namespace lar {
       Landmark& operator[](size_t id);
 
       void insert(const std::vector<Landmark> &landmarks);
-      std::vector<Landmark> find(const Rect &query) const;
+      std::vector<Landmark*> find(const Rect &query) const;
       size_t size() const;
       size_t createID();
       std::vector<Landmark*> all() const;

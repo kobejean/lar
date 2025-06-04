@@ -53,11 +53,15 @@ namespace lar {
     
     nlohmann::json gps_json = data->gps_obs;
     std::ofstream(data->directory / "gps.json") << gps_json << std::endl;
+
+    nlohmann::json map_json = data->map;
+    std::ofstream(data->directory / "map.json") << map_json << std::endl;
   }
 
   void Mapper::readMetadata() {
     data->frames = nlohmann::json::parse(std::ifstream(data->directory / "frames.json"));
     data->gps_obs = nlohmann::json::parse(std::ifstream(data->directory / "gps.json"));
+    data->map = nlohmann::json::parse(std::ifstream(data->directory / "map.json"));
   }
 
 }

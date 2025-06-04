@@ -8,10 +8,18 @@ namespace lar {
   const float MARGIN_TEST_DISTANCE = 25.f; // TODO: Think of clearer name
 
   Vision::Vision() {
-    // detector = cv::SIFT::create();
-    // matcher = cv::BFMatcher(cv::NORM_L2);
-    detector = cv::AKAZE::create(cv::AKAZE::DESCRIPTOR_MLDB, 0, 3, 0.001f, 4, 4, cv::KAZE::DIFF_PM_G2);
-    matcher = cv::BFMatcher(cv::NORM_HAMMING);
+    detector = cv::SIFT::create(0,3,0.02,10,1.6,CV_8U);
+    matcher = cv::BFMatcher(cv::NORM_L2);
+  //   sift = cv2.SIFT_create(
+  //     nfeatures=0,  # Extract all features initially
+  //     nOctaveLayers=3,
+  //     contrastThreshold=0.02,
+  //     edgeThreshold=10,
+  //     sigma=1.6,
+  //     descriptorType=cv2.CV_8U
+  // )
+    // detector = cv::AKAZE::create(cv::AKAZE::DESCRIPTOR_MLDB, 0, 3, 0.001f, 4, 4, cv::KAZE::DIFF_PM_G2);
+    // matcher = cv::BFMatcher(cv::NORM_HAMMING);
   }
 
   void Vision::extractFeatures(cv::InputArray image, cv::InputArray mask, std::vector<cv::KeyPoint>& kpts, cv::Mat& desc) {
