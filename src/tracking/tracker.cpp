@@ -3,31 +3,73 @@
 
 #include "lar/tracking/tracker.h"
 
+// Function to check gravity vector consistency using rvec and gvec
+bool checkGravityVector(const cv::Mat& rvec, const cv::Mat& gvec, float angleTolerance = 5.0f) {
+    // World gravity vector (pointing down in Y direction)
+    cv::Mat worldGravity = (cv::Mat_<double>(3,1) << 0.0, -1.0, 0.0);
+    
+    // Convert rvec to rotation matrix
+    cv::Mat rmat;
+    cv::Rodrigues(rvec, rmat);
+    
+    // Transform world gravity to camera coordinates using estimated rotation
+    // Since we're going from world to camera, we use the rotation matrix directly
+    cv::Mat estimatedCameraGravity = rmat * worldGravity;
+    
+    // Convert gvec to double if needed for consistency
+    cv::Mat measuredGravity;
+    gvec.convertTo(measuredGravity, CV_64F);
+    
+    // Normalize both vectors (they should already be normalized, but just in case)
+    cv::normalize(estimatedCameraGravity, estimatedCameraGravity);
+    cv::normalize(measuredGravity, measuredGravity);
+    
+    // Calculate dot product
+    double dotProduct = estimatedCameraGravity.dot(measuredGravity);
+    
+    // Clamp dot product to valid range for acos
+    dotProduct = std::max(-1.0, std::min(1.0, dotProduct));
+    
+    // Calculate angle
+    double angleRadians = std::acos(dotProduct);
+    double angleDegrees = angleRadians * 180.0 / M_PI;
+    
+    std::cout << "Gravity vector angle difference: " << angleDegrees << " degrees" << std::endl;
+    
+    return angleDegrees <= angleTolerance;
+}
+
 namespace lar {
 
-  namespace {
-
+  Tracker::Tracker(Map map) : map(map) {
+    usac_params = cv::UsacParams();
+    usac_params.confidence=0.99;
+    usac_params.isParallel=false;
+    usac_params.loIterations=10;
+    usac_params.loMethod=cv::LocalOptimMethod::LOCAL_OPTIM_SIGMA;
+    usac_params.loSampleSize=50;
+    usac_params.maxIterations=100000;
+    usac_params.sampler=cv::SamplingMethod::SAMPLING_PROSAC;
+    usac_params.score=cv::ScoreMethod::SCORE_METHOD_MAGSAC;
+    usac_params.threshold=8.0;
   }
 
-  Tracker::Tracker(Map map) {
-    this->map = map;
-  }
-
-  bool Tracker::localize(cv::InputArray image, const cv::Mat& intrinsics, cv::Mat &transform) {
+  bool Tracker::localize(cv::InputArray image, const cv::Mat& intrinsics, cv::Mat &transform, const cv::Mat &gvec) {
     cv::Mat rvec, tvec;
     if (!transform.empty()) {
       fromTransform(transform, rvec, tvec);
     }
 
-    bool success = localize(image, intrinsics, cv::Mat(), rvec, tvec, !transform.empty());
+    bool success = localize(image, intrinsics, cv::Mat(), rvec, tvec, gvec);
     if (success) {
       toTransform(rvec, tvec, transform);
     }
     return success;
   }
 
-  bool Tracker::localize(cv::InputArray image, const cv::Mat& intrinsics, const cv::Mat& dist_coeffs, cv::Mat &rvec, cv::Mat &tvec, bool use_extrinsic_guess) {
+  bool Tracker::localize(cv::InputArray image, const cv::Mat& intrinsics, const cv::Mat& dist_coeffs, cv::Mat &rvec, cv::Mat &tvec, const cv::Mat &gvec) {
     for (Landmark *landmark : local_landmarks) { landmark->is_matched = false; }
+    
     // get map descriptors
     if (tvec.empty()) {
       local_landmarks.clear();
@@ -39,34 +81,38 @@ namespace lar {
       Rect query = Rect(Point(tvec.at<double>(0), tvec.at<double>(2)), query_diameter, query_diameter);
       local_landmarks = map.landmarks.find(query);
     }
+    std::cout << "local_landmarks.size(): " << local_landmarks.size() << std::endl;
     cv::Mat map_desc = Landmark::concatDescriptions(local_landmarks);
+    
     // Extract Features
     std::vector<cv::KeyPoint> kpts;
     cv::Mat desc;
     vision.extractFeatures(image, cv::noArray(), kpts, desc);
+    
     std::vector<cv::DMatch> matches = vision.match(desc, map_desc);
-    std::cout << "matches.size()" << matches.size() << std::endl;
     if (matches.size() <= 3) return false; 
     
     cv::Mat object_points = objectPoints(local_landmarks, matches);
     cv::Mat image_points = imagePoints(matches, kpts);
     cv::Mat inliers;
 
-    bool success = cv::solvePnPRansac(object_points, image_points, intrinsics, dist_coeffs, rvec, tvec,
-      use_extrinsic_guess, 100, 8.0, 0.99, inliers, cv::SolvePnPMethod::SOLVEPNP_ITERATIVE);
-    std::cout << "kpts.size()" << kpts.size() << std::endl;
-    std::cout << "matches.size()" << matches.size() << std::endl;
-    std::cout << "inliers.size()" << inliers.size() << std::endl;
+    bool success = cv::solvePnPRansac(object_points, image_points, intrinsics, dist_coeffs, rvec, tvec, inliers, usac_params);
+    
+    std::cout << "kpts.size(): " << kpts.size() << std::endl;
+    std::cout << "matches.size(): " << matches.size() << std::endl;
+    std::cout << "inliers.size(): " << inliers.size() << std::endl;
+
+    if (!gvec.empty() && !checkGravityVector(rvec, gvec, 3.0f)) return false;
 
 #ifndef LAR_COMPACT_BUILD
-    // mark matches
-    for (auto &match : matches) {
-      local_landmarks[match.trainIdx]->is_matched = true;
+    for (int i = 0; i < inliers.rows; i++) {
+      int match_idx = inliers.at<int>(i);
+      local_landmarks[matches[match_idx].trainIdx]->is_matched = true;
     }
 #endif
 
     return success;
-  }
+}
 
   // Private Methods
 
@@ -104,7 +150,7 @@ namespace lar {
       rtmat.at<double>(0,0), -rtmat.at<double>(0,1),  -rtmat.at<double>(0,2), tvec_inv.at<double>(0),
       rtmat.at<double>(1,0), -rtmat.at<double>(1,1),  -rtmat.at<double>(1,2), tvec_inv.at<double>(1),
       rtmat.at<double>(2,0), -rtmat.at<double>(2,1),  -rtmat.at<double>(2,2), tvec_inv.at<double>(2),
-                         0.,                     0.,                      0.,                 1.
+                         0.,                     0.,                      0.,                     1.
     );
   }
 

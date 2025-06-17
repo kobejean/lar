@@ -64,7 +64,9 @@ namespace lar {
       }
       
       locations.pop_front();
-      location = locations.front();
+	  if (!locations.empty()) {
+        location = locations.front();
+      }
     }
 
     if (!locations.empty()) {

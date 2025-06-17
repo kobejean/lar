@@ -14,6 +14,8 @@ namespace lar {
 
       void extractFeatures(cv::InputArray image, cv::InputArray mask, std::vector<cv::KeyPoint> &kpts, cv::Mat &desc);
       std::vector<cv::DMatch> match(const cv::Mat &desc1, const cv::Mat &desc2);
+    private:
+      std::vector<cv::DMatch> matchOneWay(const cv::Mat& desc1, const cv::Mat& desc2) const;
   };
 
 }

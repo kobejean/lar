@@ -4,16 +4,27 @@
 #include <fstream>
 #include <sys/stat.h>
 #include <unordered_set>
+#include <cmath>
+#include <algorithm>
 
+#include <Eigen/Dense>
 #include <opencv2/opencv.hpp>
 
 #include "lar/core/utils/json.h"
 #include "lar/tracking/tracker.h"
+#include "lar/mapping/frame.h"
 
 using namespace std;
 
+std::string getPathPrefix(std::string directory, int id) {
+  std::string id_string = std::to_string(id);
+  int zero_count = 8 - static_cast<int>(id_string.length());
+  std::string prefix = std::string(zero_count, '0') + id_string + '_';
+  return directory + prefix;
+};
+
 int main(int argc, const char* argv[]){
-  string input = "./input/snapshot";
+  string input = "./input/aizu-park-2-proc";
   // string output = "./output/map.g2o";
 
   struct stat st;
@@ -25,28 +36,32 @@ int main(int argc, const char* argv[]){
   }
 
   std::ifstream map_data_ifs(input + "/map.json");
+  std::cout << "parse map" << std::endl;
   nlohmann::json map_data = nlohmann::json::parse(map_data_ifs);
   lar::Map map = map_data;
-
-  cv::Mat image = cv::imread(input + "/00000004_image.jpeg", cv::IMREAD_GRAYSCALE);
-  cv::Mat intrinsics(3, 3, CV_32FC1);
-  intrinsics.at<float>(0,0) = 1594.2728271484375;
-  intrinsics.at<float>(1,1) = 1594.2728271484375;
-  intrinsics.at<float>(0,2) = 952.7379150390625;
-  intrinsics.at<float>(1,2) = 714.167236328125;
-  intrinsics.at<float>(2,2) = 1.;
-  cv::Mat transform;//(4, 4, CV_64FC1);
-  // transform.at<double>(0,3) = 0.;
-  // transform.at<double>(1,3) = 0.;
-  // transform.at<double>(2,3) = 0.;
-  // transform.at<double>(0,0) = 1.;
-  // transform.at<double>(1,1) = 1.;
-  // transform.at<double>(2,2) = 1.;
-  // transform.at<double>(3,3) = 1.;
-
   lar::Tracker tracker(map);
-  std::cout << "parse map" << std::endl;
-  tracker.localize(image, intrinsics, transform);
-  std::cout << "transform:" << transform << std::endl;
+  
+  std::vector<lar::Frame> frames = nlohmann::json::parse(std::ifstream("./input/aizu-park-sunny/frames.json"));
+  int successful = 0;
+  for (auto& frame : frames) {
+    std::cout << std::endl << "LOCALIZING FRAME " << frame.id << std::endl;
+    std::string image_path = getPathPrefix("./input/aizu-park-sunny/", frame.id) + "image.jpeg";
+    cv::Mat image = cv::imread(image_path, cv::IMREAD_GRAYSCALE);
+    Eigen::Matrix3f frameIntrinsics = frame.intrinsics.cast<float>().transpose(); // transpose so that the order of data matches opencv
+    cv::Mat intrinsics(3, 3, CV_32FC1, frameIntrinsics.data());
+    cv::Mat transform;//(4, 4, CV_64FC1);
+
+    // Extract gravity vector from frame extrinsics    
+    Eigen::Vector3d worldGravity(0.0f, -1.0f, 0.0f);
+    Eigen::Vector3d cameraGravity = frame.extrinsics.block<3, 3>(0, 0).inverse() * worldGravity;
+    // Convert to opencv
+    cv::Mat gvec = (cv::Mat_<double>(3,1) << cameraGravity(0), -cameraGravity(1), -cameraGravity(2));
+
+    if (tracker.localize(image, intrinsics, transform, gvec)) {
+      std::cout << "transform:" << transform << std::endl;
+    }
+  }
+
+  std::cout << "Successfully localized " << successful << "/" << frames.size() << " images!" << std::endl;
   return 0;
 }
