@@ -12,22 +12,23 @@ namespace lar {
     public:
 
       LandmarkDatabase();
+      LandmarkDatabase(const LandmarkDatabase& other);
+      LandmarkDatabase& operator=(const LandmarkDatabase& other);
       
       Landmark& operator[](size_t id);
 
-      void insert(const std::vector<Landmark> &landmarks);
+      std::vector<size_t> insert(std::vector<Landmark> &landmarks);
       std::vector<Landmark*> find(const Rect &query) const;
       size_t size() const;
-      size_t createID();
       std::vector<Landmark*> all() const;
 
-#ifndef LAR_COMPACT_BUILD
+// #ifndef LAR_COMPACT_BUILD
       void cull();
       void addObservation(size_t id, Landmark::Observation observation);
-#endif
+// #endif
     private:
       RegionTree<Landmark> _rtree;
-      size_t next_id = 0;
+      std::atomic<size_t> next_id{0};
   };
   
 

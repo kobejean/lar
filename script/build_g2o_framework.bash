@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 export CC=/usr/bin/clang
 export CXX=/usr/bin/clang++
+export CXXFLAGS="-std=c++14"
 export AR=/usr/bin/ar
 export RANLIB=/usr/bin/ranlib
+export Qt5_DIR="/opt/homebrew/opt/qt@5/lib/cmake/Qt5"
 
 PROJECT_NAME=g2o
 FRAMEWORK_BUILD_DIR=`pwd`/build/g2o-framework

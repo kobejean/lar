@@ -23,7 +23,10 @@ namespace lar {
       void reset();
       void optimize();
       void update();
-
+      void performRescaling(double scale_factor);
+      
+      static g2o::SE3Quat poseFromExtrinsics(const Eigen::Matrix4d& extrinsics);
+      static Eigen::Matrix4d extrinsicsFromPose(const g2o::SE3Quat& pose);
     private:
       struct Stats {
         size_t total_usable_landmarks = 0;
@@ -34,7 +37,16 @@ namespace lar {
       };
       Stats _stats;
       std::vector<g2o::EdgeProjectXYZ2UVD*> _landmark_edges;
+      std::vector<g2o::EdgeSE3Expmap*> _odometry_edges;
+      std::vector<g2o::VertexPointXYZ*> _landmark_vertices;
       
+      size_t findMostConnectedPose();
+      void fixAllLandmarks(bool fixed);
+      void fixAllPoses(bool fixed);
+      void rescaleToMatchOdometry();
+      Rect calculateSpatialBounds(const Eigen::Vector3d& landmark_position, 
+                                 const std::vector<Eigen::Vector3d>& camera_positions, 
+                                 double max_distance_factor = 2.0);
       bool addLandmark(const Landmark &landmark, size_t id);
       void addPose(const Eigen::Matrix4d& extrinsics, size_t id, bool fixed);
       void addGravityConstraint(size_t frame_id);
@@ -43,12 +55,16 @@ namespace lar {
       void addLandmarkMeasurements(const Landmark& landmark, size_t id);
 
       void markOutliers(double chi_threshold);
+      void markOutliers(double landmark_chi_threshold, double odometry_chi_threshold);
+      
+      // Staged optimization methods
+      void optimizePosesOnly(int iterations);
+      void optimizeStructureOnly(int iterations);
+      void removeRobustKernels();
 
       void updateLandmarks();
       void updateAnchors();
 
-      static g2o::SE3Quat poseFromExtrinsics(const Eigen::Matrix4d& extrinsics);
-      static Eigen::Matrix4d extrinsicsFromPose(const g2o::SE3Quat& pose);
   };
 
 }

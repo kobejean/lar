@@ -90,7 +90,7 @@ namespace lar {
     filtered_matches.insert(filtered_matches.end(), 
                        std::make_move_iterator(distance_matches.begin()), 
                        std::make_move_iterator(distance_matches.end()));
-    if (filtered_matches.size() > 2000) filtered_matches.resize(2000);
+    // if (filtered_matches.size() > 3000) filtered_matches.resize(3000);
     return filtered_matches;
   }
 

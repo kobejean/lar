@@ -1,5 +1,7 @@
 set(HEADER_LIST 
   "${PROJECT_SOURCE_DIR}/include/lar/processing/bundle_adjustment.h"
+  "${PROJECT_SOURCE_DIR}/include/lar/processing/colmap_database.h"
+  "${PROJECT_SOURCE_DIR}/include/lar/processing/colmap_refiner.h"
   "${PROJECT_SOURCE_DIR}/include/lar/processing/depth.h"
   "${PROJECT_SOURCE_DIR}/include/lar/processing/frame_processor.h"
   "${PROJECT_SOURCE_DIR}/include/lar/processing/global_alignment.h"
@@ -9,6 +11,8 @@ set(HEADER_LIST
 
 add_library(lar_processing
   bundle_adjustment.cpp
+  colmap_database.cpp
+  colmap_refiner.cpp
   depth.cpp
   frame_processor.cpp
   global_alignment.cpp
@@ -21,6 +25,7 @@ target_link_libraries(lar_processing
   opencv_core
   nlohmann_json::nlohmann_json
   Eigen3::Eigen
+  sqlite3
   lar_core
   lar_mapping
   lar_tracking

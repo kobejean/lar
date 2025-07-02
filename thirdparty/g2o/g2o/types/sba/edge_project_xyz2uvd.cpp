@@ -177,17 +177,17 @@ void EdgeProjectXYZ2UVD::linearizeOplus() {
     glPushAttrib(GL_ENABLE_BIT);
     glDisable(GL_LIGHTING);
 
-    // Draw line in direction of key point
-    glColor3f(0.4f, 0.7f, 0.4f);
-    glBegin(GL_LINES);
-    glVertex3f(toTranslation.x(),toTranslation.y(),toTranslation.z());
-    glVertex3f(target.x(),target.y(),target.z());
+    // // Draw line in direction of key point
+    // glColor3f(0.4f, 0.7f, 0.4f);
+    // glBegin(GL_LINES);
+    // glVertex3f(toTranslation.x(),toTranslation.y(),toTranslation.z());
+    // glVertex3f(target.x(),target.y(),target.z());
 
-    // 
-    glColor3f(0.7f, 0.7f, 0.7f);
-    glBegin(GL_LINES);
-    glVertex3f(target.x(),target.y(),target.z());
-    glVertex3f(continuation.x(),continuation.y(),continuation.z());
+    // // 
+    // glColor3f(0.7f, 0.7f, 0.7f);
+    // glBegin(GL_LINES);
+    // glVertex3f(target.x(),target.y(),target.z());
+    // glVertex3f(continuation.x(),continuation.y(),continuation.z());
 
     
     // Draw line to vertex

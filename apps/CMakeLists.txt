@@ -21,6 +21,17 @@ set_target_properties(lar_localize
   # EXCLUDE_FROM_ALL ON
 )
 
+# Create lar_refine_colmap executable
+add_executable(lar_refine_colmap lar_refine_colmap.cpp)
+target_link_libraries(lar_refine_colmap
+  lar_processing
+)
+set_target_properties(lar_refine_colmap
+  PROPERTIES
+  XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER com.local-ar.refine-colmap
+  # EXCLUDE_FROM_ALL ON
+)
+
 # Create lar_rtree executable
 add_executable(lar_rtree lar_rtree.cpp)
 target_link_libraries(lar_rtree

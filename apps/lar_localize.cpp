@@ -24,41 +24,27 @@ std::string getPathPrefix(std::string directory, int id) {
 };
 
 int main(int argc, const char* argv[]){
-  string input = "./input/aizu-park-2-proc";
+  // string input = "./input/aizu-park-4-proc";
+  string input = "./input/aizu-park-4-g2o-3";
+  // string localize = "./input/aizu-park-4-proc/";
+  string localize = "./input/aizu-park-sunny/";
   // string output = "./output/map.g2o";
 
-  struct stat st;
-  int status = stat(input.c_str(), &st);
-
-  if (status != 0) {
-    cout << "Could not read directory at '" << input << endl;
-    return 1;
-  }
-
-  std::ifstream map_data_ifs(input + "/map.json");
+  std::ifstream map_data_ifs("./output/map/map.json");
   std::cout << "parse map" << std::endl;
   nlohmann::json map_data = nlohmann::json::parse(map_data_ifs);
   lar::Map map = map_data;
   lar::Tracker tracker(map);
   
-  std::vector<lar::Frame> frames = nlohmann::json::parse(std::ifstream("./input/aizu-park-sunny/frames.json"));
+  std::vector<lar::Frame> frames = nlohmann::json::parse(std::ifstream(localize+"frames.json"));
   int successful = 0;
   for (auto& frame : frames) {
     std::cout << std::endl << "LOCALIZING FRAME " << frame.id << std::endl;
-    std::string image_path = getPathPrefix("./input/aizu-park-sunny/", frame.id) + "image.jpeg";
+    std::string image_path = getPathPrefix(localize, frame.id) + "image.jpeg";
     cv::Mat image = cv::imread(image_path, cv::IMREAD_GRAYSCALE);
-    Eigen::Matrix3f frameIntrinsics = frame.intrinsics.cast<float>().transpose(); // transpose so that the order of data matches opencv
-    cv::Mat intrinsics(3, 3, CV_32FC1, frameIntrinsics.data());
-    cv::Mat transform;//(4, 4, CV_64FC1);
-
-    // Extract gravity vector from frame extrinsics    
-    Eigen::Vector3d worldGravity(0.0f, -1.0f, 0.0f);
-    Eigen::Vector3d cameraGravity = frame.extrinsics.block<3, 3>(0, 0).inverse() * worldGravity;
-    // Convert to opencv
-    cv::Mat gvec = (cv::Mat_<double>(3,1) << cameraGravity(0), -cameraGravity(1), -cameraGravity(2));
-
-    if (tracker.localize(image, intrinsics, transform, gvec)) {
-      std::cout << "transform:" << transform << std::endl;
+    if (tracker.localize(image, frame, frame.extrinsics)) {
+      std::cout << "transform:" << frame.extrinsics << std::endl;
+      successful++;
     }
   }
 

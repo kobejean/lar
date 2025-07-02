@@ -75,18 +75,14 @@ namespace lar {
 
     size_t landmark_count = kpts.size();
     std::vector<Landmark> new_landmarks;
-    new_landmarks.reserve(landmark_count);
     std::vector<size_t> landmark_ids;
     landmark_ids.reserve(landmark_count);
     
     for (size_t i = 0; i < landmark_count; i++) {
       if (matches.find(i) == matches.end()) {
-        size_t new_landmark_id = data->map.landmarks.createID();
-        // No match so create landmark
+        // No match so create landmark with ID 0 (will be assigned by insert)
         Eigen::Vector3d pt3d = projection.projectToWorld(kpts[i].pt, depth[i]);
-        Landmark landmark(pt3d, desc.row(i), new_landmark_id);
-
-        landmark_ids.push_back(new_landmark_id);
+        Landmark landmark(pt3d, desc.row(i), 0);
         new_landmarks.push_back(landmark);
       } else {
         // We have a match so just push the match index
@@ -94,7 +90,17 @@ namespace lar {
       }
     }
 
-    data->map.landmarks.insert(new_landmarks);
+    // Insert new landmarks and get their assigned IDs
+    std::vector<size_t> new_ids = data->map.landmarks.insert(new_landmarks);
+    
+    // Merge new IDs with existing match IDs in the correct order
+    size_t new_id_index = 0;
+    for (size_t i = 0; i < landmark_count; i++) {
+      if (matches.find(i) == matches.end()) {
+        landmark_ids.insert(landmark_ids.begin() + i, new_ids[new_id_index++]);
+      }
+    }
+    
     return landmark_ids;
   }
 

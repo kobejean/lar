@@ -10,6 +10,7 @@
 #include "lar/core/utils/json.h"
 
 namespace lar {
+  class Frame;
 
   struct GPSObservation {
     long long timestamp;
@@ -23,6 +24,7 @@ namespace lar {
     public:
       void recordPosition(long long timestamp, Eigen::Vector3d position);
       void recordLocation(long long timestamp, Eigen::Vector3d location, Eigen::Vector3d accuracy);
+      void reinterpolateMatches(const std::vector<Frame>& frames);
       std::vector<GPSObservation> matches;
       
     private:

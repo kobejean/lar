@@ -15,13 +15,13 @@ namespace lar {
       Anchor();
       Anchor(std::size_t id, Transform transform);
   
-#ifndef LAR_COMPACT_BUILD
+// #ifndef LAR_COMPACT_BUILD
       std::size_t frame_id;
       Transform relative_transform;
-#endif
+// #endif
   };
   
-  NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Anchor, id, transform)
+  NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Anchor, id, transform, frame_id, relative_transform)
 }
 
 #endif /* LAR_CORE_ANCHOR_H */

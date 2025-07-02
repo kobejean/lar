@@ -177,12 +177,28 @@ def extract_opencv_sift_features(work_dir, output_features=True, max_num_feature
                 print(f"  No features found")
                 continue
             
-            print(f"  Found {len(keypoints)} raw features")
-            
             # Filter by scale to keep the largest-scale (most prominent) features
-            if len(keypoints) > max_num_features:
-                # Extract scales (size property in OpenCV keypoints)
-                scales = np.array([kp.size for kp in keypoints])
+            # First, filter out keypoints that are too small (size < 3.0)
+            min_scale = 3.0
+            scale_filtered_keypoints = []
+            scale_filtered_descriptors = []
+
+            for i, kp in enumerate(keypoints):
+                if kp.size >= min_scale:
+                    scale_filtered_keypoints.append(kp)
+                    scale_filtered_descriptors.append(descriptors[i])
+
+            if not scale_filtered_keypoints: 
+                print(f"  No features found")
+                continue
+
+            print(f"  Found {len(scale_filtered_keypoints)} raw features")
+
+            scale_filtered_descriptors = np.array(scale_filtered_descriptors)
+            # Now apply max_num_features limit to the scale-filtered results
+            if len(scale_filtered_keypoints) > max_num_features:
+                # Extract scales from the already filtered keypoints
+                scales = np.array([kp.size for kp in scale_filtered_keypoints])
                 
                 # Get indices of features sorted by scale (descending)
                 scale_indices = np.argsort(scales)[::-1]
@@ -191,13 +207,13 @@ def extract_opencv_sift_features(work_dir, output_features=True, max_num_feature
                 top_indices = scale_indices[:max_num_features]
                 
                 # Filter keypoints and descriptors
-                filtered_keypoints = [keypoints[i] for i in top_indices]
-                filtered_descriptors = descriptors[top_indices]
+                filtered_keypoints = [scale_filtered_keypoints[i] for i in top_indices]
+                filtered_descriptors = scale_filtered_descriptors[top_indices]
                 
                 print(f"  Filtered to {len(filtered_keypoints)} largest-scale features (scale range: {scales[top_indices].max():.2f} - {scales[top_indices].min():.2f})")
             else:
-                filtered_keypoints = keypoints
-                filtered_descriptors = descriptors
+                filtered_keypoints = scale_filtered_keypoints
+                filtered_descriptors = scale_filtered_descriptors
                 print(f"  Kept all {len(filtered_keypoints)} features")
             
             features_extracted += len(filtered_keypoints)
@@ -230,21 +246,18 @@ def write_colmap_features(keypoints, descriptors, output_file):
             x, y = kp.pt
             scale = kp.size
             orientation = kp.angle
-            if descriptors.dtype != np.uint8:
-              # Proper normalization to [0, 255] range
-              descriptors = (descriptors / np.max(descriptors) * 255).astype(np.uint8)
             desc_str = ' '.join(str(int(d)) for d in desc)
             
             f.write(f"{x:.6f} {y:.6f} {scale:.6f} {orientation:.6f} {desc_str}\n")
 
-def get_descriptor_for_3d_point(track, colmap_images, database_path):
+def get_descriptor_for_3d_point(track, colmap_poses, database_path):
     """Get the SIFT descriptor for a 3D point by reading directly from COLMAP database"""
     try:
         conn = sqlite3.connect(database_path)
         cursor = conn.cursor()
         
         for img_id, point2d_idx in track:
-            if img_id in colmap_images:
+            if img_id in colmap_poses:
                 # Get descriptors for this image
                 cursor.execute("SELECT rows, cols, data FROM descriptors WHERE image_id = ?", (img_id,))
                 descriptors_row = cursor.fetchone()

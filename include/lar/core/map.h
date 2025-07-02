@@ -21,6 +21,7 @@ namespace lar {
       
       Map();
       void updateOrigin(const Transform &origin);
+      void rescale(double scale_factor);
       Anchor& createAnchor(const Transform& transform);
       void updateAnchor(Anchor& anchor, const Transform& transform);
       void removeAnchor(const Anchor& anchor);
@@ -33,17 +34,21 @@ namespace lar {
       using DidAddAnchorCallback = std::function<void(Anchor&)>;
       using DidUpdateAnchorCallback = std::function<void(Anchor&)>;
       using WillRemoveAnchorCallback = std::function<void(Anchor&)>;
+      using DidUpdateOriginCallback = std::function<void(const Transform&)>;
       void setDidAddAnchorCallback(DidAddAnchorCallback callback);
       void setDidUpdateAnchorCallback(DidUpdateAnchorCallback callback);
       void setWillRemoveAnchorCallback(WillRemoveAnchorCallback callback);
+      void setDidUpdateOriginCallback(DidUpdateOriginCallback callback);
     private:
       DidAddAnchorCallback on_did_add_anchor;
       DidUpdateAnchorCallback on_did_update_anchor;
       WillRemoveAnchorCallback on_will_remove_anchor;
+      DidUpdateOriginCallback on_did_update_origin;
       
       void notifyDidAddAnchor(Anchor& anchor);
       void notifyDidUpdateAnchor(Anchor& anchor);
       void notifyWillRemoveAnchor(Anchor& anchor);
+      void notifyDidUpdateOrigin(const Transform& origin);
   };
   
   NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Map, landmarks, origin, anchors, edges, origin_ready)

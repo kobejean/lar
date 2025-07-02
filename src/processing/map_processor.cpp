@@ -2,6 +2,7 @@
 
 #include "lar/processing/map_processor.h"
 #include "lar/core/utils/json.h"
+#include "lar/mapping/location_matcher.h"
 
 namespace lar {
 
@@ -25,6 +26,39 @@ namespace lar {
     bundle_adjustment.reset();
     bundle_adjustment.construct();
     bundle_adjustment.optimize();
+    
+    // Re-interpolate GPS observations using updated frame positions
+    LocationMatcher temp_matcher;
+    temp_matcher.matches = data->gps_obs;
+    temp_matcher.reinterpolateMatches(data->frames);
+    data->gps_obs = temp_matcher.matches;
+  }
+
+  void MapProcessor::rescale(double scale_factor) {
+    if (scale_factor <= 0.0) {
+      std::cout << "Invalid scale factor: " << scale_factor << std::endl;
+      return;
+    }
+    
+    std::cout << "Manual rescaling by factor: " << scale_factor << std::endl;
+    
+    // Ensure bundle adjustment is constructed before rescaling
+    bundle_adjustment.reset();
+    bundle_adjustment.construct();
+    
+    // Perform rescaling using the core implementation
+    bundle_adjustment.performRescaling(scale_factor);
+    
+    // Update the data structures with scaled values
+    bundle_adjustment.update();
+    
+    // Re-interpolate GPS observations using updated frame positions
+    LocationMatcher temp_matcher;
+    temp_matcher.matches = data->gps_obs;
+    temp_matcher.reinterpolateMatches(data->frames);
+    data->gps_obs = temp_matcher.matches;
+    
+    std::cout << "Manual rescaling complete" << std::endl;
   }
 
   void MapProcessor::saveMap(std::string dir) {

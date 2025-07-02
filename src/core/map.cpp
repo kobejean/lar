@@ -102,6 +102,7 @@ namespace lar {
   void Map::updateOrigin(const Transform &origin) {
     this->origin = origin;
     origin_ready = true;
+    notifyDidUpdateOrigin(origin);
   }
 
   void Map::globalPointFrom(const Eigen::Vector3d& relative, Eigen::Vector3d& global) {
@@ -129,6 +130,10 @@ namespace lar {
     on_will_remove_anchor = callback;
   }
 
+  void Map::setDidUpdateOriginCallback(DidUpdateOriginCallback callback) {
+    on_did_update_origin = callback;
+  }
+
   void Map::notifyDidAddAnchor(Anchor& anchor) {
     if (on_did_add_anchor) {
         on_did_add_anchor(anchor);
@@ -144,6 +149,12 @@ namespace lar {
   void Map::notifyWillRemoveAnchor(Anchor& anchor) {
     if (on_will_remove_anchor) {
       on_will_remove_anchor(anchor);
+    }
+  }
+
+  void Map::notifyDidUpdateOrigin(const Transform& origin) {
+    if (on_did_update_origin) {
+      on_did_update_origin(origin);
     }
   }
 

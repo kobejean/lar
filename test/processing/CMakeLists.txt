@@ -1,6 +1,8 @@
 set(LAR_PROCESSING_TEST_SRCS
   "${CMAKE_CURRENT_SOURCE_DIR}/global_alignment_test.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/projection_test.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/colmap_database_test.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/colmap_refiner_test.cpp"
 )
 set(LAR_PROCESSING_TEST_LIBS lar_processing)
 

@@ -48,10 +48,54 @@ namespace lar {
     usac_params.loIterations=10;
     usac_params.loMethod=cv::LocalOptimMethod::LOCAL_OPTIM_SIGMA;
     usac_params.loSampleSize=50;
-    usac_params.maxIterations=100000;
+    usac_params.maxIterations=10000;
     usac_params.sampler=cv::SamplingMethod::SAMPLING_PROSAC;
     usac_params.score=cv::ScoreMethod::SCORE_METHOD_MAGSAC;
     usac_params.threshold=8.0;
+  }
+
+  bool Tracker::localize(cv::InputArray image, const Frame &frame, Eigen::Matrix4d &extrinsics) {
+    Eigen::Matrix3f frameIntrinsics = frame.intrinsics.cast<float>().transpose(); // transpose so that the order of data matches opencv
+    cv::Mat intrinsics(3, 3, CV_32FC1, frameIntrinsics.data());
+    cv::Mat transform;//(4, 4, CV_64FC1);
+
+    // Extract gravity vector from frame extrinsics    
+    Eigen::Vector3d worldGravity(0.0f, -1.0f, 0.0f);
+    Eigen::Vector3d cameraGravity = frame.extrinsics.block<3, 3>(0, 0).inverse() * worldGravity;
+    Eigen::Vector3d cameraPosition = frame.extrinsics.block<3, 1>(0, 3);
+
+    // Convert to opencv
+    cv::Mat gvec = (cv::Mat_<double>(3,1) << cameraGravity(0), -cameraGravity(1), -cameraGravity(2));
+
+    if (localize(image, intrinsics, transform, gvec)) {
+      // store result in extrinsics
+      for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) {
+          extrinsics(i, j) = transform.at<double>(i, j);
+        }
+      }
+      for (auto& pair : inliers) {
+        Landmark& landmark = *pair.first;
+        cv::KeyPoint kpt = pair.second;
+        Eigen::Vector3d landmarkWorldPos = landmark.position; // Assuming landmark has world position
+        Eigen::Vector3d distance_vec = landmarkWorldPos - cameraPosition;
+        float depth = (float)distance_vec.norm();
+
+        Landmark::Observation obs{
+          .frame_id=frame.id,
+          .timestamp=frame.timestamp,
+          .cam_pose=frame.extrinsics,
+          .kpt=kpt,
+          .depth=depth,
+          .depth_confidence=0,
+          .surface_normal=landmark.orientation,
+        };
+        landmark.obs.push_back(obs);
+      }
+      return true;
+    } else {
+      return false;
+    }
   }
 
   bool Tracker::localize(cv::InputArray image, const cv::Mat& intrinsics, cv::Mat &transform, const cv::Mat &gvec) {
@@ -69,6 +113,7 @@ namespace lar {
 
   bool Tracker::localize(cv::InputArray image, const cv::Mat& intrinsics, const cv::Mat& dist_coeffs, cv::Mat &rvec, cv::Mat &tvec, const cv::Mat &gvec) {
     for (Landmark *landmark : local_landmarks) { landmark->is_matched = false; }
+    this->inliers.clear();
     
     // get map descriptors
     if (tvec.empty()) {
@@ -81,6 +126,15 @@ namespace lar {
       Rect query = Rect(Point(tvec.at<double>(0), tvec.at<double>(2)), query_diameter, query_diameter);
       local_landmarks = map.landmarks.find(query);
     }
+    
+    // Limit local_landmarks to prevent OpenCV crashes (max 250k landmarks)
+    constexpr size_t MAX_LANDMARKS = (1 << 18)-1; // 262,143
+    if (local_landmarks.size() > MAX_LANDMARKS) {
+      std::cout << "Warning: Limiting local_landmarks from " << local_landmarks.size() 
+                << " to " << MAX_LANDMARKS << " to prevent OpenCV crash" << std::endl;
+      local_landmarks.resize(MAX_LANDMARKS);
+    }
+    
     std::cout << "local_landmarks.size(): " << local_landmarks.size() << std::endl;
     cv::Mat map_desc = Landmark::concatDescriptions(local_landmarks);
     
@@ -104,12 +158,18 @@ namespace lar {
 
     if (!gvec.empty() && !checkGravityVector(rvec, gvec, 3.0f)) return false;
 
-#ifndef LAR_COMPACT_BUILD
+// #ifndef LAR_COMPACT_BUILD
     for (int i = 0; i < inliers.rows; i++) {
       int match_idx = inliers.at<int>(i);
-      local_landmarks[matches[match_idx].trainIdx]->is_matched = true;
+      auto& match = matches[match_idx];
+      Landmark* landmark = local_landmarks[match.trainIdx];
+      landmark->is_matched = true;
+      this->inliers.emplace_back(landmark, kpts[match.queryIdx]);
     }
-#endif
+    // for (auto& match : matches) {
+    //   this->inliers.emplace_back(local_landmarks[match.trainIdx], kpts[match.queryIdx]);
+    // }
+// #endif
 
     return success;
 }

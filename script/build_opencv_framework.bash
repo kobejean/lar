@@ -25,13 +25,13 @@ python3 `pwd`/thirdparty/opencv/platforms/apple/build_xcframework.py \
     --without stitching \
     --without video \
     --without videoio \
+    --without parallel \
+    --macos_archs=arm64 \
     --iphoneos_archs=arm64 \
     --iphonesimulator_archs=arm64 \
+    --catalyst_archs='' \
     --disable-bitcode \
     --build_only_specified_archs
-    # --macos_archs=arm64 \
-    # --catalyst_archs=arm64 \
-    # --without parallel \
 
 # Copy correct Resources folder to each platform variant
 copy_resources() {

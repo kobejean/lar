@@ -18,6 +18,7 @@ namespace lar {
       MapProcessor(std::shared_ptr<Mapper::Data> data);
       void process();
       void optimize();
+      void rescale(double scale_factor);
       void saveMap(std::string dir);
     // private:
       BundleAdjustment bundle_adjustment;

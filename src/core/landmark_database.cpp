@@ -5,14 +5,34 @@ namespace lar {
   LandmarkDatabase::LandmarkDatabase() : _rtree() {
   }
 
+  LandmarkDatabase::LandmarkDatabase(const LandmarkDatabase& other) 
+    : _rtree(other._rtree), next_id(other.next_id.load()) {
+  }
+
+  LandmarkDatabase& LandmarkDatabase::operator=(const LandmarkDatabase& other) {
+    if (this != &other) {
+      _rtree = other._rtree;
+      next_id.store(other.next_id.load());
+    }
+    return *this;
+  }
+
   Landmark& LandmarkDatabase::operator[](size_t id) {
     return _rtree[id];
   }
 
-  void LandmarkDatabase::insert(const std::vector<Landmark>& landmarks) {
-    for (const Landmark& landmark : landmarks) {
+  std::vector<size_t> LandmarkDatabase::insert(std::vector<Landmark>& landmarks) {
+    std::vector<size_t> ids;
+    ids.reserve(landmarks.size());
+    
+    for (Landmark& landmark : landmarks) {
+      if (landmark.id == 0) {  // Assuming 0 means unassigned
+        landmark.id = next_id.fetch_add(1);
+      }
+      ids.push_back(landmark.id);
       _rtree.insert(landmark, landmark.bounds, landmark.id);
     }
+    return ids;
   }
 
   std::vector<Landmark*> LandmarkDatabase::find(const Rect &query) const {
@@ -23,15 +43,12 @@ namespace lar {
     return _rtree.size();
   }
 
-  size_t LandmarkDatabase::createID() {
-    return next_id++;
-  }
 
   std::vector<Landmark*> LandmarkDatabase::all() const {
     return _rtree.all();
   }
 
-#ifndef LAR_COMPACT_BUILD
+// #ifndef LAR_COMPACT_BUILD
 
   void LandmarkDatabase::cull() {
     // TODO: find better way to do this
@@ -53,6 +70,6 @@ namespace lar {
     _rtree.insert(landmark, landmark.bounds, id);
   }
   
-#endif
+// #endif
 
 }

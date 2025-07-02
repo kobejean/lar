@@ -19,11 +19,11 @@ namespace lar {
 
   void Mapper::addFrame(Frame frame, cv::InputArray image, cv::InputArray depth, cv::InputArray confidence) {
     frame.id = static_cast<int>(data->frames.size());
+    data->frames.push_back(frame);
     std::string path_prefix = data->getPathPrefix(frame.id).string();
     cv::imwrite(path_prefix + "image.jpeg", image);
     cv::imwrite(path_prefix + "depth.pfm", depth);
     cv::imwrite(path_prefix + "confidence.pfm", confidence);
-    data->frames.push_back(frame);
   }
 
   void Mapper::addPosition(Eigen::Vector3d position, long long timestamp) {
@@ -38,12 +38,12 @@ namespace lar {
 
   Anchor& Mapper::createAnchor(Transform &transform) {
     Anchor& anchor = data->map.createAnchor(transform);
-#ifndef LAR_COMPACT_BUILD
+// #ifndef LAR_COMPACT_BUILD
     if (data->frames.size() > 0) {
       anchor.frame_id = data->frames.back().id;
       anchor.relative_transform = data->frames.back().extrinsics.inverse() * transform.matrix();
     }
-#endif
+// #endif
     return anchor;
   }
 

@@ -10,5 +10,5 @@ add_library(lar_tracking
 )
 target_link_libraries(lar_tracking 
   opencv_core opencv_calib3d
-  lar_core
+  lar_core lar_mapping
 )

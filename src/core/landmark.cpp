@@ -20,15 +20,10 @@ namespace lar {
     return desc;
   }
 
-  #ifndef LAR_COMPACT_BUILD
+  // #ifndef LAR_COMPACT_BUILD
 
   void Landmark::recordObservation(Observation observation) {
       obs.push_back(observation);
-      
-      // Update position using triangulation when we have multiple observations
-      // if (obs.size() >= 2) {
-      //     position = triangulatePosition();
-      // }
       
       // Update orientation (surface normal)
       orientation = observation.surface_normal;
@@ -58,6 +53,6 @@ namespace lar {
   bool Landmark::isUseable() const {
     return sightings >= 3;
   }
-  #endif
+  // #endif
 
 }
