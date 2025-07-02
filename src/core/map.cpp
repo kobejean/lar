@@ -9,8 +9,13 @@ namespace lar {
   }
 
   Anchor& Map::createAnchor(const Transform &transform) {
-    // TODO: reconsider id generation
-    std::size_t id = anchors.size();
+    // Generate ID as max existing ID + 1 to avoid collisions after deletions
+    std::size_t id = 0;
+    if (!anchors.empty()) {
+      auto max_it = std::max_element(anchors.begin(), anchors.end(),
+        [](const auto& a, const auto& b) { return a.first < b.first; });
+      id = max_it->first + 1;
+    }
     auto [it, inserted] = anchors.emplace(id,Anchor{id,transform});
     notifyDidAddAnchor(it->second);
     return it->second;
@@ -25,7 +30,9 @@ namespace lar {
     std::size_t anchor_id = anchor.id;
     auto it = anchors.find(anchor_id);
     if (it != anchors.end()) {
-      notifyWillRemoveAnchor(it->second);
+      // Make a copy of the anchor before erasing it to avoid use-after-free
+      Anchor anchor_copy = it->second;
+      notifyWillRemoveAnchor(anchor_copy);
       anchors.erase(it);
       edges.erase(anchor_id);
       for (auto& [id, edge_list] : edges) {

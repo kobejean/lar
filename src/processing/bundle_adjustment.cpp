@@ -115,9 +115,9 @@ namespace lar {
     fixAllLandmarks(false);
     
     // Stage 2: Main optimization rounds
-    constexpr size_t rounds = 3;
+    constexpr size_t rounds = 4;
     double chi_threshold[4] = { 7.378, 5.991, 5.991, 5.991 };
-    size_t iteration[4] = { 40, 40, 120, 80 };
+    size_t iteration[4] = { 80, 80, 80, 120 };
 
     for (size_t i = 0; i < rounds; i++) {
       std::cout << "Stage 2." << (i+1) << ": Full optimization..." << std::endl;

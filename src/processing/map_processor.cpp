@@ -69,7 +69,7 @@ namespace lar {
     bundle_adjustment.optimizer.save(output.c_str());
     std::cout << "Saved g2o file to: " << output << std::endl;
 
-    data->map.landmarks.cull();
+    // data->map.landmarks.cull();
 
     // Serialize
     nlohmann::json map_json = data->map;
