@@ -3,45 +3,9 @@
 
 #include "lar/tracking/tracker.h"
 
-// Function to check gravity vector consistency using rvec and gvec
-bool checkGravityVector(const cv::Mat& rvec, const cv::Mat& gvec, float angleTolerance = 5.0f) {
-    // World gravity vector (pointing down in Y direction)
-    cv::Mat worldGravity = (cv::Mat_<double>(3,1) << 0.0, -1.0, 0.0);
-    
-    // Convert rvec to rotation matrix
-    cv::Mat rmat;
-    cv::Rodrigues(rvec, rmat);
-    
-    // Transform world gravity to camera coordinates using estimated rotation
-    // Since we're going from world to camera, we use the rotation matrix directly
-    cv::Mat estimatedCameraGravity = rmat * worldGravity;
-    
-    // Convert gvec to double if needed for consistency
-    cv::Mat measuredGravity;
-    gvec.convertTo(measuredGravity, CV_64F);
-    
-    // Normalize both vectors (they should already be normalized, but just in case)
-    cv::normalize(estimatedCameraGravity, estimatedCameraGravity);
-    cv::normalize(measuredGravity, measuredGravity);
-    
-    // Calculate dot product
-    double dotProduct = estimatedCameraGravity.dot(measuredGravity);
-    
-    // Clamp dot product to valid range for acos
-    dotProduct = std::max(-1.0, std::min(1.0, dotProduct));
-    
-    // Calculate angle
-    double angleRadians = std::acos(dotProduct);
-    double angleDegrees = angleRadians * 180.0 / M_PI;
-    
-    std::cout << "Gravity vector angle difference: " << angleDegrees << " degrees" << std::endl;
-    
-    return angleDegrees <= angleTolerance;
-}
-
 namespace lar {
 
-  Tracker::Tracker(Map map) : map(map) {
+  Tracker::Tracker(Map map) : map(map), last_gravity_angle_difference(0.0) {
     usac_params = cv::UsacParams();
     usac_params.confidence=0.99;
     usac_params.isParallel=false;
@@ -54,10 +18,9 @@ namespace lar {
     usac_params.threshold=8.0;
   }
 
-  bool Tracker::localize(cv::InputArray image, const Frame &frame, Eigen::Matrix4d &extrinsics) {
+  bool Tracker::localize(cv::InputArray image, const Frame &frame, double query_x, double query_z, double query_diameter, Eigen::Matrix4d &result_transform) {
     Eigen::Matrix3f frameIntrinsics = frame.intrinsics.cast<float>().transpose(); // transpose so that the order of data matches opencv
     cv::Mat intrinsics(3, 3, CV_32FC1, frameIntrinsics.data());
-    cv::Mat transform;//(4, 4, CV_64FC1);
 
     // Extract gravity vector from frame extrinsics    
     Eigen::Vector3d worldGravity(0.0f, -1.0f, 0.0f);
@@ -67,17 +30,26 @@ namespace lar {
     // Convert to opencv
     cv::Mat gvec = (cv::Mat_<double>(3,1) << cameraGravity(0), -cameraGravity(1), -cameraGravity(2));
 
-    if (localize(image, intrinsics, transform, gvec)) {
-      // store result in extrinsics
+    cv::Mat rvec, tvec;
+    bool success = localize(image, intrinsics, cv::Mat(), rvec, tvec, gvec, query_x, query_z, query_diameter);
+    
+    if (success) {
+      // Convert result to transform matrix
+      cv::Mat transform(4, 4, CV_64FC1);
+      toTransform(rvec, tvec, transform);
+      
+      // Copy to result_transform
       for (int i = 0; i < 4; ++i) {
         for (int j = 0; j < 4; ++j) {
-          extrinsics(i, j) = transform.at<double>(i, j);
+          result_transform(i, j) = transform.at<double>(i, j);
         }
       }
+      
+      // Add observations for inliers
       for (auto& pair : inliers) {
         Landmark& landmark = *pair.first;
         cv::KeyPoint kpt = pair.second;
-        Eigen::Vector3d landmarkWorldPos = landmark.position; // Assuming landmark has world position
+        Eigen::Vector3d landmarkWorldPos = landmark.position;
         Eigen::Vector3d distance_vec = landmarkWorldPos - cameraPosition;
         float depth = (float)distance_vec.norm();
 
@@ -92,15 +64,15 @@ namespace lar {
         };
         landmark.obs.push_back(obs);
       }
-      return true;
-    } else {
-      return false;
     }
+    
+    return success;
   }
 
   bool Tracker::localize(cv::InputArray image, const cv::Mat& intrinsics, cv::Mat &transform, const cv::Mat &gvec) {
     cv::Mat rvec, tvec;
     if (!transform.empty()) {
+      std::cout << "transform" << transform << std::endl;
       fromTransform(transform, rvec, tvec);
     }
 
@@ -111,19 +83,22 @@ namespace lar {
     return success;
   }
 
-  bool Tracker::localize(cv::InputArray image, const cv::Mat& intrinsics, const cv::Mat& dist_coeffs, cv::Mat &rvec, cv::Mat &tvec, const cv::Mat &gvec) {
+  bool Tracker::localize(cv::InputArray image, const cv::Mat& intrinsics, const cv::Mat& dist_coeffs, cv::Mat &rvec, cv::Mat &tvec, const cv::Mat &gvec, double query_x, double query_z, double query_diameter) {
     for (Landmark *landmark : local_landmarks) { landmark->is_matched = false; }
+    this->matches.clear();
     this->inliers.clear();
     
-    // get map descriptors
-    if (tvec.empty()) {
+    // get map descriptors using explicit spatial query parameters
+    if (query_diameter <= 0.0) {
+      // No spatial filtering - use all landmarks
       local_landmarks.clear();
       for (Landmark *landmark : map.landmarks.all()) {
         local_landmarks.push_back(landmark);
       }
     } else {
-      double query_diameter = 25.0;
-      Rect query = Rect(Point(tvec.at<double>(0), tvec.at<double>(2)), query_diameter, query_diameter);
+      // Use spatial query with explicit parameters
+      std::cout << "Spatial query: Point(" << query_x << ", " << query_z << ") diameter=" << query_diameter << std::endl;
+      Rect query = Rect(Point(query_x, query_z), query_diameter, query_diameter);
       local_landmarks = map.landmarks.find(query);
     }
     
@@ -156,9 +131,16 @@ namespace lar {
     std::cout << "matches.size(): " << matches.size() << std::endl;
     std::cout << "inliers.size(): " << inliers.size() << std::endl;
 
-    if (!gvec.empty() && !checkGravityVector(rvec, gvec, 3.0f)) return false;
+    if (!gvec.empty() && !this->checkGravityVector(rvec, gvec, 3.0f)) return false;
 
 // #ifndef LAR_COMPACT_BUILD
+    // Store all feature matches
+    for (const auto& match : matches) {
+      Landmark* landmark = local_landmarks[match.trainIdx];
+      this->matches.emplace_back(landmark, kpts[match.queryIdx]);
+    }
+    
+    // Store inliers (subset of matches)
     for (int i = 0; i < inliers.rows; i++) {
       int match_idx = inliers.at<int>(i);
       auto& match = matches[match_idx];
@@ -230,6 +212,50 @@ namespace lar {
     // so calculate inverse translation using: `-R'*t`
     tvec = (cv::Mat_<double>(3,1) << transform.at<double>(0,3), transform.at<double>(1,3), transform.at<double>(2,3));
     tvec = -rmat * tvec;
+  }
+
+  // Private method to check gravity vector consistency and store angle difference
+  bool Tracker::checkGravityVector(const cv::Mat& rvec, const cv::Mat& gvec, float angleTolerance) {
+    // World gravity vector (pointing down in Y direction)
+    cv::Mat worldGravity = (cv::Mat_<double>(3,1) << 0.0, -1.0, 0.0);
+    
+    // Convert rvec to rotation matrix
+    cv::Mat rmat;
+    cv::Rodrigues(rvec, rmat);
+    
+    // Transform world gravity to camera coordinates using estimated rotation
+    // Since we're going from world to camera, we use the rotation matrix directly
+    cv::Mat estimatedCameraGravity = rmat * worldGravity;
+    
+    // Convert gvec to double if needed for consistency
+    cv::Mat measuredGravity;
+    gvec.convertTo(measuredGravity, CV_64F);
+    
+    // Normalize both vectors (they should already be normalized, but just in case)
+    cv::normalize(estimatedCameraGravity, estimatedCameraGravity);
+    cv::normalize(measuredGravity, measuredGravity);
+    
+    // Calculate dot product
+    double dotProduct = estimatedCameraGravity.dot(measuredGravity);
+    
+    // Clamp dot product to valid range for acos
+    dotProduct = std::max(-1.0, std::min(1.0, dotProduct));
+    
+    // Calculate angle
+    double angleRadians = std::acos(dotProduct);
+    double angleDegrees = angleRadians * 180.0 / M_PI;
+    
+    // Store the angle difference
+    last_gravity_angle_difference = angleDegrees;
+    
+    std::cout << "Gravity vector angle difference: " << angleDegrees << " degrees" << std::endl;
+    
+    return angleDegrees <= angleTolerance;
+  }
+
+  // Getter for the last calculated gravity angle difference
+  double Tracker::getLastGravityAngleDifference() const {
+    return last_gravity_angle_difference;
   }
 
 }

@@ -115,9 +115,9 @@ namespace lar {
     fixAllLandmarks(false);
     
     // Stage 2: Main optimization rounds
-    constexpr size_t rounds = 4;
+    constexpr size_t rounds = 1;
     double chi_threshold[4] = { 7.378, 5.991, 5.991, 5.991 };
-    size_t iteration[4] = { 80, 80, 80, 120 };
+    size_t iteration[4] = { 20, 80, 80, 120 };
 
     for (size_t i = 0; i < rounds; i++) {
       std::cout << "Stage 2." << (i+1) << ": Full optimization..." << std::endl;
@@ -338,11 +338,10 @@ namespace lar {
     double landmark_x = landmark_position.x();
     double landmark_z = landmark_position.z();
 
-    // Calculate bounds like Python script (lines 24-27)
-    double min_x = std::min(*std::min_element(cam_x_coords.begin(), cam_x_coords.end()), landmark_x) - extent * 0.5;
-    double max_x = std::max(*std::max_element(cam_x_coords.begin(), cam_x_coords.end()), landmark_x) + extent * 0.5;
-    double min_z = std::min(*std::min_element(cam_z_coords.begin(), cam_z_coords.end()), landmark_z) - extent * 0.5;
-    double max_z = std::max(*std::max_element(cam_z_coords.begin(), cam_z_coords.end()), landmark_z) + extent * 0.5;
+    double min_x = *std::min_element(cam_x_coords.begin(), cam_x_coords.end()) - extent * 0.2;
+    double max_x = *std::max_element(cam_x_coords.begin(), cam_x_coords.end()) + extent * 0.2;
+    double min_z = *std::min_element(cam_z_coords.begin(), cam_z_coords.end()) - extent * 0.2;
+    double max_z = *std::max_element(cam_z_coords.begin(), cam_z_coords.end()) + extent * 0.2;
 
     Point lower(min_x, min_z);
     Point upper(max_x, max_z);

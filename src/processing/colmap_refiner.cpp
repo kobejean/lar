@@ -35,7 +35,12 @@ namespace lar {
       std::string img_filepath = path_prefix + "image.jpeg";
       cv::Mat image = cv::imread(img_filepath, cv::IMREAD_GRAYSCALE);
       Eigen::Matrix4d extrinsics;
-      if (tracker.localize(image, frame, extrinsics)) {
+      // Use frame position for spatial query
+      double query_x = frame.extrinsics(0, 3);
+      double query_z = frame.extrinsics(2, 3);
+      double query_diameter = 50.0; // 50 meter search radius
+      
+      if (tracker.localize(image, frame, query_x, query_z, query_diameter, extrinsics)) {
         std::cout << "extrinsics:" << extrinsics << std::endl;
         localizations.push_back(extrinsics);
       } else {

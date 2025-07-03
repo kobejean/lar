@@ -42,7 +42,14 @@ int main(int argc, const char* argv[]){
     std::cout << std::endl << "LOCALIZING FRAME " << frame.id << std::endl;
     std::string image_path = getPathPrefix(localize, frame.id) + "image.jpeg";
     cv::Mat image = cv::imread(image_path, cv::IMREAD_GRAYSCALE);
-    if (tracker.localize(image, frame, frame.extrinsics)) {
+    // Use frame position for spatial query (assuming frame.extrinsics contains camera pose)
+    double query_x = frame.extrinsics(0, 3);
+    double query_z = frame.extrinsics(2, 3);
+    double query_diameter = 50.0; // 50 meter search radius
+    
+    Eigen::Matrix4d result_transform;
+    if (tracker.localize(image, frame, query_x, query_z, query_diameter, result_transform)) {
+      frame.extrinsics = result_transform;
       std::cout << "transform:" << frame.extrinsics << std::endl;
       successful++;
     }
