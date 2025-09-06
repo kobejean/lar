@@ -3,7 +3,7 @@ import numpy as np
 from database_operations import read_colmap_poses
 from feature_extraction import get_descriptor_for_3d_point
 
-def calculate_spatial_bounds(landmark_position, camera_positions, max_distance_factor=1.5):
+def calculate_spatial_bounds(landmark_position, camera_positions):
     """Calculate spatial bounds for a landmark based on camera positions that observe it"""
     if not camera_positions:
         return {
@@ -19,12 +19,12 @@ def calculate_spatial_bounds(landmark_position, camera_positions, max_distance_f
     camera_x_coords = camera_positions[:, 0]
     camera_z_coords = camera_positions[:, 2]
     
-    extent = max_distance * max_distance_factor
+    extent = max_distance
     
-    min_x = min(np.min(camera_x_coords), landmark_x) - extent * 0.5
-    max_x = max(np.max(camera_x_coords), landmark_x) + extent * 0.5
-    min_z = min(np.min(camera_z_coords), landmark_z) - extent * 0.5
-    max_z = max(np.max(camera_z_coords), landmark_z) + extent * 0.5
+    min_x = min(np.min(camera_x_coords), landmark_x) - extent * 0.1
+    max_x = max(np.max(camera_x_coords), landmark_x) + extent * 0.1
+    min_z = min(np.min(camera_z_coords), landmark_z) - extent * 0.1
+    max_z = max(np.max(camera_z_coords), landmark_z) + extent * 0.1
     
     return {
         "lower": {"x": min_x, "y": min_z},
@@ -160,8 +160,7 @@ def export_aligned_map_json(poses_dir, database_path, output_file, arkit_frames=
                         # Calculate bounds
                         bounds = calculate_spatial_bounds(
                             landmark_position=np.array([x, y, z]),
-                            camera_positions=observing_cameras,
-                            max_distance_factor=2.0
+                            camera_positions=observing_cameras
                         )
                         
                         landmark = {

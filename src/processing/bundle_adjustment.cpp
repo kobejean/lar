@@ -115,9 +115,9 @@ namespace lar {
     fixAllLandmarks(false);
     
     // Stage 2: Main optimization rounds
-    constexpr size_t rounds = 1;
+    constexpr size_t rounds = 4;
     double chi_threshold[4] = { 7.378, 5.991, 5.991, 5.991 };
-    size_t iteration[4] = { 20, 80, 80, 120 };
+    size_t iteration[4] = { 50, 50, 50, 50 };
 
     for (size_t i = 0; i < rounds; i++) {
       std::cout << "Stage 2." << (i+1) << ": Full optimization..." << std::endl;
@@ -139,12 +139,10 @@ namespace lar {
     //   }
     // }
 
-    // optimizer.initializeOptimization(0);
-    // optimizer.optimize(40);
-    // markOutliers(5.991);
+    markOutliers(5.991);
+    optimizer.initializeOptimization(0);
+    optimizer.optimize(50);
     markOutliers(4.605);
-    // markOutliers(5.991*10000);
-
     rescaleToMatchOdometry();
     performRescaling(1.04);
     update();
@@ -307,46 +305,6 @@ namespace lar {
     }
   }
 
-  Rect BundleAdjustment::calculateSpatialBounds(const Eigen::Vector3d& landmark_position, 
-                                               const std::vector<Eigen::Vector3d>& camera_positions, 
-                                               double max_distance_factor) {
-    if (camera_positions.empty()) {
-      // Default bounds if no camera positions (1m radius)
-      double default_size = 1.0;
-      Point lower(landmark_position.x() - default_size, landmark_position.z() - default_size);
-      Point upper(landmark_position.x() + default_size, landmark_position.z() + default_size);
-      return Rect(lower, upper);
-    }
-
-    // Calculate distances from landmark to all cameras
-    std::vector<double> distances;
-    for (const auto& cam_pos : camera_positions) {
-      double dist = (cam_pos - landmark_position).norm();
-      distances.push_back(dist);
-    }
-
-    double max_distance = *std::max_element(distances.begin(), distances.end());
-    double extent = max_distance * max_distance_factor;
-
-    // Get X and Z coordinates of cameras (Y is up in ARKit convention)
-    std::vector<double> cam_x_coords, cam_z_coords;
-    for (const auto& cam_pos : camera_positions) {
-      cam_x_coords.push_back(cam_pos.x());
-      cam_z_coords.push_back(cam_pos.z());
-    }
-
-    double landmark_x = landmark_position.x();
-    double landmark_z = landmark_position.z();
-
-    double min_x = *std::min_element(cam_x_coords.begin(), cam_x_coords.end()) - extent * 0.2;
-    double max_x = *std::max_element(cam_x_coords.begin(), cam_x_coords.end()) + extent * 0.2;
-    double min_z = *std::min_element(cam_z_coords.begin(), cam_z_coords.end()) - extent * 0.2;
-    double max_z = *std::max_element(cam_z_coords.begin(), cam_z_coords.end()) + extent * 0.2;
-
-    Point lower(min_x, min_z);
-    Point upper(max_x, max_z);
-    return Rect(lower, upper);
-  }
 
   bool BundleAdjustment::addLandmark(Landmark const &landmark, size_t id) {
     if (landmark.isUseable()) {
@@ -564,11 +522,11 @@ namespace lar {
         // Get inlier camera positions from lookup map
         auto it = landmark_inlier_cameras.find(vertex_id);
         if (it != landmark_inlier_cameras.end()) {
-          landmark->bounds = calculateSpatialBounds(landmark->position, it->second);
+          landmark->updateBounds(it->second);
           landmark->sightings = landmark_inlier_counts[vertex_id];
         } else {
           // No inliers - use default bounds and zero sightings
-          landmark->bounds = calculateSpatialBounds(landmark->position, {});
+          landmark->updateBounds({});
           landmark->sightings = 0;
         }
       }

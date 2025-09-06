@@ -126,13 +126,10 @@ namespace lar {
         continue;
       }
 
-      // Calculate spatial bounds
-      Rect bounds = calculateSpatialBounds(position, observing_camera_positions);
-
       // Create complete landmark
       Landmark landmark(position, descriptor, point3d_id);
       landmark.orientation = Eigen::Vector3f(0.0f, 0.0f, 1.0f); // Default orientation like Python script
-      landmark.bounds = bounds;
+      landmark.updateBounds(observing_camera_positions);
       landmark.sightings = observations.size();
       landmark.obs = observations;
 
@@ -247,44 +244,6 @@ namespace lar {
     return dummy_descriptor;
   }
 
-  Rect ColmapDatabase::calculateSpatialBounds(const Eigen::Vector3d& position, const std::vector<Eigen::Vector3d>& camera_positions, double max_distance_factor) {
-    if (camera_positions.empty()) {
-      // Default bounds if no camera positions
-      double default_size = 1.0;
-      Point lower(position.x() - default_size, position.z() - default_size);
-      Point upper(position.x() + default_size, position.z() + default_size);
-      return Rect(lower, upper);
-    }
-
-    // Calculate distances from landmark to all cameras
-    std::vector<double> distances;
-    for (const auto& cam_pos : camera_positions) {
-      double dist = (cam_pos - position).norm();
-      distances.push_back(dist);
-    }
-
-    double max_distance = *std::max_element(distances.begin(), distances.end());
-    double extent = max_distance * max_distance_factor;
-
-    // Get X and Z coordinates of cameras (Y is up in ARKit)
-    std::vector<double> cam_x_coords, cam_z_coords;
-    for (const auto& cam_pos : camera_positions) {
-      cam_x_coords.push_back(cam_pos.x());
-      cam_z_coords.push_back(cam_pos.z());
-    }
-
-    double landmark_x = position.x();
-    double landmark_z = position.z();
-
-    double min_x = std::min(*std::min_element(cam_x_coords.begin(), cam_x_coords.end()), landmark_x) - extent * 0.5;
-    double max_x = std::max(*std::max_element(cam_x_coords.begin(), cam_x_coords.end()), landmark_x) + extent * 0.5;
-    double min_z = std::min(*std::min_element(cam_z_coords.begin(), cam_z_coords.end()), landmark_z) - extent * 0.5;
-    double max_z = std::max(*std::max_element(cam_z_coords.begin(), cam_z_coords.end()), landmark_z) + extent * 0.5;
-
-    Point lower(min_x, min_z);
-    Point upper(max_x, max_z);
-    return Rect(lower, upper);
-  }
 
   Eigen::Matrix4d ColmapDatabase::colmapPoseToMatrix(const std::vector<double>& quat_trans) {
     double qw = quat_trans[0];

@@ -117,7 +117,7 @@ namespace lar {
     * @return Eigen::Vector2d Approximating a WGS84 position from a given cartesian_position based on a given wgs84_reference using Mercator projection.
     */
     static inline Eigen::Vector2d from_cartesian(const Eigen::Vector2d &wgs84_reference, const Eigen::Vector2d &cartesian_position) {
-        constexpr double EPSILON10{1.0e-4};
+        constexpr double EPSILON10{1.0e-10};
         const int32_t signLon{(cartesian_position.x() < 0) ? -1 : 1};
         const int32_t signLat{(cartesian_position.y() < 0) ? -1 : 1};
 

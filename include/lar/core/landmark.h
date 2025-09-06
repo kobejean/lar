@@ -21,8 +21,33 @@ namespace lar {
       Landmark(const Eigen::Vector3d& position, const cv::Mat& desc, size_t id);
 
       static cv::Mat concatDescriptions(const std::vector<Landmark*>& landmarks);
+      
+      /**
+       * Calculates spatial bounds for a landmark based on observing camera positions.
+       * The bounds encompass both the landmark position and all camera positions that observed it,
+       * with a 10% margin based on the maximum distance.
+       * 
+       * @param landmark_position Position of the landmark in 3D space
+       * @param camera_positions Positions of cameras that observed this landmark
+       * @return Rectangular bounds in XZ plane (Y is up in ARKit convention)
+       */
+      static Rect calculateSpatialBounds(const Eigen::Vector3d& landmark_position, 
+                                        const std::vector<Eigen::Vector3d>& camera_positions);
+      
+      /**
+       * Updates this landmark's bounds based on observing camera positions.
+       * Convenience method that calls calculateSpatialBounds and updates the bounds field.
+       * 
+       * @param camera_positions Positions of cameras that observed this landmark
+       */
+      void updateBounds(const std::vector<Eigen::Vector3d>& camera_positions);
 
 #ifndef LAR_COMPACT_BUILD
+      /**
+       * Updates this landmark's bounds based on its stored observations.
+       * Extracts camera positions from the observation data and updates bounds.
+       */
+      void updateBoundsFromObservations();
 
       struct Observation {
         size_t frame_id;

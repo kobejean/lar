@@ -136,8 +136,8 @@ TEST_F(ColmapDatabaseTest, ReadDatabase) {
     ColmapDatabase db;
     EXPECT_TRUE(db.readDatabase(database_path.string()));
     
-    // Verify image was read
-    EXPECT_EQ(db.images.size(), 1);
+    // Verify image was read (images vector is indexed by image_id, so size is image_id + 1)
+    EXPECT_EQ(db.images.size(), 2);
     EXPECT_EQ(db.images[1].image_id, 1);
     EXPECT_EQ(db.images[1].name, "1_image.jpeg");
     EXPECT_EQ(db.images[1].keypoints.size(), 1);
@@ -156,17 +156,17 @@ TEST_F(ColmapDatabaseTest, ReadSparseReconstruction) {
     ColmapDatabase db;
     EXPECT_TRUE(db.readSparseReconstruction(sparse_dir.string()));
     
-    // Verify 3D point was read
+    // Verify 3D point was read (points3d is a sequential vector, not indexed by ID)
     EXPECT_EQ(db.points3d.size(), 1);
-    EXPECT_EQ(db.points3d[1].point3d_id, 1);
-    EXPECT_DOUBLE_EQ(db.points3d[1].position.x(), 5.0);
-    EXPECT_DOUBLE_EQ(db.points3d[1].position.y(), 6.0);
-    EXPECT_DOUBLE_EQ(db.points3d[1].position.z(), 7.0);
+    EXPECT_EQ(db.points3d[0].point3d_id, 1);
+    EXPECT_DOUBLE_EQ(db.points3d[0].position.x(), 5.0);
+    EXPECT_DOUBLE_EQ(db.points3d[0].position.y(), 6.0);
+    EXPECT_DOUBLE_EQ(db.points3d[0].position.z(), 7.0);
     
     // Verify track
-    EXPECT_EQ(db.points3d[1].track.size(), 1);
-    EXPECT_EQ(db.points3d[1].track[0].first, 1);  // image_id
-    EXPECT_EQ(db.points3d[1].track[0].second, 0); // point2d_idx
+    EXPECT_EQ(db.points3d[0].track.size(), 1);
+    EXPECT_EQ(db.points3d[0].track[0].first, 1);  // image_id
+    EXPECT_EQ(db.points3d[0].track[0].second, 0); // point2d_idx
 }
 
 TEST_F(ColmapDatabaseTest, CoordinateConversion) {

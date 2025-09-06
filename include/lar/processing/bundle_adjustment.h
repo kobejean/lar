@@ -44,9 +44,6 @@ namespace lar {
       void fixAllLandmarks(bool fixed);
       void fixAllPoses(bool fixed);
       void rescaleToMatchOdometry();
-      Rect calculateSpatialBounds(const Eigen::Vector3d& landmark_position, 
-                                 const std::vector<Eigen::Vector3d>& camera_positions, 
-                                 double max_distance_factor = 2.0);
       bool addLandmark(const Landmark &landmark, size_t id);
       void addPose(const Eigen::Matrix4d& extrinsics, size_t id, bool fixed);
       void addGravityConstraint(size_t frame_id);

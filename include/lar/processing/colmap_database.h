@@ -59,7 +59,6 @@ namespace lar {
     // Helper functions for landmark construction
     cv::Mat getDescriptorForPoint(int point3d_id, const std::string& database_path);
     cv::Mat getDescriptorForPointCached(const ColmapPoint3D& point3d);
-    Rect calculateSpatialBounds(const Eigen::Vector3d& position, const std::vector<Eigen::Vector3d>& camera_positions, double max_distance_factor = 1.5);
   };
 
 }

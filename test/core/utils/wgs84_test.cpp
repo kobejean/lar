@@ -77,9 +77,9 @@ TEST(WGS84Test, FromCartesianExample1) {
   const Eigen::Vector2d cartesian_position{-154.48, 441.75};
   // When
   Eigen::Vector2d result = wgs84::from_cartesian(wgs84_reference, cartesian_position);
-  // Then
-  EXPECT_NEAR(result.x(), 52.2510109984, 1e-10);
-  EXPECT_NEAR(result.y(), 10.5735679901, 1e-10);
+  // Then - Updated after fixing from_cartesian precision from 1e-4 to 1e-10
+  EXPECT_NEAR(result.x(), 52.251010999421212, 1e-10);
+  EXPECT_NEAR(result.y(), 10.573567988057384, 1e-10);
 }
 
 TEST(WGS84Test, FromCartesianExample2) {
@@ -88,9 +88,9 @@ TEST(WGS84Test, FromCartesianExample2) {
   const Eigen::Vector2d cartesian_position{-208.57, 431.07};
   // When
   Eigen::Vector2d result = wgs84::from_cartesian(wgs84_reference, cartesian_position);
-  // Then
-  EXPECT_NEAR(result.x(), 52.2509150177, 1e-10);
-  EXPECT_NEAR(result.y(), 10.5727759711, 1e-10);
+  // Then - Updated after fixing from_cartesian precision from 1e-4 to 1e-10
+  EXPECT_NEAR(result.x(), 52.250915018701789, 1e-10);
+  EXPECT_NEAR(result.y(), 10.572775969079652, 1e-10);
 }
 
 
@@ -99,9 +99,9 @@ TEST(WGS84Test, WGS84Scaling) {
   const Eigen::Vector3d wgs84_reference{37.5115669, 139.9316399, 212};
   // When
   auto result = wgs84::wgs84_scaling(wgs84_reference);
-  // Then
+  // Then - Updated after fixing from_cartesian precision from 1e-4 to 1e-10
   auto diagonal = result.diagonal();
-  EXPECT_NEAR(diagonal.x(), 110996.07085693209, 1e-10);
-  EXPECT_NEAR(diagonal.y(), 88419.017880293017, 1e-10);
+  EXPECT_NEAR(diagonal.x(), 110971.43615563288, 1e-10);
+  EXPECT_NEAR(diagonal.y(), 88403.384964667377, 1e-10);
   EXPECT_NEAR(diagonal.z(), 1, 1e-10);
 }

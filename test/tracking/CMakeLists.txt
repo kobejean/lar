@@ -1,5 +1,6 @@
 set(LAR_TRACKING_TEST_SRCS
   "${CMAKE_CURRENT_SOURCE_DIR}/tracker_test.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/sift_test.cpp"
 )
 set(LAR_TRACKING_TEST_LIBS lar_tracking opencv_imgcodecs)
 
