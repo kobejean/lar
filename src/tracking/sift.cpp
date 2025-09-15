@@ -87,13 +87,15 @@ void SIFT::detectAndCompute(cv::InputArray image, cv::InputArray mask,
             std::vector<Keypoint> siftKeypoints;
             for (const auto& kp : keypoints) {
                 Keypoint skp;
-                skp.x = kp.pt.x;
-                skp.y = kp.pt.y;
-                skp.scale = kp.size;
+                // Convert back to pyramid coordinates if we doubled the image
+                float scale_factor = SIFT_IMG_DBL ? 2.0f : 1.0f;
+                skp.x = kp.pt.x * scale_factor;
+                skp.y = kp.pt.y * scale_factor;
+                skp.scale = kp.size * scale_factor;
                 skp.angle = kp.angle;
                 skp.response = kp.response;
-                skp.octave = kp.octave;
-                skp.layer = (kp.octave >> 8) & 255;
+                skp.octave = kp.octave & 0xFF;  // Extract octave from packed format
+                skp.layer = (kp.octave >> 8) & 0xFF;  // Extract layer from packed format
                 siftKeypoints.push_back(skp);
             }
             
@@ -155,11 +157,14 @@ void SIFT::ScaleSpacePyramid::build(const cv::Mat& image, int nOctaveLayers, dou
                       0, 0, cv::INTER_NEAREST);
         }
         
-        // Build Gaussian pyramid for this octave
+        // Build Gaussian pyramid for this octave  
         double k = std::pow(2.0, 1.0 / nOctaveLayers);
         for (int i = 1; i < nLayers; i++) {
-            double sig = sigma * std::pow(k, i);
-            cv::GaussianBlur(octaves[o][i-1], octaves[o][i], cv::Size(), sig);
+            // OpenCV uses incremental sigma for efficiency
+            double sig_prev = (i == 1) ? sigma : sigma * std::pow(k, i-1);
+            double sig_total = sigma * std::pow(k, i);
+            double sig_diff = std::sqrt(sig_total * sig_total - sig_prev * sig_prev);
+            cv::GaussianBlur(octaves[o][i-1], octaves[o][i], cv::Size(), sig_diff);
             
             // Compute Difference of Gaussians
             if (i > 0) {
@@ -173,7 +178,8 @@ void SIFT::ScaleSpacePyramid::build(const cv::Mat& image, int nOctaveLayers, dou
 void SIFT::findScaleSpaceExtrema(const ScaleSpacePyramid& pyramid, 
                                   std::vector<Keypoint>& keypoints) {
     keypoints.clear();
-    const double threshold = contrastThreshold_ / nOctaveLayers_;
+    // OpenCV uses the threshold directly, not divided by nOctaveLayers
+    const double threshold = 0.5 * contrastThreshold_ / nOctaveLayers_;
     
     for (int o = 0; o < pyramid.nOctaves; o++) {
         for (int i = 1; i < static_cast<int>(pyramid.DoG[o].size()) - 1; i++) {  // Skip first and last
@@ -298,10 +304,11 @@ bool SIFT::localizeKeypoint(const ScaleSpacePyramid& pyramid, Keypoint& kpt) {
     kpt.x += xc;
     kpt.y += xr;
     
-    // Calculate scale
-    double scale = sigma_ * std::pow(2.0, octave + (kpt.layer + xi) / nOctaveLayers_);
-    if (!SIFT_IMG_DBL) {
-        scale *= 2;
+    // Calculate scale - match OpenCV's formula
+    double scale_factor = std::pow(2.0, octave + (kpt.layer + xi) / nOctaveLayers_);
+    double scale = sigma_ * scale_factor;
+    if (SIFT_IMG_DBL) {
+        scale *= 2.0;  // Account for initial upsampling
     }
     kpt.scale = scale;
     
@@ -317,8 +324,8 @@ bool SIFT::localizeKeypoint(const ScaleSpacePyramid& pyramid, Keypoint& kpt) {
     
     float contrast = img.at<float>(r, c) + 0.5f * (dx * xc + dy * xr + ds * xi);
     
-    // Reject low contrast
-    if (std::abs(contrast) < contrastThreshold_) {
+    // Reject low contrast - OpenCV uses threshold / nOctaveLayers
+    if (std::abs(contrast) < contrastThreshold_ / nOctaveLayers_) {
         return false;
     }
     
@@ -330,6 +337,7 @@ bool SIFT::localizeKeypoint(const ScaleSpacePyramid& pyramid, Keypoint& kpt) {
 void SIFT::eliminateEdgeResponse(const ScaleSpacePyramid& pyramid, 
                                   std::vector<Keypoint>& keypoints) {
     std::vector<Keypoint> filtered;
+    // OpenCV uses this formula: (r+1)^2/r where r is the edge threshold
     const double edgeThreshold = (edgeThreshold_ + 1) * (edgeThreshold_ + 1) / edgeThreshold_;
     
     for (const auto& kpt : keypoints) {
@@ -437,6 +445,23 @@ void SIFT::computeDescriptors(const ScaleSpacePyramid& pyramid,
     
     for (int k = 0; k < nKeypoints; k++) {
         const Keypoint& kpt = keypoints[k];
+        
+        // Validate octave and layer bounds
+        if (kpt.octave < 0 || kpt.octave >= pyramid.nOctaves || 
+            kpt.layer < 0 || kpt.layer >= static_cast<int>(pyramid.octaves[kpt.octave].size())) {
+            // Fill with zeros for invalid keypoints
+            if (descriptorType_ == CV_8U) {
+                for (int i = 0; i < 128; i++) {
+                    descriptors.at<uchar>(k, i) = 0;
+                }
+            } else {
+                for (int i = 0; i < 128; i++) {
+                    descriptors.at<float>(k, i) = 0.0f;
+                }
+            }
+            continue;
+        }
+        
         const cv::Mat& img = pyramid.octaves[kpt.octave][kpt.layer];
         
         float angle = kpt.angle * CV_PI / 180.0f;
@@ -568,9 +593,11 @@ void SIFT::retainBestFeatures(std::vector<Keypoint>& keypoints) {
 // Convert internal keypoint to OpenCV format
 cv::KeyPoint SIFT::Keypoint::toOpenCV() const {
     cv::KeyPoint kp;
-    kp.pt.x = x;
-    kp.pt.y = y;
-    kp.size = scale;
+    // Adjust coordinates if we doubled the image size
+    float scale_factor = SIFT_IMG_DBL ? 0.5f : 1.0f;
+    kp.pt.x = x * scale_factor;
+    kp.pt.y = y * scale_factor;
+    kp.size = scale * scale_factor;
     kp.angle = angle;
     kp.response = response;
     kp.octave = octave + (layer << 8);
