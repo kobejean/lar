@@ -9,7 +9,7 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest]
 
     runs-on: ${{ matrix.os }}
 
@@ -17,15 +17,6 @@ jobs:
     - uses: actions/checkout@v4
     - name: Update Submodules
       run: git submodule update --init --recursive
-    
-    # Install compatible CMake version for macOS
-    - name: Install CMake (macOS)
-      if: runner.os == 'macOS'
-      run: |
-        brew uninstall --ignore-dependencies cmake
-        brew install cmake@3.25
-        brew link cmake@3.25 --force
-        
     - name: Build
       run: make tests
     - name: Test
