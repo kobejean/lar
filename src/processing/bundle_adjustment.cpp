@@ -115,7 +115,7 @@ namespace lar {
     fixAllLandmarks(false);
     
     // Stage 2: Main optimization rounds
-    constexpr size_t rounds = 2;
+    constexpr size_t rounds = 4;
     double chi_threshold[4] = { 7.378, 5.991, 5.991, 5.991 };
     size_t iteration[4] = { 50, 50, 50, 50 };
 
@@ -302,6 +302,7 @@ namespace lar {
       Eigen::Vector3d scaled_position = anchor_position + (position - anchor_position) * scale_factor;
       vertex->setEstimate(scaled_position);
     }
+
   }
 
 
@@ -525,8 +526,7 @@ namespace lar {
           landmark->updateBounds(it->second, marginRatio);
           landmark->sightings = landmark_inlier_counts[vertex_id];
         } else {
-          // No inliers - use default bounds and zero sightings
-          landmark->updateBounds({}, marginRatio);
+          // No inliers - preserve existing bounds and set zero sightings
           landmark->sightings = 0;
         }
       }
@@ -541,6 +541,63 @@ namespace lar {
       Eigen::Matrix4d extrinsics = extrinsicsFromPose(v->estimate());
       Anchor::Transform transform(extrinsics * anchor.relative_transform.matrix());
       data->map.updateAnchor(anchor, transform);
+    }
+  }
+
+  void BundleAdjustment::updateAfterRescaling(double scale_factor, double marginRatio) {
+    // First do normal updates (positions and bounds with camera observations)
+    updateLandmarks(marginRatio);
+    updateAnchors();
+
+    // Then rescale bounds for landmarks without camera observations
+    // Find anchor pose used during rescaling
+    size_t anchor_pose = findMostConnectedPose();
+    g2o::VertexSE3Expmap* anchor_vertex = dynamic_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(anchor_pose));
+
+    if (!anchor_vertex) {
+      std::cout << "Could not find anchor vertex for bounds rescaling" << std::endl;
+      return;
+    }
+
+    Eigen::Vector3d anchor_position = anchor_vertex->estimate().inverse().translation();
+
+    // Rescale bounds for landmarks without camera observations
+    for (Landmark* landmark : data->map.landmarks.all()) {
+      if (landmark->isUseable()) {
+        // Check if this landmark had no camera observations (bounds weren't updated)
+        size_t vertex_id = landmark->id + data->frames.size();
+        bool has_inlier_cameras = false;
+
+        for (auto edge : _landmark_edges) {
+          if (edge->level() == 0) { // inlier
+            g2o::VertexPointXYZ* lm_vertex = dynamic_cast<g2o::VertexPointXYZ*>(edge->vertex(0));
+            if (lm_vertex && static_cast<size_t>(lm_vertex->id()) == vertex_id) {
+              has_inlier_cameras = true;
+              break;
+            }
+          }
+        }
+
+        if (!has_inlier_cameras) {
+          // Rescale the bounds rectangle relative to anchor position
+          double min_x = landmark->bounds.lower.x;
+          double min_z = landmark->bounds.lower.y;
+          double max_x = landmark->bounds.upper.x;
+          double max_z = landmark->bounds.upper.y;
+
+          // Scale bounds corners relative to anchor
+          double scaled_min_x = anchor_position.x() + (min_x - anchor_position.x()) * scale_factor;
+          double scaled_min_z = anchor_position.z() + (min_z - anchor_position.z()) * scale_factor;
+          double scaled_max_x = anchor_position.x() + (max_x - anchor_position.x()) * scale_factor;
+          double scaled_max_z = anchor_position.z() + (max_z - anchor_position.z()) * scale_factor;
+
+          // Update bounds with scaled coordinates
+          landmark->bounds = Rect(
+            Point(scaled_min_x, scaled_min_z),
+            Point(scaled_max_x, scaled_max_z)
+          );
+        }
+      }
     }
   }
 

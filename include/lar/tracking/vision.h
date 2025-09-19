@@ -8,7 +8,8 @@ namespace lar {
   class Vision {
     public:
       cv::Ptr<cv::Feature2D> detector;
-      cv::BFMatcher matcher;
+      cv::FlannBasedMatcher flann_matcher;
+      cv::BFMatcher bf_matcher;
 
       Vision();
 

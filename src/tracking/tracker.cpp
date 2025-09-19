@@ -12,7 +12,7 @@ namespace lar {
     usac_params.loIterations=10;
     usac_params.loMethod=cv::LocalOptimMethod::LOCAL_OPTIM_SIGMA;
     usac_params.loSampleSize=50;
-    usac_params.maxIterations=10000;
+    usac_params.maxIterations=5000;
     usac_params.sampler=cv::SamplingMethod::SAMPLING_PROSAC;
     usac_params.score=cv::ScoreMethod::SCORE_METHOD_MAGSAC;
     usac_params.threshold=8.0;

@@ -12,6 +12,11 @@ FetchContent_MakeAvailable(googletest)
 add_executable(lar_test all_tests.cpp)
 target_link_libraries(lar_test gtest)
 
+# Add OpenGL libraries for g2o visualization support
+if(OPENGL_LIBRARIES)
+    target_link_libraries(lar_test ${OPENGL_LIBRARIES})
+endif()
+
 add_subdirectory(core)
 add_subdirectory(mapping)
 add_subdirectory(processing)

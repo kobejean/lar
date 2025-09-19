@@ -19,13 +19,33 @@ endif()
 set(DEPENDENCIES)
 set(EXTRA_CMAKE_ARGS)
 
+# Platform-specific toolchain settings
+if(APPLE)
+  set(COMMON_TOOLCHAIN_ARGS
+    -DCMAKE_C_COMPILER=/usr/bin/clang
+    -DCMAKE_CXX_COMPILER=/usr/bin/clang++
+    -DCMAKE_AR=/usr/bin/ar
+    -DCMAKE_RANLIB=/usr/bin/ranlib
+  )
+elseif(UNIX AND NOT APPLE)
+  # Linux settings - use default system compilers
+  set(COMMON_TOOLCHAIN_ARGS
+    -DCMAKE_C_COMPILER=gcc
+    -DCMAKE_CXX_COMPILER=g++
+  )
+else()
+  # Windows or other platforms - use CMake defaults
+  set(COMMON_TOOLCHAIN_ARGS "")
+endif()
+
 # Setup Eigen
 list(APPEND DEPENDENCIES Eigen3)
 ExternalProject_Add(Eigen3
   SOURCE_DIR ${PROJECT_SOURCE_DIR}/thirdparty/eigen3
   BINARY_DIR Eigen3-build
-  CMAKE_ARGS 
+  CMAKE_ARGS
     -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/install
+    ${COMMON_TOOLCHAIN_ARGS}
 )
 list(APPEND EXTRA_CMAKE_ARGS
   -DEigen3_DIR=${CMAKE_BINARY_DIR}/Eigen3-build
@@ -37,8 +57,9 @@ list(APPEND DEPENDENCIES opencv)
 ExternalProject_Add(opencv
   SOURCE_DIR ${PROJECT_SOURCE_DIR}/thirdparty/opencv
   BINARY_DIR opencv-build
-  CMAKE_ARGS 
+  CMAKE_ARGS
     -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/install
+    ${COMMON_TOOLCHAIN_ARGS}
     -DBUILD_LIST=core,calib3d,features2d,imgcodecs,imgproc
     -DBUILD_SHARED_LIBS=OFF
     -DBUILD_DOCS=OFF
@@ -75,8 +96,9 @@ list(APPEND DEPENDENCIES nlohmann_json)
 ExternalProject_Add(nlohmann_json
     SOURCE_DIR ${PROJECT_SOURCE_DIR}/thirdparty/json
     BINARY_DIR nlohmann_json-build
-    CMAKE_ARGS 
+    CMAKE_ARGS
         -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/install
+        ${COMMON_TOOLCHAIN_ARGS}
         -DJSON_BuildTests=OFF
         -DJSON_Install=ON
         -DJSON_MultipleHeaders=OFF
@@ -95,11 +117,12 @@ ExternalProject_Add(g2o
   DEPENDS Eigen3
   SOURCE_DIR ${PROJECT_SOURCE_DIR}/thirdparty/g2o
   BINARY_DIR g2o-build
-  CMAKE_ARGS 
+  CMAKE_ARGS
     -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/install
     -DEIGEN3_INCLUDE_DIR=${CMAKE_BINARY_DIR}/install/include/eigen3
+    ${COMMON_TOOLCHAIN_ARGS}
     -DG2O_USE_VENDORED_CERES=ON
-    -DG2O_USE_OPENGL=OFF
+    -DG2O_USE_OPENGL=ON
     -DBUILD_SHARED_LIBS=OFF
     -DG2O_BUILD_APPS=OFF
     -DG2O_BUILD_EXAMPLES=OFF
@@ -113,8 +136,9 @@ ExternalProject_Add(g2o
 list(APPEND EXTRA_CMAKE_ARGS
   -Dg2o_DIR=${CMAKE_BINARY_DIR}/install/lib/cmake/g2o
   -DG2O_USE_VENDORED_CERES=ON
-  -DG2O_USE_OPENGL=OFF
+  -DG2O_USE_OPENGL=ON
   -DBUILD_SHARED_LIBS=OFF
+  ${COMMON_TOOLCHAIN_ARGS}
 )
 
 # Inner build

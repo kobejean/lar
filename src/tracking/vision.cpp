@@ -10,7 +10,14 @@ namespace lar {
 
   Vision::Vision() {
     detector = cv::SIFT::create(0,3,0.02,10,1.6,CV_8U);
-    matcher = cv::BFMatcher(cv::NORM_L2);
+
+    // Use FLANN matcher for better performance with large datasets
+    cv::Ptr<cv::flann::IndexParams> indexParams = cv::makePtr<cv::flann::KDTreeIndexParams>(5);
+    cv::Ptr<cv::flann::SearchParams> searchParams = cv::makePtr<cv::flann::SearchParams>(50);
+    flann_matcher = cv::FlannBasedMatcher(indexParams, searchParams);
+
+    // Keep BFMatcher as fallback
+    bf_matcher = cv::BFMatcher(cv::NORM_L2, false);
   }
 
   void Vision::extractFeatures(cv::InputArray image, cv::InputArray mask, std::vector<cv::KeyPoint>& kpts, cv::Mat& desc) {
@@ -60,9 +67,15 @@ namespace lar {
   std::vector<cv::DMatch> Vision::matchOneWay(const cv::Mat& desc1, const cv::Mat& desc2) const {
     std::vector<cv::DMatch> filtered_matches;
     if (desc1.rows <= 2 || desc2.rows <= 2) return filtered_matches;
-    
+
     std::vector<std::vector<cv::DMatch>> nn_matches;
-    matcher.knnMatch(desc1, desc2, nn_matches, 5);
+
+    // Convert uint8 descriptors to float32 for FLANN
+    cv::Mat desc1_float, desc2_float;
+    desc1.convertTo(desc1_float, CV_32F);
+    desc2.convertTo(desc2_float, CV_32F);
+
+    flann_matcher.knnMatch(desc1_float, desc2_float, nn_matches, 5);
     std::sort(nn_matches.begin(), nn_matches.end(), [](const std::vector<cv::DMatch>& a, const std::vector<cv::DMatch>& b) {
       if (a.size() < 2 || b.size() < 2) return a.size() > b.size();
       return a[0].distance * b[1].distance < a[1].distance * b[0].distance;

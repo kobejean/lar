@@ -51,6 +51,21 @@ find_package(OpenCV 4.5.4 REQUIRED core calib3d features2d imgcodecs imgproc)
 find_package(nlohmann_json 3.11.3 REQUIRED)
 find_package(g2o 1.0.0 REQUIRED)
 
+# Find OpenGL for g2o visualization support
+if(APPLE)
+    find_library(OPENGL_FRAMEWORK OpenGL REQUIRED)
+    find_library(GLUT_FRAMEWORK GLUT)
+    set(OPENGL_LIBRARIES ${OPENGL_FRAMEWORK})
+    if(GLUT_FRAMEWORK)
+        list(APPEND OPENGL_LIBRARIES ${GLUT_FRAMEWORK})
+    endif()
+elseif(UNIX AND NOT APPLE)
+    # Linux - use standard OpenGL packages
+    find_package(OpenGL REQUIRED)
+    find_package(GLUT REQUIRED)
+    set(OPENGL_LIBRARIES ${OPENGL_LIBRARIES} ${GLUT_LIBRARIES})
+endif()
+
 include_directories(${PROJECT_SOURCE_DIR}/include)
 
 # Add subdirectories

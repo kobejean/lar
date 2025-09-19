@@ -49,9 +49,9 @@ namespace lar {
     
     // Perform rescaling using the core implementation
     bundle_adjustment.performRescaling(scale_factor);
-    
-    // Update the data structures with scaled values
-    bundle_adjustment.update();
+
+    // Update the data structures with scaled values (including bounds rescaling)
+    bundle_adjustment.updateAfterRescaling(scale_factor);
     
     // Re-interpolate GPS observations using updated frame positions
     LocationMatcher temp_matcher;

@@ -24,11 +24,8 @@ std::string getPathPrefix(std::string directory, int id) {
 };
 
 int main(int argc, const char* argv[]){
-  // string input = "./input/aizu-park-4-proc";
-  string input = "./input/aizu-park-4-g2o-3";
   // string localize = "./input/aizu-park-4-proc/";
   string localize = "./input/aizu-park-sunny/";
-  // string output = "./output/map.g2o";
 
   std::ifstream map_data_ifs("./output/map/map.json");
   std::cout << "parse map" << std::endl;
@@ -45,7 +42,7 @@ int main(int argc, const char* argv[]){
     // Use frame position for spatial query (assuming frame.extrinsics contains camera pose)
     double query_x = frame.extrinsics(0, 3);
     double query_z = frame.extrinsics(2, 3);
-    double query_diameter = 50.0; // 50 meter search radius
+    double query_diameter = 20.0; // 20 meter search radius
     
     Eigen::Matrix4d result_transform;
     if (tracker.localize(image, frame, query_x, query_z, query_diameter, result_transform)) {

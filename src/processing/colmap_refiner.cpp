@@ -239,9 +239,9 @@ namespace lar {
     
     // Perform rescaling using the core implementation
     bundle_adjustment.performRescaling(scale_factor);
-    
-    // Update the data structures with scaled values
-    bundle_adjustment.update();
+
+    // Update the data structures with scaled values (including bounds rescaling)
+    bundle_adjustment.updateAfterRescaling(scale_factor);
     
     std::cout << "Manual rescaling complete" << std::endl;
   }
