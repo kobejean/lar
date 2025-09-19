@@ -15,9 +15,17 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+
+    - name: Setup CMake
+      uses: jwlawson/actions-setup-cmake@v2
+      with:
+        cmake-version: '3.27.x'
+
     - name: Update Submodules
       run: git submodule update --init --recursive
+
     - name: Build
       run: make tests
+
     - name: Test
       run: ./bin/lar_test

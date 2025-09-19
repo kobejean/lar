@@ -60,6 +60,7 @@ ExternalProject_Add(opencv
   CMAKE_ARGS
     -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/install
     ${COMMON_TOOLCHAIN_ARGS}
+    -DCMAKE_POLICY_DEFAULT_CMP0048=NEW
     -DBUILD_LIST=core,calib3d,features2d,imgcodecs,imgproc
     -DBUILD_SHARED_LIBS=OFF
     -DBUILD_DOCS=OFF
