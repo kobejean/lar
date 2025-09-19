@@ -75,7 +75,7 @@ namespace lar {
     desc1.convertTo(desc1_float, CV_32F);
     desc2.convertTo(desc2_float, CV_32F);
 
-    flann_matcher.knnMatch(desc1_float, desc2_float, nn_matches, 5);
+    flann_matcher.knnMatch(desc1_float, desc2_float, nn_matches, 8);
     std::sort(nn_matches.begin(), nn_matches.end(), [](const std::vector<cv::DMatch>& a, const std::vector<cv::DMatch>& b) {
       if (a.size() < 2 || b.size() < 2) return a.size() > b.size();
       return a[0].distance * b[1].distance < a[1].distance * b[0].distance;
