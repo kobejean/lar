@@ -22,7 +22,7 @@ namespace lar {
       void construct();
       void reset();
       void optimize();
-      void update();
+      void update(double marginRatio = 0.2);
       void performRescaling(double scale_factor);
       
       static g2o::SE3Quat poseFromExtrinsics(const Eigen::Matrix4d& extrinsics);
@@ -59,7 +59,7 @@ namespace lar {
       void optimizeStructureOnly(int iterations);
       void removeRobustKernels();
 
-      void updateLandmarks();
+      void updateLandmarks(double marginRatio = 0.2);
       void updateAnchors();
 
   };

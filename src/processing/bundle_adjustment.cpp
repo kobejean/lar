@@ -115,7 +115,7 @@ namespace lar {
     fixAllLandmarks(false);
     
     // Stage 2: Main optimization rounds
-    constexpr size_t rounds = 4;
+    constexpr size_t rounds = 2;
     double chi_threshold[4] = { 7.378, 5.991, 5.991, 5.991 };
     size_t iteration[4] = { 50, 50, 50, 50 };
 
@@ -145,11 +145,10 @@ namespace lar {
     markOutliers(4.605);
     rescaleToMatchOdometry();
     performRescaling(1.04);
-    update();
   }
 
-  void BundleAdjustment::update() {
-    updateLandmarks();
+  void BundleAdjustment::update(double marginRatio) {
+    updateLandmarks(marginRatio);
     updateAnchors();
   }
 
@@ -489,7 +488,7 @@ namespace lar {
               << odometry_outliers << " odometry outliers" << std::endl;
   }
 
-  void BundleAdjustment::updateLandmarks() {
+  void BundleAdjustment::updateLandmarks(double marginRatio) {
     // Build lookup map: landmark vertex_id -> inlier camera positions (O(edges))
     std::unordered_map<size_t, std::vector<Eigen::Vector3d>> landmark_inlier_cameras;
     std::unordered_map<size_t, size_t> landmark_inlier_counts;
@@ -502,9 +501,10 @@ namespace lar {
         if (landmark_vertex && pose_vertex) {
           size_t vertex_id = landmark_vertex->id();
           
-          // Get camera position from pose
+          // Get camera position from pose (convert g2o pose to camera position)
           g2o::SE3Quat pose = pose_vertex->estimate();
-          Eigen::Vector3d camera_pos = pose.translation();
+          Eigen::Matrix4d extrinsics = extrinsicsFromPose(pose);
+          Eigen::Vector3d camera_pos = extrinsics.block<3,1>(0,3);
           
           landmark_inlier_cameras[vertex_id].push_back(camera_pos);
           landmark_inlier_counts[vertex_id]++;
@@ -522,11 +522,11 @@ namespace lar {
         // Get inlier camera positions from lookup map
         auto it = landmark_inlier_cameras.find(vertex_id);
         if (it != landmark_inlier_cameras.end()) {
-          landmark->updateBounds(it->second);
+          landmark->updateBounds(it->second, marginRatio);
           landmark->sightings = landmark_inlier_counts[vertex_id];
         } else {
           // No inliers - use default bounds and zero sightings
-          landmark->updateBounds({});
+          landmark->updateBounds({}, marginRatio);
           landmark->sightings = 0;
         }
       }

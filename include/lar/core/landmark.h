@@ -31,23 +31,27 @@ namespace lar {
        * @param camera_positions Positions of cameras that observed this landmark
        * @return Rectangular bounds in XZ plane (Y is up in ARKit convention)
        */
-      static Rect calculateSpatialBounds(const Eigen::Vector3d& landmark_position, 
-                                        const std::vector<Eigen::Vector3d>& camera_positions);
+      static Rect calculateSpatialBounds(const Eigen::Vector3d& landmark_position,
+                                        const std::vector<Eigen::Vector3d>& camera_positions,
+                                        double marginRatio = 0.2);
       
       /**
        * Updates this landmark's bounds based on observing camera positions.
        * Convenience method that calls calculateSpatialBounds and updates the bounds field.
-       * 
+       *
        * @param camera_positions Positions of cameras that observed this landmark
+       * @param marginRatio Ratio of max distance to use as margin (default: 0.2)
        */
-      void updateBounds(const std::vector<Eigen::Vector3d>& camera_positions);
+      void updateBounds(const std::vector<Eigen::Vector3d>& camera_positions, double marginRatio = 0.2);
 
 #ifndef LAR_COMPACT_BUILD
       /**
        * Updates this landmark's bounds based on its stored observations.
        * Extracts camera positions from the observation data and updates bounds.
+       *
+       * @param marginRatio Ratio of max distance to use as margin (default: 0.2)
        */
-      void updateBoundsFromObservations();
+      void updateBoundsFromObservations(double marginRatio = 0.2);
 
       struct Observation {
         size_t frame_id;

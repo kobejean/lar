@@ -121,7 +121,7 @@ namespace lar {
         if (landmarks_created == 0) std::cout << "Created observation for frame " << frame.id << std::endl;
       }
 
-      if (observations.empty()) {
+      if (observations.empty() || observing_camera_positions.empty()) {
         if (landmarks_created == 0) std::cout << "No observations created for point3d_id " << point3d_id << std::endl;
         continue;
       }

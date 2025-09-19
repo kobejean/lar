@@ -26,7 +26,8 @@ namespace lar {
     bundle_adjustment.reset();
     bundle_adjustment.construct();
     bundle_adjustment.optimize();
-    
+    bundle_adjustment.update();
+
     // Re-interpolate GPS observations using updated frame positions
     LocationMatcher temp_matcher;
     temp_matcher.matches = data->gps_obs;
