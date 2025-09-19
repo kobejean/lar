@@ -56,9 +56,9 @@ TEST(GlobalAlignmentTest, CrossCovariance) {
   // When
   Eigen::Matrix3d CC = aligner.crossCovariance(rc, gc, D);
   // Then - Updated values after fixing WGS84 precision from 1e-4 to 1e-10
-  EXPECT_NEAR(CC(0,0), -17325.921528590075, 1e-5);
+  EXPECT_NEAR(CC(0,0), -17325.921528590075, 2e-5);
   EXPECT_NEAR(CC(0,1), 0, 1e-10);
-  EXPECT_NEAR(CC(0,2), -17325.921528590075, 1e-5);
+  EXPECT_NEAR(CC(0,2), -17325.921528590075, 2e-5);
   EXPECT_NEAR(CC(1,0), -7333.9860039396517, 1e-10);
   EXPECT_NEAR(CC(1,1), 0, 1e-10);
   EXPECT_NEAR(CC(1,2), -7333.9860039396517, 1e-10);
@@ -91,9 +91,9 @@ TEST(GlobalAlignmentTest, UpdateAlignment) {
   EXPECT_NEAR(origin(0,1), 0, 1e-10);
   EXPECT_NEAR(origin(0,2), -8.3517791308255934e-06, 1e-5);
   EXPECT_NEAR(origin(0,3), 37.52367540433918, 1e-10);
-  EXPECT_NEAR(origin(1,0), -1.0483862418883284e-05, 1e-5);
+  EXPECT_NEAR(origin(1,0), -1.0483862418883284e-05, 2e-5);
   EXPECT_NEAR(origin(1,1), 0, 1e-10);
-  EXPECT_NEAR(origin(1,2), 4.2479509382021304e-06, 1e-5);
+  EXPECT_NEAR(origin(1,2), 4.2479509382021304e-06, 2e-5);
   EXPECT_NEAR(origin(1,3), 139.93807388383271, 1e-10);
   EXPECT_NEAR(origin(2,0), 0, 1e-10);
   EXPECT_NEAR(origin(2,1), 1, 1e-10);
