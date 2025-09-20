@@ -32,6 +32,9 @@ int main(int argc, const char* argv[]){
   nlohmann::json map_data = nlohmann::json::parse(map_data_ifs);
   lar::Map map = map_data;
   lar::Tracker tracker(map);
+
+  // Using original FLANN matching implementation
+  std::cout << "FLANN matching enabled" << std::endl;
   
   std::vector<lar::Frame> frames = nlohmann::json::parse(std::ifstream(localize+"frames.json"));
   int successful = 0;
