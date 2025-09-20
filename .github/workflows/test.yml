@@ -21,11 +21,22 @@ jobs:
       with:
         cmake-version: '3.27.x'
 
-    - name: Install OpenGL dependencies (Linux)
+    - name: Install dependencies (Linux)
       if: runner.os == 'Linux'
       run: |
         sudo apt-get update
-        sudo apt-get install -y libgl1-mesa-dev libglu1-mesa-dev freeglut3-dev
+        sudo apt-get install -y \
+          libgl1-mesa-dev libglu1-mesa-dev freeglut3-dev \
+          libeigen3-dev \
+          libopenblas-dev \
+          liblapack-dev \
+          libblas-dev \
+          libjpeg-dev \
+          libpng-dev \
+          pkg-config \
+          build-essential \
+          cmake \
+          git
 
     - name: Update Submodules
       run: git submodule update --init --recursive
