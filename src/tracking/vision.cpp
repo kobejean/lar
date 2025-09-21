@@ -3,6 +3,7 @@
 #include <iostream>
 #include <chrono>
 #include <opencv2/flann.hpp>
+#include <opencv2/imgproc.hpp>
 
 namespace lar {
 
@@ -21,9 +22,14 @@ namespace lar {
   }
 
   void Vision::extractFeatures(cv::InputArray image, cv::InputArray mask, std::vector<cv::KeyPoint>& kpts, cv::Mat& desc) {
-    size_t max_features = 8192;
+    auto start_extract = std::chrono::high_resolution_clock::now();
+
+    size_t max_features = 8192*2;
     float min_scale = 2.9;
+
+    auto start_sift = std::chrono::high_resolution_clock::now();
     detector->detectAndCompute(image, mask, kpts, desc);
+    auto end_sift = std::chrono::high_resolution_clock::now();
 
     // Filter out feature points that are too small
     std::vector<std::pair<float, int>> scale_indices;
@@ -35,9 +41,7 @@ namespace lar {
 
     // Sort by scale in descending order (largest first)
     std::sort(scale_indices.begin(), scale_indices.end(),
-              [](const std::pair<float, int>& a, const std::pair<float, int>& b) {
-                return a.first > b.first;
-              });
+              [](const std::pair<float, int>& a, const std::pair<float, int>& b) { return a.first > b.first; });
 
     // Keep only top max_features from the scale-filtered results
     std::vector<cv::KeyPoint> filtered_kpts;
@@ -59,6 +63,13 @@ namespace lar {
     kpts = std::move(filtered_kpts);
     desc = filtered_desc.clone(); // Use clone() to ensure proper matrix copy
 
+    auto end_extract = std::chrono::high_resolution_clock::now();
+
+    // Log timing information
+    auto sift_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_sift - start_sift).count();
+    auto total_extract_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_extract - start_extract).count();
+
+    std::cout << "Feature Extraction - SIFT: " << sift_time << "ms, Total: " << total_extract_time << std::endl;
     std::cout << "Filtered to " << kpts.size() << " largest-scale features (scale >= " << min_scale << ") "
               << "(scale range: " << (scale_indices.empty() ? 0.0f : scale_indices[0].first) << " - "
               << (num_features > 0 ? scale_indices[num_features-1].first : 0.0f) << ")" << std::endl;
@@ -123,7 +134,7 @@ namespace lar {
     auto match_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_match - start_match).count();
     auto total_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_total - start_total).count();
 
-    std::cout << "Timing - Convert: " << convert_time << "ms, Match: " << match_time << "ms, Total: " << total_time << "ms" << std::endl;
+    std::cout << "Feature Matching - Convert: " << convert_time << "ms, FLANN: " << match_time << "ms, Total: " << total_time << "ms" << std::endl;
 
     return filtered_matches;
   }
