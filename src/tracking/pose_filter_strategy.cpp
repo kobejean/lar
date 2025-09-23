@@ -26,30 +26,14 @@ void PoseState::fromVector(const Eigen::VectorXd& vec) {
 }
 
 Eigen::Matrix4d PoseState::toTransform() const {
-    Eigen::Matrix4d T = Eigen::Matrix4d::Identity();
-    T.block<3,3>(0,0) = axisAngleToRotationMatrix(orientation);
-    T.block<3,1>(0,3) = position;
-    return T;
+    return utils::TransformUtils::createTransform(position, orientation);
 }
 
 void PoseState::fromTransform(const Eigen::Matrix4d& T) {
-    position = T.block<3,1>(0,3);
-    orientation = rotationMatrixToAxisAngle(T.block<3,3>(0,0));
+    position = utils::TransformUtils::extractPosition(T);
+    orientation = utils::TransformUtils::rotationMatrixToAxisAngle(utils::TransformUtils::extractRotation(T));
 }
 
-Eigen::Vector3d PoseState::rotationMatrixToAxisAngle(const Eigen::Matrix3d& R) {
-    Eigen::AngleAxisd axis_angle(R);
-    return axis_angle.axis() * axis_angle.angle();
-}
-
-Eigen::Matrix3d PoseState::axisAngleToRotationMatrix(const Eigen::Vector3d& axis_angle) {
-    double angle = axis_angle.norm();
-    if (angle < 1e-10) {
-        return Eigen::Matrix3d::Identity();
-    }
-    Eigen::Vector3d axis = axis_angle / angle;
-    return Eigen::AngleAxisd(angle, axis).toRotationMatrix();
-}
 
 // ============================================================================
 // ExtendedKalmanFilter Implementation

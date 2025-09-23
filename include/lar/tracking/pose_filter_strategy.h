@@ -3,6 +3,7 @@
 
 #include <Eigen/Core>
 #include <Eigen/Geometry>
+#include "lar/core/utils/transform.h"
 
 namespace lar {
 
@@ -26,10 +27,6 @@ struct PoseState {
     // Convert to transform matrix
     Eigen::Matrix4d toTransform() const;
     void fromTransform(const Eigen::Matrix4d& T);
-
-private:
-    static Eigen::Vector3d rotationMatrixToAxisAngle(const Eigen::Matrix3d& R);
-    static Eigen::Matrix3d axisAngleToRotationMatrix(const Eigen::Vector3d& axis_angle);
 };
 
 /**

@@ -1,6 +1,7 @@
 set(LAR_CORE_UTILS_TEST_SRCS
   "${CMAKE_CURRENT_SOURCE_DIR}/json_test.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/wgs84_test.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/transform_test.cpp"
 )
 
 # add tests to parent targets
