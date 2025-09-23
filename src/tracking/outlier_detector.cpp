@@ -50,14 +50,10 @@ bool ChiSquaredOutlierDetector::isOutlier(
 Eigen::VectorXd ChiSquaredOutlierDetector::transformToVector(const Eigen::Matrix4d& T) const {
     Eigen::VectorXd vec(6);
     vec.segment<3>(0) = T.block<3,1>(0,3);  // position
-    vec.segment<3>(3) = rotationMatrixToAxisAngle(T.block<3,3>(0,0));  // orientation
+    vec.segment<3>(3) = utils::TransformUtils::rotationMatrixToAxisAngle(T.block<3,3>(0,0));  // orientation
     return vec;
 }
 
-Eigen::Vector3d ChiSquaredOutlierDetector::rotationMatrixToAxisAngle(const Eigen::Matrix3d& R) const {
-    Eigen::AngleAxisd axis_angle(R);
-    return axis_angle.axis() * axis_angle.angle();
-}
 
 // ============================================================================
 // DistanceOutlierDetector Implementation

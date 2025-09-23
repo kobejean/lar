@@ -8,8 +8,7 @@
 #include <opencv2/core.hpp>
 #include "lar/tracking/tracker.h"
 #include "lar/tracking/filtered_tracker_config.h"
-#include "lar/tracking/coordinate_transform_manager.h"
-#include "lar/tracking/vio_motion_estimator.h"
+#include "lar/core/utils/transform.h"
 #include "lar/tracking/confidence_estimator.h"
 #include "lar/tracking/outlier_detector.h"
 #include "lar/tracking/pose_filter_strategy.h"
@@ -45,17 +44,24 @@ private:
     FilteredTrackerConfig config_;
 
     // Pluggable architectural components
-    std::unique_ptr<PoseFilterStrategy> filter_strategy_;       // Pluggable filtering algorithm
-    std::unique_ptr<CoordinateTransformManager> transform_manager_; // VIO-LAR coordinate transforms
-    std::unique_ptr<VIOMotionEstimator> motion_estimator_;      // VIO motion estimation
-    std::unique_ptr<ConfidenceEstimator> confidence_estimator_; // Pluggable confidence estimation
-    std::unique_ptr<OutlierDetector> outlier_detector_;         // Pluggable outlier detection
+    std::unique_ptr<PoseFilterStrategy> filter_strategy_;
+    std::unique_ptr<ConfidenceEstimator> confidence_estimator_;
+    std::unique_ptr<OutlierDetector> outlier_detector_;
+
+    // VIO motion estimation state
+    Eigen::Matrix4d last_vio_camera_pose_;
+    Eigen::Matrix4d current_vio_camera_pose_;
+    bool has_vio_poses_;
+
+    // Coordinate transform state
+    MeasurementResult last_transform_result_;
 
     // Timing
     std::chrono::steady_clock::time_point last_prediction_time_;
 
-    // Last measurement result (contains the computed transform)
-    MeasurementResult last_measurement_result_;
+    // Helper methods
+    Eigen::Matrix4d computeMotionDelta();
+    MeasurementResult computeCoordinateTransform(const Eigen::Matrix4d& T_lar_from_camera, double confidence);
 
 public:
     /**

@@ -2,8 +2,6 @@ set(HEADER_LIST
   "${PROJECT_SOURCE_DIR}/include/lar/tracking/tracker.h"
   "${PROJECT_SOURCE_DIR}/include/lar/tracking/filtered_tracker.h"
   "${PROJECT_SOURCE_DIR}/include/lar/tracking/filtered_tracker_config.h"
-  "${PROJECT_SOURCE_DIR}/include/lar/tracking/coordinate_transform_manager.h"
-  "${PROJECT_SOURCE_DIR}/include/lar/tracking/vio_motion_estimator.h"
   "${PROJECT_SOURCE_DIR}/include/lar/tracking/confidence_estimator.h"
   "${PROJECT_SOURCE_DIR}/include/lar/tracking/outlier_detector.h"
   "${PROJECT_SOURCE_DIR}/include/lar/tracking/pose_filter_strategy.h"
@@ -14,8 +12,6 @@ set(HEADER_LIST
 add_library(lar_tracking
   tracker.cpp
   filtered_tracker.cpp
-  coordinate_transform_manager.cpp
-  vio_motion_estimator.cpp
   confidence_estimator.cpp
   outlier_detector.cpp
   pose_filter_strategy.cpp

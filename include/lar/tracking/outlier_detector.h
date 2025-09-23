@@ -3,6 +3,7 @@
 
 #include <Eigen/Core>
 #include <Eigen/Geometry>
+#include "lar/core/utils/transform.h"
 
 namespace lar {
 
@@ -52,11 +53,6 @@ private:
      * Convert transform matrix to 6D state vector (position + axis-angle orientation)
      */
     Eigen::VectorXd transformToVector(const Eigen::Matrix4d& T) const;
-
-    /**
-     * Convert rotation matrix to axis-angle representation
-     */
-    Eigen::Vector3d rotationMatrixToAxisAngle(const Eigen::Matrix3d& R) const;
 };
 
 /**

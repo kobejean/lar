@@ -50,17 +50,18 @@ FilteredTracker::FilteredTracker(std::unique_ptr<Tracker> tracker,
         std::cout << "=== FilteredTracker Constructor (Pluggable Architecture) ===" << std::endl;
     }
 
-    // Initialize non-pluggable components
-    transform_manager_ = std::make_unique<CoordinateTransformManager>();
-    motion_estimator_ = std::make_unique<VIOMotionEstimator>();
+    // Initialize VIO motion estimation state
+    last_vio_camera_pose_ = Eigen::Matrix4d::Identity();
+    current_vio_camera_pose_ = Eigen::Matrix4d::Identity();
+    has_vio_poses_ = false;
+
+    // Initialize coordinate transform state
+    last_transform_result_.success = false;
+    last_transform_result_.map_to_vio_transform = Eigen::Matrix4d::Identity();
+    last_transform_result_.confidence = 0.0;
 
     // Initialize timing
     last_prediction_time_ = std::chrono::steady_clock::now();
-
-    // Initialize last measurement result
-    last_measurement_result_.success = false;
-    last_measurement_result_.map_to_vio_transform = Eigen::Matrix4d::Identity();
-    last_measurement_result_.confidence = 0.0;
 
     if (config_.enable_debug_output) {
         std::cout << "FilteredTracker initialized with pluggable architecture" << std::endl;
@@ -73,9 +74,26 @@ FilteredTracker::FilteredTracker(std::unique_ptr<Tracker> tracker,
 // ============================================================================
 
 void FilteredTracker::updateVIOCameraPose(const Eigen::Matrix4d& T_vio_from_camera) {
-    // Delegate to motion estimator and transform manager
-    motion_estimator_->updateVIOCameraPose(T_vio_from_camera);
-    transform_manager_->updateVIOCameraPose(T_vio_from_camera);
+    if (!utils::TransformUtils::validateTransformMatrix(T_vio_from_camera, "T_vio_from_camera")) {
+        std::cout << "WARNING: Invalid VIO camera pose provided to FilteredTracker" << std::endl;
+        return;
+    }
+
+    // Update VIO pose tracking
+    if (!has_vio_poses_) {
+        // First pose - initialize both current and last
+        last_vio_camera_pose_ = T_vio_from_camera;
+        current_vio_camera_pose_ = T_vio_from_camera;
+        has_vio_poses_ = true;
+
+        if (config_.enable_debug_output) {
+            std::cout << "FilteredTracker: First VIO pose received" << std::endl;
+        }
+    } else {
+        // Update poses: current becomes last, new pose becomes current
+        last_vio_camera_pose_ = current_vio_camera_pose_;
+        current_vio_camera_pose_ = T_vio_from_camera;
+    }
 }
 
 // ============================================================================
@@ -91,8 +109,8 @@ void FilteredTracker::predictStep() {
         return;
     }
 
-    // Get motion from VIO estimator
-    Eigen::Matrix4d motion = motion_estimator_->getMotionDelta();
+    // Get motion from VIO poses
+    Eigen::Matrix4d motion = computeMotionDelta();
 
     // Perform prediction using pluggable filter strategy
     filter_strategy_->predict(motion, dt, config_);
@@ -167,7 +185,7 @@ FilteredTracker::MeasurementResult FilteredTracker::measurementUpdate(
                 std::cout << "Rejecting camera pose measurement (outlier detection)" << std::endl;
             }
             // Return last known transform for rejected measurements
-            result.map_to_vio_transform = last_measurement_result_.map_to_vio_transform;
+            result.map_to_vio_transform = last_transform_result_.map_to_vio_transform;
             return result;
         }
 
@@ -179,11 +197,11 @@ FilteredTracker::MeasurementResult FilteredTracker::measurementUpdate(
 
     // Compute coordinate transform using FILTERED camera pose estimate
     Eigen::Matrix4d T_lar_from_camera_filtered = filter_strategy_->getState().toTransform();
-    auto transform_result = transform_manager_->computeTransform(T_lar_from_camera_filtered, result.confidence);
+    MeasurementResult transform_result = computeCoordinateTransform(T_lar_from_camera_filtered, result.confidence);
     result.map_to_vio_transform = transform_result.map_to_vio_transform;
 
-    // Store result for future reference
-    last_measurement_result_ = result;
+    // Store result for future reference (keeping legacy name for compatibility)
+    last_transform_result_ = result;
 
     if (config_.enable_debug_output) {
         std::cout << "Measurement update completed successfully" << std::endl;
@@ -197,7 +215,7 @@ FilteredTracker::MeasurementResult FilteredTracker::measurementUpdate(
 // ============================================================================
 
 Eigen::Matrix4d FilteredTracker::getFilteredTransform() const {
-    return transform_manager_->getCurrentTransform();
+    return last_transform_result_.map_to_vio_transform;
 }
 
 double FilteredTracker::getPositionUncertainty() const {
@@ -217,14 +235,88 @@ void FilteredTracker::reset() {
     }
 
     filter_strategy_->reset();
-    transform_manager_->reset();
-    motion_estimator_->reset();
 
-    last_measurement_result_.success = false;
-    last_measurement_result_.map_to_vio_transform = Eigen::Matrix4d::Identity();
-    last_measurement_result_.confidence = 0.0;
+    // Reset VIO motion estimation state
+    has_vio_poses_ = false;
+    last_vio_camera_pose_ = Eigen::Matrix4d::Identity();
+    current_vio_camera_pose_ = Eigen::Matrix4d::Identity();
+
+    // Reset coordinate transform state
+    last_transform_result_.success = false;
+    last_transform_result_.map_to_vio_transform = Eigen::Matrix4d::Identity();
+    last_transform_result_.confidence = 0.0;
 
     last_prediction_time_ = std::chrono::steady_clock::now();
+}
+
+// ============================================================================
+// Helper Methods (merged from VIOMotionEstimator and CoordinateTransformManager)
+// ============================================================================
+
+Eigen::Matrix4d FilteredTracker::computeMotionDelta() {
+    if (!has_vio_poses_) {
+        if (config_.enable_debug_output) {
+            std::cout << "WARNING: No VIO poses available for motion computation" << std::endl;
+        }
+        return Eigen::Matrix4d::Identity();
+    }
+
+    // Compute relative camera motion in camera's own frame
+    // We need: T_camera_current_from_camera_last
+    // This is: T_camera_from_vio_last * T_vio_from_camera_current
+    Eigen::Matrix4d motion_delta = last_vio_camera_pose_.inverse() * current_vio_camera_pose_;
+
+    if (!utils::TransformUtils::validateTransformMatrix(motion_delta, "motion_delta")) {
+        std::cout << "WARNING: Computed motion delta is invalid, returning identity" << std::endl;
+        return Eigen::Matrix4d::Identity();
+    }
+
+    return motion_delta;
+}
+
+FilteredTracker::MeasurementResult FilteredTracker::computeCoordinateTransform(
+    const Eigen::Matrix4d& T_lar_from_camera, double confidence) {
+
+    MeasurementResult result;
+    result.success = false;
+    result.confidence = confidence;
+
+    if (!has_vio_poses_) {
+        std::cout << "ERROR: No VIO camera pose available for transform computation" << std::endl;
+        return result;
+    }
+
+    if (!utils::TransformUtils::validateTransformMatrix(T_lar_from_camera, "T_lar_from_camera")) {
+        std::cout << "ERROR: Invalid LAR camera pose" << std::endl;
+        return result;
+    }
+
+    // CRITICAL: Use synchronized poses to compute coordinate transform
+    // We have:
+    // - T_lar_from_camera: Camera pose in LAR world (filtered estimate)
+    // - current_vio_camera_pose_: Camera pose from VIO (synchronized with measurement)
+    //
+    // We want T_vio_from_lar such that:
+    // T_lar_from_camera = T_lar_from_vio * T_vio_from_camera
+    // Therefore: T_lar_from_vio = T_lar_from_camera * T_vio_from_camera^-1
+    // But we need the reverse transform: T_vio_from_lar = T_lar_from_vio^-1
+    // So: map_to_vio_transform = (T_lar_from_camera * T_vio_from_camera^-1)^-1
+    //                          = T_vio_from_camera * T_lar_from_camera^-1
+
+    result.map_to_vio_transform = current_vio_camera_pose_ * T_lar_from_camera.inverse();
+
+    if (!utils::TransformUtils::validateTransformMatrix(result.map_to_vio_transform, "map_to_vio_transform")) {
+        std::cout << "ERROR: Computed transform is invalid" << std::endl;
+        return result;
+    }
+
+    result.success = true;
+
+    if (config_.enable_debug_output) {
+        std::cout << "Transform computed successfully (confidence: " << confidence << ")" << std::endl;
+    }
+
+    return result;
 }
 
 } // namespace lar
