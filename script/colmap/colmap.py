@@ -171,10 +171,10 @@ def copy_images(source_dir, work_dir):
 
 def setup(args, frames_json_path, database_path, work_dir):
     arkit_frames = load_arkit_data(frames_json_path)
-    # create_colmap_database(arkit_frames, database_path, work_dir)
-    # if not copy_images(args.source_dir, work_dir):
-    #     print("Failed to copy images. Exiting.")
-    #     exit()
+    create_colmap_database(arkit_frames, database_path, work_dir)
+    if not copy_images(args.source_dir, work_dir):
+        print("Failed to copy images. Exiting.")
+        exit()
     return arkit_frames
 
 def extract_features(args, work_dir, database_path):
@@ -278,14 +278,14 @@ def main():
     # Step 1: Setup
     arkit_frames = setup(args, frames_json_path, database_path, work_dir)
 
-    # # # Step 2: Extract SIFT features
-    # extract_features(args, work_dir, database_path)
+    # Step 2: Extract SIFT features
+    extract_features(args, work_dir, database_path)
     
-    # # # Step 3: Feature matching
-    # feature_matching(args, database_path)
+    # Step 3: Feature matching
+    feature_matching(args, database_path)
 
-    # # # Step 4: Sparse reconstruction
-    # reconstruction_path = sparse_reconstruction(args, database_path, sparse_dir)
+    # Step 4: Sparse reconstruction
+    reconstruction_path = sparse_reconstruction(args, database_path, sparse_dir)
     reconstruction_path = sparse_dir / "0"
     
     # Step 5: Model alignment

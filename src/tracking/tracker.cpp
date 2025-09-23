@@ -15,6 +15,8 @@ namespace lar {
     usac_params.maxIterations=5000;
     usac_params.sampler=cv::SamplingMethod::SAMPLING_PROSAC;
     usac_params.score=cv::ScoreMethod::SCORE_METHOD_MAGSAC;
+    // usac_params.final_polisher = cv::PolishingMethod::POLISHING_MAGSAC;
+    // usac_params.final_polisher_iterations = 10;
     usac_params.threshold=8.0;
   }
 
