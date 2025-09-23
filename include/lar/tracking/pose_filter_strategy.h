@@ -93,7 +93,7 @@ public:
 
 /**
  * Extended Kalman Filter implementation.
- * This is the current filtering approach extracted from CameraPoseFilter.
+ * Full-featured EKF for camera pose estimation with motion-based process noise.
  */
 class ExtendedKalmanFilter : public PoseFilterStrategy {
 public:
