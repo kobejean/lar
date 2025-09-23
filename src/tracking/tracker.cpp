@@ -20,7 +20,7 @@ namespace lar {
     usac_params.threshold=8.0;
   }
 
-  bool Tracker::localize(cv::InputArray image, const Frame &frame, double query_x, double query_z, double query_diameter, Eigen::Matrix4d &result_transform) {
+  bool Tracker::localize(cv::InputArray image, const Frame &frame, double query_x, double query_z, double query_diameter, Eigen::Matrix4d &result_transform, const Eigen::Matrix4d &initial_guess, bool use_initial_guess) {
     Eigen::Matrix3f frameIntrinsics = frame.intrinsics.cast<float>().transpose(); // transpose so that the order of data matches opencv
     cv::Mat intrinsics(3, 3, CV_32FC1, frameIntrinsics.data());
 
@@ -32,7 +32,18 @@ namespace lar {
     // Convert to opencv
     cv::Mat gvec = (cv::Mat_<double>(3,1) << cameraGravity(0), -cameraGravity(1), -cameraGravity(2));
 
+    // Prepare initial guess if provided
     cv::Mat rvec, tvec;
+    if (use_initial_guess) {
+      cv::Mat initial_transform(4, 4, CV_64FC1);
+      for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) {
+          initial_transform.at<double>(i, j) = initial_guess(i, j);
+        }
+      }
+      fromTransform(initial_transform, rvec, tvec);
+    }
+
     bool success = localize(image, intrinsics, cv::Mat(), rvec, tvec, gvec, query_x, query_z, query_diameter);
     
     if (success) {

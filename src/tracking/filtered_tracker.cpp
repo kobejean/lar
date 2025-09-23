@@ -26,7 +26,7 @@ FilteredTracker::FilteredTracker(std::unique_ptr<Tracker> tracker, const Filtere
     : FilteredTracker(std::move(tracker),
                      config,
                      std::make_unique<ExtendedKalmanFilter>(),
-                     std::make_unique<GeometricConfidenceEstimator>(),
+                     std::make_unique<ReprojectionBasedConfidenceEstimator>(),
                      std::make_unique<ChiSquaredOutlierDetector>()) {
 }
 
@@ -115,10 +115,10 @@ void FilteredTracker::predictStep() {
     // Perform prediction using pluggable filter strategy
     filter_strategy_->predict(motion, dt, config_);
 
-    if (config_.enable_debug_output) {
-        std::cout << "Prediction step: dt=" << dt << "s, uncertainty="
-                  << filter_strategy_->getPositionUncertainty() << std::endl;
-    }
+    // if (config_.enable_debug_output) {
+    //     std::cout << "Prediction step: dt=" << dt << "s, uncertainty="
+    //               << filter_strategy_->getPositionUncertainty() << std::endl;
+    // }
 }
 
 // ============================================================================
@@ -145,8 +145,23 @@ FilteredTracker::MeasurementResult FilteredTracker::measurementUpdate(
 
     // Perform LAR localization (returns camera pose in LAR world)
     Eigen::Matrix4d T_lar_from_camera_measured;
-    bool localization_success = base_tracker_->localize(
-        image, frame, query_x, query_z, query_diameter, T_lar_from_camera_measured);
+    bool localization_success;
+
+    if (filter_strategy_->isInitialized()) {
+        // Use EKF prediction as initial guess for RANSAC
+        Eigen::Matrix4d predicted_pose = filter_strategy_->getState().toTransform();
+
+        if (config_.enable_debug_output) {
+            std::cout << "Using EKF prediction as initial guess for PnP" << std::endl;
+        }
+
+        localization_success = base_tracker_->localize(
+            image, frame, query_x, query_z, query_diameter, T_lar_from_camera_measured, predicted_pose, true);
+    } else {
+        // No prediction available, use standard localization
+        localization_success = base_tracker_->localize(
+            image, frame, query_x, query_z, query_diameter, T_lar_from_camera_measured);
+    }
 
     if (!localization_success) {
         if (config_.enable_debug_output) {
@@ -166,7 +181,13 @@ FilteredTracker::MeasurementResult FilteredTracker::measurementUpdate(
     }
 
     // Calculate confidence using pluggable estimator
-    result.confidence = confidence_estimator_->calculateConfidence(result.inliers, T_lar_from_camera_measured, config_);
+    // If using ReprojectionBasedConfidenceEstimator, provide total matches for inlier ratio
+    auto* reprojection_estimator = dynamic_cast<ReprojectionBasedConfidenceEstimator*>(confidence_estimator_.get());
+    if (reprojection_estimator) {
+        reprojection_estimator->setTotalMatches(base_tracker_->matches.size());
+    }
+
+    result.confidence = confidence_estimator_->calculateConfidence(result.inliers, T_lar_from_camera_measured, frame, config_);
 
     if (!filter_strategy_->isInitialized()) {
         // Initialize filter from first measurement
@@ -191,7 +212,7 @@ FilteredTracker::MeasurementResult FilteredTracker::measurementUpdate(
 
         // Perform measurement update using pluggable filter strategy
         Eigen::MatrixXd measurement_noise = confidence_estimator_->calculateMeasurementNoise(
-            result.inliers, T_lar_from_camera_measured, result.confidence, config_);
+            result.inliers, T_lar_from_camera_measured, frame, result.confidence, config_);
         filter_strategy_->update(T_lar_from_camera_measured, measurement_noise, config_);
     }
 

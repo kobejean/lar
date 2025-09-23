@@ -9,9 +9,9 @@
 #include "lar/tracking/tracker.h"
 #include "lar/tracking/filtered_tracker_config.h"
 #include "lar/core/utils/transform.h"
-#include "lar/tracking/confidence_estimator.h"
-#include "lar/tracking/outlier_detector.h"
-#include "lar/tracking/pose_filter_strategy.h"
+#include "lar/tracking/confidence_estimation/confidence_estimator.h"
+#include "lar/tracking/outlier_detection/outlier_detector.h"
+#include "lar/tracking/pose_filtering/pose_filter_strategy.h"
 
 namespace lar {
 

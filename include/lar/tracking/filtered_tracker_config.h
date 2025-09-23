@@ -20,8 +20,9 @@ struct FilteredTrackerConfig {
     bool enable_outlier_detection = true;
 
     // === Measurement Noise Estimation ===
-    double base_position_noise = 0.1;      // Base position uncertainty (10cm)
-    double base_orientation_noise = 0.05;  // Base orientation uncertainty (~3 degrees)
+    double base_position_noise = 0.2;      // Base position uncertainty (10cm)
+    double base_orientation_noise = 0.1;  // Base orientation uncertainty (~6 degrees)
+    double landmark_position_noise = 0.1; // Landmark 3D position uncertainty from mapping (10cm)
     double min_confidence_factor = 0.1;    // Minimum confidence to prevent division by zero
     double min_inliers_for_noise = 20.0;   // Minimum inliers for noise calculation
 
@@ -35,6 +36,30 @@ struct FilteredTrackerConfig {
     double max_inliers_for_confidence = 50.0;  // Inlier count for 100% confidence
     double spatial_distribution_scale = 2.0;   // Scale factor for spatial distribution
     double min_inliers_for_tracking = 4;       // Minimum inliers to consider valid
+
+    // === Distance Stratified Confidence Estimation ===
+    double near_threshold = 5.0;               // Distance threshold for near features (meters)
+    double far_threshold = 25.0;               // Distance threshold for far features (meters)
+
+    // === Historical Anchor Constraints ===
+    bool enable_anchor_constraints = false;    // Enable/disable anchor constraints
+    double anchor_min_confidence = 0.6;        // Minimum confidence to qualify as anchor
+    size_t anchor_min_features = 40;           // Minimum features to qualify as anchor
+    double anchor_min_spacing = 2.0;           // Minimum distance between anchors (meters)
+    size_t anchor_max_count = 20;              // Maximum number of anchors to keep
+    double anchor_max_distance = 10.0;         // Maximum distance to consider anchors (meters)
+    double anchor_max_age = 120.0;             // Maximum age of anchors to use (seconds)
+    double anchor_distance_scale = 5.0;        // Distance scaling for anchor relevance
+    double anchor_time_scale = 60.0;           // Time scaling for anchor relevance
+    double anchor_min_relevance = 0.1;         // Minimum relevance to use anchor
+    double anchor_max_correction = 0.1;        // Maximum rotation correction per update (radians)
+    double anchor_correction_strength = 0.2;   // Strength of anchor corrections (0-1)
+
+    // === Reprojection-Based Confidence Estimation ===
+    double reprojection_expected_noise = 2.0;      // Expected reprojection error (pixels)
+    double reprojection_min_position_noise = 0.01; // Minimum position uncertainty (meters)
+    double reprojection_min_orientation_noise = 0.01; // Minimum orientation uncertainty (radians)
+    // Note: Camera intrinsics are now obtained directly from Frame object
 
     // === Debugging ===
     bool enable_debug_output = true;
@@ -56,10 +81,27 @@ struct FilteredTrackerConfig {
                outlier_threshold > 0.0 &&
                base_position_noise > 0.0 &&
                base_orientation_noise > 0.0 &&
+               landmark_position_noise > 0.0 &&
                min_confidence_factor > 0.0 &&
                min_inliers_for_noise > 0.0 &&
                max_inliers_for_confidence > 0.0 &&
-               min_inliers_for_tracking >= 3;  // Need at least 3 points for pose estimation
+               min_inliers_for_tracking >= 3 &&  // Need at least 3 points for pose estimation
+               near_threshold > 0.0 &&
+               far_threshold > near_threshold &&  // Far threshold must be greater than near
+               anchor_min_confidence > 0.0 && anchor_min_confidence <= 1.0 &&
+               anchor_min_features > 0 &&
+               anchor_min_spacing > 0.0 &&
+               anchor_max_count > 0 &&
+               anchor_max_distance > 0.0 &&
+               anchor_max_age > 0.0 &&
+               anchor_distance_scale > 0.0 &&
+               anchor_time_scale > 0.0 &&
+               anchor_min_relevance > 0.0 && anchor_min_relevance <= 1.0 &&
+               anchor_max_correction > 0.0 &&
+               anchor_correction_strength > 0.0 && anchor_correction_strength <= 1.0 &&
+               reprojection_expected_noise > 0.0 &&
+               reprojection_min_position_noise > 0.0 &&
+               reprojection_min_orientation_noise > 0.0;
     }
 
     /**
@@ -72,6 +114,7 @@ struct FilteredTrackerConfig {
         config.outlier_threshold = 9.488;  // 90% confidence instead of 95%
         config.base_position_noise = 0.2;
         config.base_orientation_noise = 0.1;
+        config.landmark_position_noise = 0.1;  // Higher uncertainty for fast tracking
         return config;
     }
 
@@ -85,6 +128,7 @@ struct FilteredTrackerConfig {
         config.outlier_threshold = 16.812;  // 99% confidence
         config.base_position_noise = 0.05;
         config.base_orientation_noise = 0.025;
+        config.landmark_position_noise = 0.02;  // Lower uncertainty for precision tracking
         config.min_inliers_for_tracking = 6;
         return config;
     }
