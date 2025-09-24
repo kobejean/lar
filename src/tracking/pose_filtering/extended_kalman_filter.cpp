@@ -9,13 +9,11 @@
 
 namespace lar {
 
-void ExtendedKalmanFilter::initialize(const Eigen::Matrix4d& initial_pose, const FilteredTrackerConfig& config) {
-    state_.fromTransform(initial_pose);
+void ExtendedKalmanFilter::initialize(const MeasurementContext& context, const FilteredTrackerConfig& config) {
+    state_.fromTransform(context.measured_pose);
 
-    // Initialize covariance
-    covariance_ = Eigen::MatrixXd::Identity(6, 6);
-    covariance_.block<3,3>(0,0) *= config.initial_position_uncertainty * config.initial_position_uncertainty;
-    covariance_.block<3,3>(3,3) *= config.initial_orientation_uncertainty * config.initial_orientation_uncertainty;
+    // Initialize covariance from measurement noise
+    covariance_ = context.measurement_noise;
 
     is_initialized_ = true;
 
@@ -53,7 +51,6 @@ void ExtendedKalmanFilter::predict(const Eigen::Matrix4d& motion, double dt, con
 }
 
 void ExtendedKalmanFilter::update(const MeasurementContext& context,
-                                 const Eigen::MatrixXd& measurement_noise,
                                  const FilteredTrackerConfig& config) {
     const Eigen::Matrix4d& measurement = context.measured_pose;
     if (!is_initialized_) {
@@ -73,7 +70,7 @@ void ExtendedKalmanFilter::update(const MeasurementContext& context,
 
     // Innovation covariance: S = H*P*H' + R
     // Since H = I (direct measurement), S = P + R
-    Eigen::MatrixXd S = covariance_ + measurement_noise;
+    Eigen::MatrixXd S = covariance_ + context.measurement_noise;
 
     // Kalman gain: K = P*H'*S^-1 = P*S^-1
     Eigen::MatrixXd K = covariance_ * S.inverse();
@@ -113,10 +110,9 @@ void ExtendedKalmanFilter::reset() {
 // ============================================================================
 
 void ExtendedKalmanFilter::updateWithAnchors(const MeasurementContext& context,
-                                            const Eigen::MatrixXd& measurement_noise,
                                             const FilteredTrackerConfig& config) {
     // First, do standard EKF update
-    update(context, measurement_noise, config);
+    update(context, config);
 
     // Check if this measurement qualifies as an anchor
     if (shouldAddAnchor(context.measured_pose, context.confidence, context.inliers ? context.inliers->size() : 0, config)) {

@@ -297,7 +297,7 @@ Eigen::MatrixXd ReprojectionBasedConfidenceEstimator::calculateReprojectionJacob
     double cy = frame.intrinsics(1, 2);
 
     // Jacobian matrix (2 x 6): [∂u/∂pose, ∂v/∂pose]
-    // pose = [tx, ty, tz, rx, ry, rz]
+    // pose = [tx, ty, tz, rx, ry, rz] in ARKit coordinates (axis-angle representation)
     Eigen::MatrixXd J(2, 6);
 
     // Avoid division by zero
@@ -306,22 +306,25 @@ Eigen::MatrixXd ReprojectionBasedConfidenceEstimator::calculateReprojectionJacob
         return J;
     }
 
-    // Standard OpenCV Jacobian derivatives
-    // (coordinates already converted from ARKit to OpenCV)
-    J(0, 0) = fx / Z;                    // ∂u/∂tx
-    J(0, 1) = 0;                         // ∂u/∂ty
-    J(0, 2) = -fx * X / (Z * Z);         // ∂u/∂tz
+    // Jacobian accounting for ARKit axis-angle representation
+    // and coordinate system transformation to OpenCV
+    
+    // Translation derivatives
+    J(0, 0) = -fx / Z;                         // ∂u/∂tx
+    J(0, 1) = 0;                               // ∂u/∂ty
+    J(0, 2) = -fx * X / (Z * Z);               // ∂u/∂tz
 
-    J(1, 0) = 0;                         // ∂v/∂tx
-    J(1, 1) = fy / Z;                    // ∂v/∂ty
-    J(1, 2) = -fy * Y / (Z * Z);         // ∂v/∂tz
+    J(1, 0) = 0;                               // ∂v/∂tx
+    J(1, 1) = fy / Z;                          // ∂v/∂ty  
+    J(1, 2) = -fy * Y / (Z * Z);               // ∂v/∂tz
 
-    // Rotational derivatives (rotation around x, y, z axes)
-    J(0, 3) = -fx * X * Y / (Z * Z);           // ∂u/∂rx
+    // Rotation derivatives (corrected for ARKit axis-angle with Y,Z axis flips)
+    // ARKit rotation vector [rx,ry,rz] transforms to OpenCV as [rx,-ry,-rz]
+    J(0, 3) = fx * X * Y / (Z * Z);            // ∂u/∂rx
     J(0, 4) = fx * (1 + X * X / (Z * Z));      // ∂u/∂ry
     J(0, 5) = -fx * Y / Z;                     // ∂u/∂rz
 
-    J(1, 3) = -fy * (1 + Y * Y / (Z * Z));     // ∂v/∂rx
+    J(1, 3) = fy * (1 + Y * Y / (Z * Z));      // ∂v/∂rx
     J(1, 4) = fy * X * Y / (Z * Z);            // ∂v/∂ry
     J(1, 5) = fy * X / Z;                      // ∂v/∂rz
 

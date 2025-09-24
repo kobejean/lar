@@ -8,8 +8,8 @@
 
 namespace lar {
 
-void PassThroughFilter::initialize(const Eigen::Matrix4d& initial_pose, const FilteredTrackerConfig& config) {
-    state_.fromTransform(initial_pose);
+void PassThroughFilter::initialize(const MeasurementContext& context, const FilteredTrackerConfig& config) {
+    state_.fromTransform(context.measured_pose);
     is_initialized_ = true;
 
     if (config.enable_debug_output) {
@@ -22,7 +22,6 @@ void PassThroughFilter::predict(const Eigen::Matrix4d& motion, double dt, const 
 }
 
 void PassThroughFilter::update(const MeasurementContext& context,
-                              const Eigen::MatrixXd& measurement_noise,
                               const FilteredTrackerConfig& config) {
     const Eigen::Matrix4d& measurement = context.measured_pose;
     if (!is_initialized_) {

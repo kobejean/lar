@@ -90,6 +90,17 @@ public:
     static Eigen::Matrix4d createTransform(const Eigen::Vector3d& position,
                                          const Eigen::Vector3d& orientation);
 
+    /**
+     * Interpolate between two SE(3) poses using proper Lie group interpolation
+     * @param T1 Starting pose
+     * @param T2 Ending pose
+     * @param alpha Interpolation factor (0.0 = T1, 1.0 = T2)
+     * @return Interpolated pose
+     */
+    static Eigen::Matrix4d interpolatePose(const Eigen::Matrix4d& T1,
+                                         const Eigen::Matrix4d& T2,
+                                         double alpha);
+
     // ========================================================================
     // g2o Coordinate System Conversion
     // ========================================================================

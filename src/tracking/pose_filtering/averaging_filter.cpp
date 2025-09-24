@@ -12,8 +12,8 @@ AveragingFilter::AveragingFilter(double alpha)
     : alpha_(alpha), position_uncertainty_(1.0), is_initialized_(false) {
 }
 
-void AveragingFilter::initialize(const Eigen::Matrix4d& initial_pose, const FilteredTrackerConfig& config) {
-    state_.fromTransform(initial_pose);
+void AveragingFilter::initialize(const MeasurementContext& context, const FilteredTrackerConfig& config) {
+    state_.fromTransform(context.measured_pose);
     position_uncertainty_ = config.initial_position_uncertainty;
     is_initialized_ = true;
 
@@ -39,7 +39,6 @@ void AveragingFilter::predict(const Eigen::Matrix4d& motion, double dt, const Fi
 }
 
 void AveragingFilter::update(const MeasurementContext& context,
-                            const Eigen::MatrixXd& measurement_noise,
                             const FilteredTrackerConfig& config) {
     const Eigen::Matrix4d& measurement = context.measured_pose;
     if (!is_initialized_) {

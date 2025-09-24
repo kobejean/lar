@@ -28,6 +28,7 @@ struct MeasurementContext {
 
     // === Quality ===
     double confidence = 0.0;                                         // Measurement confidence
+    Eigen::MatrixXd measurement_noise = Eigen::MatrixXd::Zero(6, 6); // Measurement noise covariance (calculated once, used by all filters)
 };
 
 } // namespace lar

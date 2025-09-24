@@ -13,10 +13,9 @@ class AveragingFilter : public PoseFilterStrategy {
 public:
     explicit AveragingFilter(double alpha = 0.9);
 
-    void initialize(const Eigen::Matrix4d& initial_pose, const FilteredTrackerConfig& config) override;
+    void initialize(const MeasurementContext& context, const FilteredTrackerConfig& config) override;
     void predict(const Eigen::Matrix4d& motion, double dt, const FilteredTrackerConfig& config) override;
     void update(const MeasurementContext& context,
-               const Eigen::MatrixXd& measurement_noise,
                const FilteredTrackerConfig& config) override;
 
     PoseState getState() const override { return state_; }

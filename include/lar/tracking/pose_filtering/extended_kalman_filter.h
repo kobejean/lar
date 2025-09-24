@@ -30,20 +30,17 @@ struct AnchorPose {
  */
 class ExtendedKalmanFilter : public PoseFilterStrategy {
 public:
-    void initialize(const Eigen::Matrix4d& initial_pose, const FilteredTrackerConfig& config) override;
+    void initialize(const MeasurementContext& context, const FilteredTrackerConfig& config) override;
     void predict(const Eigen::Matrix4d& motion, double dt, const FilteredTrackerConfig& config) override;
     void update(const MeasurementContext& context,
-               const Eigen::MatrixXd& measurement_noise,
                const FilteredTrackerConfig& config) override;
 
     /**
      * Enhanced update with anchor constraints (optional)
-     * @param context Measurement context with pose, confidence, and observation count
-     * @param measurement_noise Measurement covariance
+     * @param context Measurement context with pose, confidence, measurement_noise, and observation count
      * @param config Configuration parameters
      */
     void updateWithAnchors(const MeasurementContext& context,
-                          const Eigen::MatrixXd& measurement_noise,
                           const FilteredTrackerConfig& config);
 
     PoseState getState() const override { return state_; }

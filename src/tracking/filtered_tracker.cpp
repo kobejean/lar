@@ -151,11 +151,6 @@ void FilteredTracker::predictStep() {
 
     // Perform prediction using pluggable filter strategy
     filter_strategy_->predict(motion, dt, config_);
-
-    // if (config_.enable_debug_output) {
-    //     std::cout << "Prediction step: dt=" << dt << "s, uncertainty="
-    //               << filter_strategy_->getPositionUncertainty() << std::endl;
-    // }
 }
 
 // ============================================================================
@@ -231,12 +226,15 @@ FilteredTracker::MeasurementResult FilteredTracker::measurementUpdate(
     result.confidence = confidence_estimator_->calculateConfidence(context, config_);
     context.confidence = result.confidence; // Update context with calculated confidence
 
+    // Calculate measurement noise using context (compute once, use many times)
+    context.measurement_noise = confidence_estimator_->calculateMeasurementNoise(context, config_);
+
     if (!filter_strategy_->isInitialized()) {
         // Initialize filter from first measurement
         if (config_.enable_debug_output) {
             std::cout << "Initializing filter strategy from first LAR measurement" << std::endl;
         }
-        filter_strategy_->initialize(T_lar_from_camera_measured, config_);
+        filter_strategy_->initialize(context, config_);
         // Keep the calculated confidence from the estimator
     } else {
         // Check for outliers using pluggable detector
@@ -254,7 +252,7 @@ FilteredTracker::MeasurementResult FilteredTracker::measurementUpdate(
 
             // Reset filter and reinitialize with current measurement
             filter_strategy_->reset();
-            filter_strategy_->initialize(T_lar_from_camera_measured, config_);
+            filter_strategy_->initialize(context, config_);
 
             // Reset outlier detection counter
             outlier_result.is_outlier = false; // Accept this measurement after reset
@@ -272,8 +270,8 @@ FilteredTracker::MeasurementResult FilteredTracker::measurementUpdate(
         // Continue processing (either good measurement or recovered from bad state)
 
         // Perform measurement update using pluggable filter strategy with context
-        Eigen::MatrixXd measurement_noise = confidence_estimator_->calculateMeasurementNoise(context, config_);
-        filter_strategy_->update(context, measurement_noise, config_);
+        // Note: measurement_noise is already calculated and stored in context
+        filter_strategy_->update(context, config_);
     }
 
     // Compute coordinate transform using FILTERED camera pose estimate

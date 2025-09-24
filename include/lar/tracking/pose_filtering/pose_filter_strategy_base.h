@@ -20,11 +20,11 @@ public:
     virtual ~PoseFilterStrategy() = default;
 
     /**
-     * Initialize filter with first measurement
-     * @param initial_pose Initial camera pose
+     * Initialize filter with first measurement context
+     * @param context Complete measurement context with pose, inliers, confidence, and measurement_noise
      * @param config Configuration parameters
      */
-    virtual void initialize(const Eigen::Matrix4d& initial_pose, const FilteredTrackerConfig& config) = 0;
+    virtual void initialize(const MeasurementContext& context, const FilteredTrackerConfig& config) = 0;
 
     /**
      * Prediction step using motion model
@@ -37,11 +37,9 @@ public:
     /**
      * Measurement update step
      * @param context Measurement context containing pose, inliers, and metadata
-     * @param measurement_noise 6x6 measurement noise covariance matrix
      * @param config Configuration parameters
      */
     virtual void update(const MeasurementContext& context,
-                       const Eigen::MatrixXd& measurement_noise,
                        const FilteredTrackerConfig& config) = 0;
 
     /**

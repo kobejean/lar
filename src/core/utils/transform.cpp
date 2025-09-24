@@ -125,6 +125,46 @@ Eigen::Matrix4d TransformUtils::createTransform(const Eigen::Vector3d& position,
     return createTransform(position, rotation);
 }
 
+Eigen::Matrix4d TransformUtils::interpolatePose(const Eigen::Matrix4d& T1,
+                                               const Eigen::Matrix4d& T2,
+                                               double alpha) {
+    // Clamp alpha to [0, 1] for safety
+    alpha = std::max(0.0, std::min(1.0, alpha));
+
+    // Handle edge cases
+    if (alpha <= 1e-10) {
+        return T1;
+    }
+    if (alpha >= 1.0 - 1e-10) {
+        return T2;
+    }
+
+    // Linear interpolation for position
+    Eigen::Vector3d pos1 = T1.block<3,1>(0,3);
+    Eigen::Vector3d pos2 = T2.block<3,1>(0,3);
+    Eigen::Vector3d pos_interp = (1.0 - alpha) * pos1 + alpha * pos2;
+
+    // SE(3) interpolation for rotation using quaternion SLERP
+    Eigen::Matrix3d R1 = T1.block<3,3>(0,0);
+    Eigen::Matrix3d R2 = T2.block<3,3>(0,0);
+
+    // Convert to quaternions for SLERP
+    Eigen::Quaterniond q1(R1);
+    Eigen::Quaterniond q2(R2);
+
+    // Ensure we take the shortest path
+    if (q1.dot(q2) < 0) {
+        q2 = Eigen::Quaterniond(-q2.coeffs());
+    }
+
+    // Spherical linear interpolation
+    Eigen::Quaterniond q_interp = q1.slerp(alpha, q2);
+    Eigen::Matrix3d R_interp = q_interp.toRotationMatrix();
+
+    // Construct interpolated transform
+    return createTransform(pos_interp, R_interp);
+}
+
 // ============================================================================
 // g2o Coordinate System Conversion
 // ============================================================================

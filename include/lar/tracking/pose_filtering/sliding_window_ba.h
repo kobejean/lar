@@ -3,6 +3,7 @@
 
 #include "pose_filter_strategy_base.h"
 #include "../measurement_context.h"
+#include "lar/mapping/frame.h"
 #include <deque>
 #include <memory>
 #include <unordered_map>
@@ -24,13 +25,28 @@ class Landmark;
 /**
  * Keyframe for sliding window bundle adjustment
  * Uses inlier format to avoid unnecessary allocations
+ * Each keyframe stores its own camera intrinsics for accurate optimization
  */
 struct Keyframe {
+    // Constructor from MeasurementContext
+    Keyframe(size_t keyframe_id, const MeasurementContext& context)
+        : id(keyframe_id)
+        , timestamp(std::chrono::steady_clock::now().time_since_epoch().count())
+        , pose(context.measured_pose)
+        , intrinsics(context.frame->intrinsics)
+        , inliers(context.inliers)
+        , covariance(context.measurement_noise)
+        , confidence(context.confidence)
+        , is_marginalized(false) {
+    }
+
     size_t id;
     double timestamp;
     Eigen::Matrix4d pose;                                                            // T_world_from_camera
-    std::shared_ptr<std::vector<std::pair<Landmark*, cv::KeyPoint>>> inliers;       // Shared inlier landmark-keypoint pairs (zero-copy from MeasurementContext)
+    Eigen::Matrix3d intrinsics;
+    std::shared_ptr<std::vector<std::pair<Landmark*, cv::KeyPoint>>> inliers;
     Eigen::MatrixXd covariance;                                                      // 6x6 pose covariance
+    double confidence = 0.0;                                                         // Measurement confidence from LAR
     bool is_marginalized = false;
 };
 
@@ -52,21 +68,15 @@ public:
     virtual ~SlidingWindowBA();
 
     // PoseFilterStrategy interface
-    void initialize(const Eigen::Matrix4d& initial_pose, const FilteredTrackerConfig& config) override;
+    void initialize(const MeasurementContext& context, const FilteredTrackerConfig& config) override;
     void predict(const Eigen::Matrix4d& motion, double dt, const FilteredTrackerConfig& config) override;
     void update(const MeasurementContext& context,
-                const Eigen::MatrixXd& measurement_noise,
                 const FilteredTrackerConfig& config) override;
     PoseState getState() const override;
     Eigen::MatrixXd getCovariance() const override;
     double getPositionUncertainty() const override;
     bool isInitialized() const override;
     void reset() override;
-
-    /**
-     * Set camera intrinsics for reprojection constraints
-     */
-    void setCameraIntrinsics(double fx, double fy, double cx, double cy);
 
 private:
     // === Configuration ===
@@ -76,10 +86,6 @@ private:
     double keyframe_angle_ = 15.0;         // Minimum angle between keyframes (degrees)
     int optimization_iterations_ = 10;     // g2o optimization iterations
 
-    // === Camera parameters ===
-    double fx_ = 600.0, fy_ = 600.0;      // Focal lengths
-    double cx_ = 320.0, cy_ = 240.0;      // Principal point
-
     // === State ===
     bool initialized_ = false;
     PoseState current_state_;              // Current pose estimate
@@ -87,7 +93,6 @@ private:
 
     // === Sliding window ===
     std::deque<std::shared_ptr<Keyframe>> keyframes_;  // Active keyframes
-    std::shared_ptr<Keyframe> current_frame_;          // Current (non-keyframe) frame
     size_t next_keyframe_id_ = 0;
 
     // === Landmark tracking ===
@@ -105,24 +110,24 @@ private:
     // === Keyframe Management ===
 
     /**
-     * Check if current frame should be a keyframe
+     * Check if current measurement should be a keyframe
      */
-    bool shouldCreateKeyframe(const Eigen::Matrix4d& current_pose) const;
-
-    /**
-     * Create new keyframe from current state and MeasurementContext
-     */
-    void createKeyframe(const Eigen::Matrix4d& pose, const Eigen::MatrixXd& covariance);
-
-    /**
-     * Process inliers from MeasurementContext and store them efficiently
-     */
-    void processInliers(const MeasurementContext& context);
+    bool shouldCreateKeyframe(const MeasurementContext& context) const;
 
     /**
      * Marginalize oldest keyframe when window is full
      */
     void marginalizeOldestKeyframe();
+
+    /**
+     * Extract marginal information from keyframe before removal
+     */
+    Eigen::MatrixXd extractMarginalInformation(size_t keyframe_id) const;
+
+    /**
+     * Apply marginal prior constraint to connected keyframe
+     */
+    void applyMarginalPrior(size_t target_keyframe_id, const Eigen::MatrixXd& marginal_info, const Eigen::Matrix4d& marginalized_pose);
 
     // === Bundle Adjustment ===
 
@@ -153,19 +158,6 @@ private:
      */
     Eigen::MatrixXd calculateInformationMatrix(const Eigen::MatrixXd& covariance) const;
 
-    // === Projection Utilities ===
-
-    /**
-     * Project 3D point to image coordinates
-     */
-    Eigen::Vector2d project(const Eigen::Vector3d& point_camera) const;
-
-    /**
-     * Calculate reprojection Jacobian
-     */
-    Eigen::Matrix<double, 2, 6> calculateReprojectionJacobian(
-        const Eigen::Vector3d& point_world,
-        const Eigen::Matrix4d& T_camera_from_world) const;
 };
 
 } // namespace lar
