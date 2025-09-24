@@ -70,6 +70,14 @@ struct FilteredTrackerConfig {
     double reprojection_min_orientation_noise = 0.01; // Minimum orientation uncertainty (radians)
     // Note: Camera intrinsics are now obtained directly from Frame object
 
+    // === Sliding Window Bundle Adjustment ===
+    size_t sliding_window_max_keyframes = 10;         // Maximum keyframes in sliding window
+    double sliding_window_keyframe_distance = 0.1;    // Minimum distance between keyframes (meters)
+    double sliding_window_keyframe_angle = 5.0;       // Minimum angle between keyframes (degrees)
+    size_t sliding_window_min_observations = 10;      // Minimum observations to create keyframe
+    int sliding_window_optimization_iterations = 10;  // g2o optimization iterations
+    double sliding_window_pixel_noise = 2.0;          // Expected reprojection noise (pixels)
+
     // === Debugging ===
     bool enable_debug_output = true;
     bool enable_coordinate_debugging = false;
@@ -110,7 +118,13 @@ struct FilteredTrackerConfig {
                anchor_correction_strength > 0.0 && anchor_correction_strength <= 1.0 &&
                reprojection_expected_noise > 0.0 &&
                reprojection_min_position_noise > 0.0 &&
-               reprojection_min_orientation_noise > 0.0;
+               reprojection_min_orientation_noise > 0.0 &&
+               sliding_window_max_keyframes > 0 &&
+               sliding_window_keyframe_distance > 0.0 &&
+               sliding_window_keyframe_angle > 0.0 &&
+               sliding_window_min_observations > 0 &&
+               sliding_window_optimization_iterations > 0 &&
+               sliding_window_pixel_noise > 0.0;
     }
 
     /**

@@ -125,7 +125,7 @@ private:
     /**
      * Build optimization graph with current keyframes and landmarks
      */
-    void buildOptimizationGraph();
+    void buildOptimizationGraph(const FilteredTrackerConfig& config);
 
     /**
      * Run g2o optimization
@@ -136,6 +136,11 @@ private:
      * Update state from optimized graph
      */
     void updateStateFromOptimization();
+
+    /**
+     * Extract covariance matrix from bundle adjustment optimization
+     */
+    Eigen::MatrixXd extractCovarianceFromBA(size_t keyframe_id) const;
 
     /**
      * Calculate information matrix from covariance

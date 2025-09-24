@@ -45,11 +45,11 @@ SlidingWindowBA::~SlidingWindowBA() = default;
 
 void SlidingWindowBA::initialize(const Eigen::Matrix4d& initial_pose, const FilteredTrackerConfig& config) {
     // Set configuration from config
-    max_window_size_ = 10;  // TODO: Add to config
-    keyframe_distance_ = 0.1;  // meters (reduced from 0.5)
-    keyframe_angle_ = 5.0 * M_PI / 180.0;  // 5 degrees (reduced from 15)
-    min_observations_ = 10;  // Reduced from 20
-    optimization_iterations_ = 10;
+    max_window_size_ = config.sliding_window_max_keyframes;
+    keyframe_distance_ = config.sliding_window_keyframe_distance;  // meters
+    keyframe_angle_ = config.sliding_window_keyframe_angle * M_PI / 180.0;  // Convert degrees to radians
+    min_observations_ = config.sliding_window_min_observations;
+    optimization_iterations_ = config.sliding_window_optimization_iterations;
 
     // Initialize state
     current_state_.fromTransform(initial_pose);
@@ -152,7 +152,7 @@ void SlidingWindowBA::update(const MeasurementContext& context,
 
     // Run bundle adjustment optimization after every measurement if we have multiple keyframes
     if (keyframes_.size() >= 2) {
-        buildOptimizationGraph();
+        buildOptimizationGraph(config);
         optimize();
         updateStateFromOptimization();
     }
@@ -291,7 +291,7 @@ void SlidingWindowBA::marginalizeOldestKeyframe() {
     std::cout << "Marginalized keyframe " << oldest->id << std::endl;
 }
 
-void SlidingWindowBA::buildOptimizationGraph() {
+void SlidingWindowBA::buildOptimizationGraph(const FilteredTrackerConfig& config) {
     // Clear previous graph
     optimizer_->clear();
     optimizer_->clearParameters();
@@ -369,7 +369,7 @@ void SlidingWindowBA::buildOptimizationGraph() {
             edge->setMeasurement(measurement_with_depth);
 
             // Set information matrix (only weight u,v; ignore depth)
-            double pixel_noise = 2.0;  // pixels
+            double pixel_noise = config.sliding_window_pixel_noise;
             Eigen::Vector3d information_diag(1.0/(pixel_noise*pixel_noise),
                                             1.0/(pixel_noise*pixel_noise),
                                             0.0);  // Zero weight for depth
@@ -444,21 +444,8 @@ void SlidingWindowBA::updateStateFromOptimization() {
         const auto& last_kf = keyframes_.back();
         current_state_.fromTransform(last_kf->pose * accumulated_motion_);
 
-        // For sliding window BA, use reasonable uncertainty estimates
-        // Position uncertainty should be on order of 10cm, rotation ~1 degree
-        current_covariance_ = Eigen::MatrixXd::Identity(6, 6);
-        current_covariance_.block<3,3>(0,0) *= 0.1 * 0.1;  // 10cm position uncertainty
-        current_covariance_.block<3,3>(3,3) *= (M_PI/180.0) * (M_PI/180.0);  // 1 degree rotation uncertainty
-
-        // Scale based on number of observations in the window
-        size_t total_observations = 0;
-        for (const auto& kf : keyframes_) {
-            total_observations += kf->observations.size();
-        }
-
-        // More observations = lower uncertainty
-        double obs_scale = std::max(0.5, 1.0 / sqrt(std::max(1.0, double(total_observations) / 50.0)));
-        current_covariance_ *= obs_scale;
+        // Extract true covariance from bundle adjustment
+        current_covariance_ = extractCovarianceFromBA(last_kf->id);
 
         std::cout << "SlidingWindowBA state update:" << std::endl;
         std::cout << "  Last keyframe pose:" << std::endl;
@@ -468,12 +455,97 @@ void SlidingWindowBA::updateStateFromOptimization() {
         std::cout << "  Final state pose:" << std::endl;
         Eigen::Matrix4d final_pose = current_state_.toTransform();
         std::cout << "    Position: [" << final_pose(0,3) << ", " << final_pose(1,3) << ", " << final_pose(2,3) << "]" << std::endl;
-        std::cout << "  Covariance:" << std::endl;
-        std::cout << "    Total observations: " << total_observations << std::endl;
-        std::cout << "    Obs scale: " << obs_scale << std::endl;
-        std::cout << "    Position uncertainty: " << sqrt(current_covariance_(0,0)) << " m" << std::endl;
-        std::cout << "    Orientation uncertainty: " << sqrt(current_covariance_(3,3)) * 180.0 / M_PI << " deg" << std::endl;
+        std::cout << "  Real BA Covariance:" << std::endl;
+        std::cout << "    Position uncertainty: ["
+                  << sqrt(current_covariance_(0,0)) << ", "
+                  << sqrt(current_covariance_(1,1)) << ", "
+                  << sqrt(current_covariance_(2,2)) << "] m" << std::endl;
+        std::cout << "    Orientation uncertainty: ["
+                  << sqrt(current_covariance_(3,3)) * 180.0 / M_PI << "°, "
+                  << sqrt(current_covariance_(4,4)) * 180.0 / M_PI << "°, "
+                  << sqrt(current_covariance_(5,5)) * 180.0 / M_PI << "°]" << std::endl;
     }
+}
+
+Eigen::MatrixXd SlidingWindowBA::extractCovarianceFromBA(size_t keyframe_id) const {
+    // Find the vertex for this keyframe
+    auto vertex_it = pose_vertices_.find(keyframe_id);
+    if (vertex_it == pose_vertices_.end()) {
+        std::cout << "ERROR: Cannot find pose vertex for keyframe " << keyframe_id
+                  << " in optimization graph!" << std::endl;
+        std::cout << "Available vertex IDs: ";
+        for (const auto& [id, vertex] : pose_vertices_) {
+            std::cout << id << " ";
+        }
+        std::cout << std::endl;
+
+        // This indicates a serious bug - don't hide it with fallbacks
+        throw std::runtime_error("Pose vertex not found in optimization graph - this should never happen");
+    }
+
+    auto target_vertex = vertex_it->second;
+
+    // Try to extract true marginal covariance using g2o
+    g2o::SparseBlockMatrix<Eigen::MatrixXd> spinv;
+    if (optimizer_->computeMarginals(spinv, target_vertex)) {
+        int vertex_idx = target_vertex->hessianIndex();
+        if (vertex_idx >= 0) {
+            auto block = spinv.block(vertex_idx, vertex_idx);
+            if (block && block->rows() == 6 && block->cols() == 6) {
+                std::cout << "Extracted true marginal covariance from BA" << std::endl;
+                return *block;
+            }
+        }
+    }
+
+    // Fallback: residual-based estimate
+    std::cout << "Marginal computation failed, using residual-based estimate" << std::endl;
+
+    double total_error = 0.0;
+    int edge_count = 0;
+
+    for (auto edge : target_vertex->edges()) {
+        // Try to cast to specific edge types to access error computation
+        if (auto reprojection_edge = dynamic_cast<g2o::EdgeProjectXYZ2UVD*>(edge)) {
+            reprojection_edge->computeError();
+            auto error_vec = reprojection_edge->error();
+            for (int i = 0; i < error_vec.size(); ++i) {
+                total_error += error_vec[i] * error_vec[i];
+            }
+            edge_count++;
+        } else if (auto odometry_edge = dynamic_cast<g2o::EdgeSE3Expmap*>(edge)) {
+            odometry_edge->computeError();
+            auto error_vec = odometry_edge->error();
+            for (int i = 0; i < error_vec.size(); ++i) {
+                total_error += error_vec[i] * error_vec[i];
+            }
+            edge_count++;
+        }
+        // Skip unknown edge types silently
+    }
+
+    if (edge_count > 0) {
+        double rms_error = std::sqrt(total_error / edge_count);
+        double error_scale = std::max(1.0, rms_error / 2.0);
+
+        Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(6, 6);
+        double pos_var = (0.05 * error_scale) * (0.05 * error_scale);  // 5cm base
+        double rot_var = (0.02 * error_scale) * (0.02 * error_scale);  // ~1° base
+
+        cov.block<3,3>(0,0) *= pos_var;
+        cov.block<3,3>(3,3) *= rot_var;
+
+        std::cout << "Using residual-based covariance (RMS: " << rms_error << ")" << std::endl;
+        return cov;
+    }
+
+    // Final fallback - no edges found
+    std::cout << "WARNING: No edges found for vertex, using conservative defaults" << std::endl;
+
+    Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(6, 6);
+    cov.block<3,3>(0,0) *= 0.2 * 0.2;  // Conservative 20cm
+    cov.block<3,3>(3,3) *= (5.0 * M_PI/180.0) * (5.0 * M_PI/180.0);  // Conservative 5°
+    return cov;
 }
 
 Eigen::MatrixXd SlidingWindowBA::calculateInformationMatrix(const Eigen::MatrixXd& covariance) const {
