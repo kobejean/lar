@@ -5,6 +5,7 @@
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 #include <opencv2/core.hpp>
+#include "lar/tracking/measurement_context.h"
 
 namespace lar {
 
@@ -23,32 +24,22 @@ public:
 
     /**
      * Calculate overall confidence for a measurement
-     * @param inliers Vector of matched landmark-keypoint pairs
-     * @param T_lar_from_camera Camera pose in LAR world coordinates
-     * @param frame Frame containing camera intrinsics and metadata
+     * @param context Measurement context containing inliers, poses, and metadata
      * @param config Configuration parameters
      * @return Confidence value in range [0,1]
      */
     virtual double calculateConfidence(
-        const std::vector<std::pair<Landmark*, cv::KeyPoint>>& inliers,
-        const Eigen::Matrix4d& T_lar_from_camera,
-        const Frame& frame,
+        const MeasurementContext& context,
         const FilteredTrackerConfig& config) const = 0;
 
     /**
      * Calculate measurement noise covariance matrix
-     * @param inliers Vector of matched landmark-keypoint pairs
-     * @param T_lar_from_camera Camera pose in LAR world coordinates
-     * @param frame Frame containing camera intrinsics and metadata
-     * @param confidence Overall confidence value
+     * @param context Measurement context containing inliers, poses, and metadata
      * @param config Configuration parameters
      * @return 6x6 measurement noise covariance matrix
      */
     virtual Eigen::MatrixXd calculateMeasurementNoise(
-        const std::vector<std::pair<Landmark*, cv::KeyPoint>>& inliers,
-        const Eigen::Matrix4d& T_lar_from_camera,
-        const Frame& frame,
-        double confidence,
+        const MeasurementContext& context,
         const FilteredTrackerConfig& config) const = 0;
 };
 

@@ -52,9 +52,10 @@ void ExtendedKalmanFilter::predict(const Eigen::Matrix4d& motion, double dt, con
     covariance_ = covariance_ + Q;
 }
 
-void ExtendedKalmanFilter::update(const Eigen::Matrix4d& measurement,
+void ExtendedKalmanFilter::update(const MeasurementContext& context,
                                  const Eigen::MatrixXd& measurement_noise,
                                  const FilteredTrackerConfig& config) {
+    const Eigen::Matrix4d& measurement = context.measured_pose;
     if (!is_initialized_) {
         return;
     }
@@ -117,7 +118,9 @@ void ExtendedKalmanFilter::updateWithAnchors(const Eigen::Matrix4d& measurement,
                                             size_t observation_count,
                                             const FilteredTrackerConfig& config) {
     // First, do standard EKF update
-    update(measurement, measurement_noise, config);
+    MeasurementContext temp_context;
+    temp_context.measured_pose = measurement;
+    update(temp_context, measurement_noise, config);
 
     // Check if this measurement qualifies as an anchor
     if (shouldAddAnchor(measurement, confidence, observation_count, config)) {

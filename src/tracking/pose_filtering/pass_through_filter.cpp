@@ -21,9 +21,10 @@ void PassThroughFilter::predict(const Eigen::Matrix4d& motion, double dt, const 
     // No prediction - just keep last measurement
 }
 
-void PassThroughFilter::update(const Eigen::Matrix4d& measurement,
+void PassThroughFilter::update(const MeasurementContext& context,
                               const Eigen::MatrixXd& measurement_noise,
                               const FilteredTrackerConfig& config) {
+    const Eigen::Matrix4d& measurement = context.measured_pose;
     if (!is_initialized_) {
         return;
     }

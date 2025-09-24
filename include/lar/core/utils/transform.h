@@ -5,6 +5,11 @@
 #include <Eigen/Geometry>
 #include <string>
 
+// Forward declaration for g2o
+namespace g2o {
+    class SE3Quat;
+}
+
 namespace lar {
 namespace utils {
 
@@ -84,6 +89,26 @@ public:
      */
     static Eigen::Matrix4d createTransform(const Eigen::Vector3d& position,
                                          const Eigen::Vector3d& orientation);
+
+    // ========================================================================
+    // g2o Coordinate System Conversion
+    // ========================================================================
+
+    /**
+     * Convert ARKit extrinsics to g2o SE3Quat pose
+     * Handles coordinate system conversion (Y/Z axis flips) and inversion
+     * @param extrinsics ARKit camera extrinsics matrix
+     * @return g2o SE3Quat pose for optimization
+     */
+    static g2o::SE3Quat arkitToG2oPose(const Eigen::Matrix4d& extrinsics);
+
+    /**
+     * Convert g2o SE3Quat pose back to ARKit extrinsics
+     * Reverses the coordinate system conversion from arkitToG2oPose
+     * @param pose g2o SE3Quat pose from optimization
+     * @return ARKit camera extrinsics matrix
+     */
+    static Eigen::Matrix4d g2oToArkitPose(const g2o::SE3Quat& pose);
 
 private:
     static constexpr double DEFAULT_TOLERANCE = 1e-6;

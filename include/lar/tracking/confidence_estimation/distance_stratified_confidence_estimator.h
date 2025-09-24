@@ -42,9 +42,7 @@ public:
      * Calculate overall confidence based on feature distribution quality
      */
     double calculateConfidence(
-        const std::vector<std::pair<Landmark*, cv::KeyPoint>>& inliers,
-        const Eigen::Matrix4d& T_lar_from_camera,
-        const Frame& frame,
+        const MeasurementContext& context,
         const FilteredTrackerConfig& config) const override;
 
     /**
@@ -52,10 +50,7 @@ public:
      * based on feature distance distribution
      */
     Eigen::MatrixXd calculateMeasurementNoise(
-        const std::vector<std::pair<Landmark*, cv::KeyPoint>>& inliers,
-        const Eigen::Matrix4d& T_lar_from_camera,
-        const Frame& frame,
-        double confidence,
+        const MeasurementContext& context,
         const FilteredTrackerConfig& config) const override;
 
 private:

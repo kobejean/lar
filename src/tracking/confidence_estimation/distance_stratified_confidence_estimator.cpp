@@ -54,10 +54,11 @@ double FeatureDistribution::overall_quality() const {
 // ============================================================================
 
 double DistanceStratifiedConfidenceEstimator::calculateConfidence(
-    const std::vector<std::pair<Landmark*, cv::KeyPoint>>& inliers,
-    const Eigen::Matrix4d& T_lar_from_camera,
-    const Frame& frame,
+    const MeasurementContext& context,
     const FilteredTrackerConfig& config) const {
+
+    const auto& inliers = context.inliers;
+    const Eigen::Matrix4d& T_lar_from_camera = context.measured_pose;
 
     if (inliers.size() < config.min_inliers_for_tracking) {
         return 0.0;
@@ -90,11 +91,12 @@ double DistanceStratifiedConfidenceEstimator::calculateConfidence(
 }
 
 Eigen::MatrixXd DistanceStratifiedConfidenceEstimator::calculateMeasurementNoise(
-    const std::vector<std::pair<Landmark*, cv::KeyPoint>>& inliers,
-    const Eigen::Matrix4d& T_lar_from_camera,
-    const Frame& frame,
-    double confidence,
+    const MeasurementContext& context,
     const FilteredTrackerConfig& config) const {
+
+    const auto& inliers = context.inliers;
+    const Eigen::Matrix4d& T_lar_from_camera = context.measured_pose;
+    double confidence = context.confidence;
 
     // Analyze feature distribution by distance
     FeatureDistribution distribution = analyzeFeatureDistribution(inliers, T_lar_from_camera, config);

@@ -9,6 +9,7 @@
 #include "g2o/types/sba/types_six_dof_expmap.h"
 #include "g2o/types/sba/edge_se3_expmap_gravity.h"
 #include "lar/processing/bundle_adjustment.h"
+#include "lar/core/utils/transform.h"
 
 // Information matrix strategy constants - uncomment to try different approaches
 #define INFORMATION_STRATEGY_UNIFORM        // Uniform information matrix
@@ -320,7 +321,7 @@ namespace lar {
   }
 
   void BundleAdjustment::addPose(Eigen::Matrix4d const &extrinsics, size_t id, bool fixed) {
-    g2o::SE3Quat pose = poseFromExtrinsics(extrinsics);
+    g2o::SE3Quat pose = lar::utils::TransformUtils::arkitToG2oPose(extrinsics);
     g2o::VertexSE3Expmap * vertex = new g2o::VertexSE3Expmap();
     vertex->setId(id);
     vertex->setEstimate(pose);
@@ -337,8 +338,8 @@ namespace lar {
     Frame const& frame2 = data->frames[frame_id];
     
     // Convert to g2o poses first, then compute relative transform
-    g2o::SE3Quat arkit_pose1 = poseFromExtrinsics(frame1.extrinsics);
-    g2o::SE3Quat arkit_pose2 = poseFromExtrinsics(frame2.extrinsics);
+    g2o::SE3Quat arkit_pose1 = lar::utils::TransformUtils::arkitToG2oPose(frame1.extrinsics);
+    g2o::SE3Quat arkit_pose2 = lar::utils::TransformUtils::arkitToG2oPose(frame2.extrinsics);
     g2o::SE3Quat pose_change = arkit_pose2 * arkit_pose1.inverse();
     
     g2o::EdgeSE3Expmap * e = new g2o::EdgeSE3Expmap();
@@ -362,7 +363,7 @@ namespace lar {
   void BundleAdjustment::addGravityConstraint(size_t frame_id) {
     // Get the initial pose to compute gravity direction in camera coordinates
     Frame const& frame = data->frames[frame_id];
-    g2o::SE3Quat initial_pose = poseFromExtrinsics(frame.extrinsics);
+    g2o::SE3Quat initial_pose = lar::utils::TransformUtils::arkitToG2oPose(frame.extrinsics);
     Eigen::Matrix3d R_initial = initial_pose.rotation().toRotationMatrix();
     
     // Compute gravity direction in this camera's coordinate frame
@@ -504,7 +505,7 @@ namespace lar {
           
           // Get camera position from pose (convert g2o pose to camera position)
           g2o::SE3Quat pose = pose_vertex->estimate();
-          Eigen::Matrix4d extrinsics = extrinsicsFromPose(pose);
+          Eigen::Matrix4d extrinsics = lar::utils::TransformUtils::g2oToArkitPose(pose);
           Eigen::Vector3d camera_pos = extrinsics.block<3,1>(0,3);
           
           landmark_inlier_cameras[vertex_id].push_back(camera_pos);
@@ -538,7 +539,7 @@ namespace lar {
       Anchor &anchor = it.second;
       size_t vertex_id = anchor.frame_id;
       g2o::VertexSE3Expmap* v = dynamic_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(vertex_id));
-      Eigen::Matrix4d extrinsics = extrinsicsFromPose(v->estimate());
+      Eigen::Matrix4d extrinsics = lar::utils::TransformUtils::g2oToArkitPose(v->estimate());
       Anchor::Transform transform(extrinsics * anchor.relative_transform.matrix());
       data->map.updateAnchor(anchor, transform);
     }
@@ -601,21 +602,6 @@ namespace lar {
     }
   }
 
-  g2o::SE3Quat BundleAdjustment::poseFromExtrinsics(Eigen::Matrix4d const &extrinsics) {
-    Eigen::Matrix3d rot = extrinsics.block<3,3>(0,0);
-    // Flipping y and z axis to align with image coordinates and depth direction
-    rot(Eigen::indexing::all, 1) = -rot(Eigen::indexing::all, 1);
-    rot(Eigen::indexing::all, 2) = -rot(Eigen::indexing::all, 2);
-    return g2o::SE3Quat(rot, extrinsics.block<3,1>(0,3)).inverse();
-  }
-
-  Eigen::Matrix4d BundleAdjustment::extrinsicsFromPose(g2o::SE3Quat const &pose) {
-    Eigen::Matrix4d extrinsics = pose.inverse().to_homogeneous_matrix();
-    // Flipping y and z axis to align with image coordinates and depth direction
-    extrinsics(Eigen::indexing::all, 1) = -extrinsics(Eigen::indexing::all, 1);
-    extrinsics(Eigen::indexing::all, 2) = -extrinsics(Eigen::indexing::all, 2);
-    return extrinsics;
-  }
 
   void BundleAdjustment::Stats::print() {
     // for (size_t i = 0; i < landmarks.size(); i++) {

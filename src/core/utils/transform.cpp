@@ -3,6 +3,7 @@
 //
 
 #include "lar/core/utils/transform.h"
+#include <g2o/types/sba/types_six_dof_expmap.h>
 #include <iostream>
 #include <cmath>
 
@@ -122,6 +123,33 @@ Eigen::Matrix4d TransformUtils::createTransform(const Eigen::Vector3d& position,
                                                const Eigen::Vector3d& orientation) {
     Eigen::Matrix3d rotation = axisAngleToRotationMatrix(orientation);
     return createTransform(position, rotation);
+}
+
+// ============================================================================
+// g2o Coordinate System Conversion
+// ============================================================================
+
+g2o::SE3Quat TransformUtils::arkitToG2oPose(const Eigen::Matrix4d& extrinsics) {
+    // This matches the exact implementation from bundle_adjustment.cpp
+    Eigen::Matrix3d rot = extrinsics.block<3,3>(0,0);
+
+    // Flipping y and z axis to align with image coordinates and depth direction
+    rot(Eigen::indexing::all, 1) = -rot(Eigen::indexing::all, 1);
+    rot(Eigen::indexing::all, 2) = -rot(Eigen::indexing::all, 2);
+
+    // Return inverted pose for g2o format
+    return g2o::SE3Quat(rot, extrinsics.block<3,1>(0,3)).inverse();
+}
+
+Eigen::Matrix4d TransformUtils::g2oToArkitPose(const g2o::SE3Quat& pose) {
+    // This matches the exact implementation from bundle_adjustment.cpp
+    Eigen::Matrix4d extrinsics = pose.inverse().to_homogeneous_matrix();
+
+    // Flipping y and z axis to align with image coordinates and depth direction
+    extrinsics(Eigen::indexing::all, 1) = -extrinsics(Eigen::indexing::all, 1);
+    extrinsics(Eigen::indexing::all, 2) = -extrinsics(Eigen::indexing::all, 2);
+
+    return extrinsics;
 }
 
 } // namespace utils

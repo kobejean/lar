@@ -12,10 +12,11 @@
 namespace lar {
 
 double GeometricConfidenceEstimator::calculateConfidence(
-    const std::vector<std::pair<Landmark*, cv::KeyPoint>>& inliers,
-    const Eigen::Matrix4d& T_lar_from_camera,
-    const Frame& frame,
+    const MeasurementContext& context,
     const FilteredTrackerConfig& config) const {
+
+    const auto& inliers = context.inliers;
+    const Eigen::Matrix4d& T_lar_from_camera = context.measured_pose;
 
     if (inliers.size() < config.min_inliers_for_tracking) {
         return 0.0;
@@ -33,11 +34,11 @@ double GeometricConfidenceEstimator::calculateConfidence(
 }
 
 Eigen::MatrixXd GeometricConfidenceEstimator::calculateMeasurementNoise(
-    const std::vector<std::pair<Landmark*, cv::KeyPoint>>& inliers,
-    const Eigen::Matrix4d& T_lar_from_camera,
-    const Frame& frame,
-    double confidence,
+    const MeasurementContext& context,
     const FilteredTrackerConfig& config) const {
+
+    const auto& inliers = context.inliers;
+    double confidence = context.confidence;
 
     // Scene-dependent measurement noise based on confidence and geometry
     double confidence_factor = 1.0 / std::max(config.min_confidence_factor, confidence);

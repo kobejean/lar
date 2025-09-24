@@ -22,9 +22,7 @@ public:
      * Calculate confidence based on reprojection errors and feature quality
      */
     double calculateConfidence(
-        const std::vector<std::pair<Landmark*, cv::KeyPoint>>& inliers,
-        const Eigen::Matrix4d& T_lar_from_camera,
-        const Frame& frame,
+        const MeasurementContext& context,
         const FilteredTrackerConfig& config) const override;
 
     /**
@@ -32,19 +30,11 @@ public:
      * from reprojection error Jacobians
      */
     Eigen::MatrixXd calculateMeasurementNoise(
-        const std::vector<std::pair<Landmark*, cv::KeyPoint>>& inliers,
-        const Eigen::Matrix4d& T_lar_from_camera,
-        const Frame& frame,
-        double confidence,
+        const MeasurementContext& context,
         const FilteredTrackerConfig& config) const override;
 
-    /**
-     * Set total number of matches for inlier ratio calculation
-     */
-    void setTotalMatches(size_t total_matches) { total_matches_ = total_matches; }
 
 private:
-    mutable size_t total_matches_ = 0;  // Total matches for inlier ratio
 
     /**
      * Calculate reprojection errors for all inlier features

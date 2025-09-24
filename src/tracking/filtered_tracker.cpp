@@ -9,23 +9,60 @@
 // - T_lar_from_vio: Coordinate transform FROM VIO TO LAR world (output)
 
 #include "lar/tracking/filtered_tracker.h"
+#include "lar/tracking/pose_filtering/extended_kalman_filter.h"
+#include "lar/tracking/pose_filtering/sliding_window_ba.h"
+#include "lar/tracking/pose_filtering/averaging_filter.h"
+#include "lar/tracking/pose_filtering/pass_through_filter.h"
+#include "lar/tracking/measurement_context.h"
 #include <iostream>
 #include <cmath>
 
 namespace lar {
 
 // ============================================================================
+// Helper Functions
+// ============================================================================
+
+std::unique_ptr<PoseFilterStrategy> createFilterStrategy(const FilteredTrackerConfig& config) {
+    switch (config.filter_strategy) {
+        case FilteredTrackerConfig::FilterStrategy::EXTENDED_KALMAN_FILTER:
+            std::cout << "FilteredTracker: Using Extended Kalman Filter" << std::endl;
+            return std::make_unique<ExtendedKalmanFilter>();
+
+        case FilteredTrackerConfig::FilterStrategy::SLIDING_WINDOW_BA:
+            std::cout << "FilteredTracker: Using Sliding Window Bundle Adjustment" << std::endl;
+            return std::make_unique<SlidingWindowBA>();
+
+        case FilteredTrackerConfig::FilterStrategy::AVERAGING:
+            std::cout << "FilteredTracker: Using Averaging Filter" << std::endl;
+            return std::make_unique<AveragingFilter>();
+
+        case FilteredTrackerConfig::FilterStrategy::PASS_THROUGH:
+            std::cout << "FilteredTracker: Using Pass Through Filter" << std::endl;
+            return std::make_unique<PassThroughFilter>();
+
+        default:
+            std::cout << "FilteredTracker: Unknown strategy, defaulting to EKF" << std::endl;
+            return std::make_unique<ExtendedKalmanFilter>();
+    }
+}
+
+// ============================================================================
 // Constructors
 // ============================================================================
 
 FilteredTracker::FilteredTracker(std::unique_ptr<Tracker> tracker, double measurement_interval)
-    : FilteredTracker(std::move(tracker), FilteredTrackerConfig{measurement_interval}) {
+    : FilteredTracker(std::move(tracker), [measurement_interval]() {
+        FilteredTrackerConfig config;
+        config.measurement_interval_seconds = measurement_interval;
+        return config;
+    }()) {
 }
 
 FilteredTracker::FilteredTracker(std::unique_ptr<Tracker> tracker, const FilteredTrackerConfig& config)
     : FilteredTracker(std::move(tracker),
                      config,
-                     std::make_unique<ExtendedKalmanFilter>(),
+                     createFilterStrategy(config),
                      std::make_unique<ReprojectionBasedConfidenceEstimator>(),
                      std::make_unique<ChiSquaredOutlierDetector>()) {
 }
@@ -148,7 +185,7 @@ FilteredTracker::MeasurementResult FilteredTracker::measurementUpdate(
     bool localization_success;
 
     if (filter_strategy_->isInitialized()) {
-        // Use EKF prediction as initial guess for RANSAC
+        // Use pose prediction as initial guess for RANSAC
         Eigen::Matrix4d predicted_pose = filter_strategy_->getState().toTransform();
 
         if (config_.enable_debug_output) {
@@ -180,14 +217,19 @@ FilteredTracker::MeasurementResult FilteredTracker::measurementUpdate(
                   << result.matched_landmarks.size() << " matches" << std::endl;
     }
 
-    // Calculate confidence using pluggable estimator
-    // If using ReprojectionBasedConfidenceEstimator, provide total matches for inlier ratio
-    auto* reprojection_estimator = dynamic_cast<ReprojectionBasedConfidenceEstimator*>(confidence_estimator_.get());
-    if (reprojection_estimator) {
-        reprojection_estimator->setTotalMatches(base_tracker_->matches.size());
+    // Create measurement context for pluggable components
+    MeasurementContext context;
+    context.inliers = result.inliers;
+    context.total_matches = base_tracker_->matches.size();
+    context.frame = &frame;
+    context.measured_pose = T_lar_from_camera_measured;
+    if (filter_strategy_->isInitialized()) {
+        context.predicted_pose = filter_strategy_->getState().toTransform();
     }
 
-    result.confidence = confidence_estimator_->calculateConfidence(result.inliers, T_lar_from_camera_measured, frame, config_);
+    // Calculate confidence using context
+    result.confidence = confidence_estimator_->calculateConfidence(context, config_);
+    context.confidence = result.confidence; // Update context with calculated confidence
 
     if (!filter_strategy_->isInitialized()) {
         // Initialize filter from first measurement
@@ -201,7 +243,24 @@ FilteredTracker::MeasurementResult FilteredTracker::measurementUpdate(
         Eigen::Matrix4d predicted_pose = filter_strategy_->getState().toTransform();
         Eigen::MatrixXd covariance = filter_strategy_->getCovariance();
 
-        if (outlier_detector_->isOutlier(T_lar_from_camera_measured, predicted_pose, covariance, result.confidence, config_)) {
+        // Use enhanced outlier analysis with pattern detection
+        auto outlier_result = outlier_detector_->analyzeOutlier(T_lar_from_camera_measured, predicted_pose, covariance, result.confidence, config_);
+
+        if (outlier_result.likely_bad_state) {
+            if (config_.enable_debug_output) {
+                std::cout << "Pattern analysis suggests bad filter state - resetting filter (consecutive rejections: "
+                          << outlier_result.consecutive_rejections << ")" << std::endl;
+            }
+
+            // Reset filter and reinitialize with current measurement
+            filter_strategy_->reset();
+            filter_strategy_->initialize(T_lar_from_camera_measured, config_);
+
+            // Reset outlier detection counter
+            outlier_result.is_outlier = false; // Accept this measurement after reset
+        }
+
+        if (outlier_result.is_outlier && !outlier_result.likely_bad_state) {
             if (config_.enable_debug_output) {
                 std::cout << "Rejecting camera pose measurement (outlier detection)" << std::endl;
             }
@@ -210,10 +269,11 @@ FilteredTracker::MeasurementResult FilteredTracker::measurementUpdate(
             return result;
         }
 
-        // Perform measurement update using pluggable filter strategy
-        Eigen::MatrixXd measurement_noise = confidence_estimator_->calculateMeasurementNoise(
-            result.inliers, T_lar_from_camera_measured, frame, result.confidence, config_);
-        filter_strategy_->update(T_lar_from_camera_measured, measurement_noise, config_);
+        // Continue processing (either good measurement or recovered from bad state)
+
+        // Perform measurement update using pluggable filter strategy with context
+        Eigen::MatrixXd measurement_noise = confidence_estimator_->calculateMeasurementNoise(context, config_);
+        filter_strategy_->update(context, measurement_noise, config_);
     }
 
     // Compute coordinate transform using FILTERED camera pose estimate
@@ -282,10 +342,18 @@ Eigen::Matrix4d FilteredTracker::computeMotionDelta() {
         return Eigen::Matrix4d::Identity();
     }
 
+    static int motion_call_count = 0;
+    motion_call_count++;
+
     // Compute relative camera motion in camera's own frame
     // We need: T_camera_current_from_camera_last
     // This is: T_camera_from_vio_last * T_vio_from_camera_current
     Eigen::Matrix4d motion_delta = last_vio_camera_pose_.inverse() * current_vio_camera_pose_;
+
+    // Log every 20th call to reduce spam
+    if (motion_call_count % 20 == 0) {
+        std::cout << "VIO motion delta [call " << motion_call_count << "]: [" << motion_delta(0,3) << ", " << motion_delta(1,3) << ", " << motion_delta(2,3) << "]" << std::endl;
+    }
 
     if (!utils::TransformUtils::validateTransformMatrix(motion_delta, "motion_delta")) {
         std::cout << "WARNING: Computed motion delta is invalid, returning identity" << std::endl;

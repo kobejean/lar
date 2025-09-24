@@ -38,9 +38,10 @@ void AveragingFilter::predict(const Eigen::Matrix4d& motion, double dt, const Fi
     position_uncertainty_ += config.motion_position_noise_scale * motion_magnitude + config.time_position_noise_scale * dt;
 }
 
-void AveragingFilter::update(const Eigen::Matrix4d& measurement,
+void AveragingFilter::update(const MeasurementContext& context,
                             const Eigen::MatrixXd& measurement_noise,
                             const FilteredTrackerConfig& config) {
+    const Eigen::Matrix4d& measurement = context.measured_pose;
     if (!is_initialized_) {
         return;
     }

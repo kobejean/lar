@@ -4,6 +4,7 @@
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 #include "pose_state.h"
+#include "lar/tracking/measurement_context.h"
 
 namespace lar {
 
@@ -35,11 +36,11 @@ public:
 
     /**
      * Measurement update step
-     * @param measurement Camera pose measurement
+     * @param context Measurement context containing pose, inliers, and metadata
      * @param measurement_noise 6x6 measurement noise covariance matrix
      * @param config Configuration parameters
      */
-    virtual void update(const Eigen::Matrix4d& measurement,
+    virtual void update(const MeasurementContext& context,
                        const Eigen::MatrixXd& measurement_noise,
                        const FilteredTrackerConfig& config) = 0;
 

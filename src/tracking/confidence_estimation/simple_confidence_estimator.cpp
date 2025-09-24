@@ -10,10 +10,10 @@
 namespace lar {
 
 double SimpleConfidenceEstimator::calculateConfidence(
-    const std::vector<std::pair<Landmark*, cv::KeyPoint>>& inliers,
-    const Eigen::Matrix4d& T_lar_from_camera,
-    const Frame& frame,
+    const MeasurementContext& context,
     const FilteredTrackerConfig& config) const {
+
+    const auto& inliers = context.inliers;
 
     if (inliers.size() < config.min_inliers_for_tracking) {
         return 0.0;
@@ -24,11 +24,10 @@ double SimpleConfidenceEstimator::calculateConfidence(
 }
 
 Eigen::MatrixXd SimpleConfidenceEstimator::calculateMeasurementNoise(
-    const std::vector<std::pair<Landmark*, cv::KeyPoint>>& inliers,
-    const Eigen::Matrix4d& T_lar_from_camera,
-    const Frame& frame,
-    double confidence,
+    const MeasurementContext& context,
     const FilteredTrackerConfig& config) const {
+
+    double confidence = context.confidence;
 
     // Fixed noise based only on confidence
     double confidence_factor = 1.0 / std::max(config.min_confidence_factor, confidence);

@@ -13,10 +13,12 @@
 namespace lar {
 
 double ReprojectionBasedConfidenceEstimator::calculateConfidence(
-    const std::vector<std::pair<Landmark*, cv::KeyPoint>>& inliers,
-    const Eigen::Matrix4d& T_lar_from_camera,
-    const Frame& frame,
+    const MeasurementContext& context,
     const FilteredTrackerConfig& config) const {
+
+    const auto& inliers = context.inliers;
+    const Eigen::Matrix4d& T_lar_from_camera = context.measured_pose;
+    const Frame& frame = *context.frame;
 
     // Early exit for insufficient inliers
     if (inliers.size() < config.min_inliers_for_tracking) {
@@ -48,8 +50,8 @@ double ReprojectionBasedConfidenceEstimator::calculateConfidence(
     double ori_score = std::exp(-ori_uncertainty / 0.05); // Target: ~3° orientation uncertainty
 
     // Inlier quality
-    double inlier_ratio = total_matches_ > 0 ?
-        static_cast<double>(inliers.size()) / total_matches_ : 1.0;
+    double inlier_ratio = context.total_matches > 0 ?
+        static_cast<double>(inliers.size()) / context.total_matches : 1.0;
     double count_score = std::min(1.0, inliers.size() / 50.0);  // Normalize by 50 inliers
     double ratio_score = std::min(1.0, inlier_ratio * 5.0);    // Cap at 20% ratio
 
@@ -65,7 +67,7 @@ double ReprojectionBasedConfidenceEstimator::calculateConfidence(
 
     // Debug output
     if (config.enable_debug_output) {
-        std::cout << "=== Data-Driven Confidence Calculation ===" << std::endl;
+        std::cout << "=== Reprojection-Based Measurement Confidence ===" << std::endl;
         std::cout << "  RMSE: " << rmse << " pixels" << std::endl;
         std::cout << "  Position uncertainty: " << pos_uncertainty << " m" << std::endl;
         std::cout << "  Orientation uncertainty: " << ori_uncertainty << " rad" << std::endl;
@@ -74,18 +76,20 @@ double ReprojectionBasedConfidenceEstimator::calculateConfidence(
         std::cout << "  Position score: " << pos_score << std::endl;
         std::cout << "  Orientation score: " << ori_score << std::endl;
         std::cout << "  Count/ratio scores: " << count_score << "/" << ratio_score << std::endl;
-        std::cout << "  Final confidence: " << confidence << std::endl;
+        std::cout << "  Final measurement confidence: " << confidence << std::endl;
     }
 
     return confidence;
 }
 
 Eigen::MatrixXd ReprojectionBasedConfidenceEstimator::calculateMeasurementNoise(
-    const std::vector<std::pair<Landmark*, cv::KeyPoint>>& inliers,
-    const Eigen::Matrix4d& T_lar_from_camera,
-    const Frame& frame,
-    double confidence,
+    const MeasurementContext& context,
     const FilteredTrackerConfig& config) const {
+
+    const auto& inliers = context.inliers;
+    const Eigen::Matrix4d& T_lar_from_camera = context.measured_pose;
+    const Frame& frame = *context.frame;
+    double confidence = context.confidence;
 
     if (inliers.size() < 4) {
         // Fallback to diagonal matrix for insufficient data

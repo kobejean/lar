@@ -15,7 +15,7 @@ public:
 
     void initialize(const Eigen::Matrix4d& initial_pose, const FilteredTrackerConfig& config) override;
     void predict(const Eigen::Matrix4d& motion, double dt, const FilteredTrackerConfig& config) override;
-    void update(const Eigen::Matrix4d& measurement,
+    void update(const MeasurementContext& context,
                const Eigen::MatrixXd& measurement_noise,
                const FilteredTrackerConfig& config) override;
 

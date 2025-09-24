@@ -8,6 +8,15 @@ namespace lar {
  * Centralizes all configuration to make tuning and experimentation easier.
  */
 struct FilteredTrackerConfig {
+    // === Filter Strategy Selection ===
+    enum class FilterStrategy {
+        EXTENDED_KALMAN_FILTER,
+        SLIDING_WINDOW_BA,
+        AVERAGING,
+        PASS_THROUGH
+    };
+    FilterStrategy filter_strategy = FilterStrategy::SLIDING_WINDOW_BA;  // Default to Sliding Window BA
+
     // === Core Timing ===
     double measurement_interval_seconds = 2.0;  // LAR measurement update interval
 
