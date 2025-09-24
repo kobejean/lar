@@ -3,6 +3,7 @@
 
 #include "pose_filter_strategy_base.h"
 #include "../measurement_context.h"
+#include "../filtered_tracker_config.h"
 #include "lar/mapping/frame.h"
 #include <deque>
 #include <memory>
@@ -80,16 +81,12 @@ public:
 
 private:
     // === Configuration ===
-    size_t max_window_size_ = 10;          // Maximum keyframes in window
-    size_t min_observations_ = 20;         // Minimum observations to create keyframe
-    double keyframe_distance_ = 0.5;       // Minimum distance between keyframes (meters)
-    double keyframe_angle_ = 15.0;         // Minimum angle between keyframes (degrees)
-    int optimization_iterations_ = 10;     // g2o optimization iterations
+    FilteredTrackerConfig config_;         // Store entire configuration
 
     // === State ===
     bool initialized_ = false;
-    PoseState current_state_;              // Current pose estimate
-    Eigen::MatrixXd current_covariance_;   // Current 6x6 covariance
+    PoseState state_;              // Current pose estimate
+    Eigen::MatrixXd covariance_;   // Current 6x6 covariance
 
     // === Sliding window ===
     std::deque<std::shared_ptr<Keyframe>> keyframes_;  // Active keyframes
@@ -110,19 +107,10 @@ private:
     // === Keyframe Management ===
 
     /**
-     * Check if current measurement should be a keyframe
-     */
-    bool shouldCreateKeyframe(const MeasurementContext& context) const;
-
-    /**
      * Marginalize oldest keyframe when window is full
      */
     void marginalizeOldestKeyframe();
 
-    /**
-     * Extract marginal information from keyframe before removal
-     */
-    Eigen::MatrixXd extractMarginalInformation(size_t keyframe_id) const;
 
     /**
      * Apply marginal prior constraint to connected keyframe
