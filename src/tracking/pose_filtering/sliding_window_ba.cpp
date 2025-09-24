@@ -124,6 +124,9 @@ void SlidingWindowBA::update(const MeasurementContext& context,
         return;
     }
 
+    // Process inliers from measurement context
+    processInliers(context);
+
     // Check if we should create a new keyframe
     if (shouldCreateKeyframe(measurement)) {
         createKeyframe(measurement, measurement_noise);
@@ -193,19 +196,22 @@ void SlidingWindowBA::reset() {
 // Public Methods
 // ============================================================================
 
-void SlidingWindowBA::addObservations(const std::vector<std::pair<Landmark*, Eigen::Vector2d>>& observations) {
+void SlidingWindowBA::processInliers(const MeasurementContext& context) {
     if (!current_frame_) {
         current_frame_ = std::make_shared<Keyframe>();
         current_frame_->pose = current_state_.toTransform();
         current_frame_->covariance = current_covariance_;
     }
 
-    current_frame_->observations = observations;
+    // True zero-copy! Just share the smart pointer
+    current_frame_->inliers = context.inliers;
 
     // Track landmark observation counts
-    for (const auto& [landmark, pixel] : observations) {
-        landmark_observations_[landmark]++;
-        active_landmarks_.insert(landmark);
+    if (context.inliers) {
+        for (const auto& [landmark, keypoint] : *context.inliers) {
+            landmark_observations_[landmark]++;
+            active_landmarks_.insert(landmark);
+        }
     }
 }
 
@@ -242,7 +248,7 @@ bool SlidingWindowBA::shouldCreateKeyframe(const Eigen::Matrix4d& current_pose) 
     }
 
     // Check observation criterion
-    if (current_frame_ && current_frame_->observations.size() >= min_observations_) {
+    if (current_frame_ && current_frame_->inliers && current_frame_->inliers->size() >= min_observations_) {
         return true;
     }
 
@@ -256,9 +262,9 @@ void SlidingWindowBA::createKeyframe(const Eigen::Matrix4d& pose, const Eigen::M
     kf->pose = pose;
     kf->covariance = covariance;
 
-    // Transfer observations from current frame
+    // Transfer inliers from current frame
     if (current_frame_) {
-        kf->observations = current_frame_->observations;
+        kf->inliers = std::move(current_frame_->inliers);
     }
 
     keyframes_.push_back(kf);
@@ -277,13 +283,15 @@ void SlidingWindowBA::marginalizeOldestKeyframe() {
     keyframes_.pop_front();
 
     // Remove observations of marginalized landmarks
-    for (const auto& [landmark, pixel] : oldest->observations) {
-        auto it = landmark_observations_.find(landmark);
-        if (it != landmark_observations_.end()) {
-            it->second--;
-            if (it->second == 0) {
-                landmark_observations_.erase(it);
-                active_landmarks_.erase(landmark);
+    if (oldest->inliers) {
+        for (const auto& [landmark, keypoint] : *oldest->inliers) {
+            auto it = landmark_observations_.find(landmark);
+            if (it != landmark_observations_.end()) {
+                it->second--;
+                if (it->second == 0) {
+                    landmark_observations_.erase(it);
+                    active_landmarks_.erase(landmark);
+                }
             }
         }
     }
@@ -352,33 +360,35 @@ void SlidingWindowBA::buildOptimizationGraph(const FilteredTrackerConfig& config
     for (const auto& kf : keyframes_) {
         auto pose_vertex = pose_vertices_[kf->id];
 
-        for (const auto& [landmark, observation] : kf->observations) {
-            auto lm_it = landmark_vertices_.find(landmark);
-            if (lm_it == landmark_vertices_.end()) continue;
+        if (kf->inliers) {
+            for (const auto& [landmark, keypoint] : *kf->inliers) {
+                auto lm_it = landmark_vertices_.find(landmark);
+                if (lm_it == landmark_vertices_.end()) continue;
 
-            auto landmark_vertex = lm_it->second;
+                auto landmark_vertex = lm_it->second;
 
-            // Create edge - use the same type as bundle_adjustment.cpp
-            auto edge = new g2o::EdgeProjectXYZ2UVD();
-            edge->setId(edge_id++);
-            edge->setVertex(0, landmark_vertex);  // 3D point
-            edge->setVertex(1, pose_vertex);       // SE3 pose
+                // Create edge - use the same type as bundle_adjustment.cpp
+                auto edge = new g2o::EdgeProjectXYZ2UVD();
+                edge->setId(edge_id++);
+                edge->setVertex(0, landmark_vertex);  // 3D point
+                edge->setVertex(1, pose_vertex);       // SE3 pose
 
-            // Set measurement (u, v, depth=0 for monocular)
-            Eigen::Vector3d measurement_with_depth(observation[0], observation[1], 0.0);
-            edge->setMeasurement(measurement_with_depth);
+                // Set measurement (u, v, depth=0 for monocular) - extract from keypoint
+                Eigen::Vector3d measurement_with_depth(keypoint.pt.x, keypoint.pt.y, 0.0);
+                edge->setMeasurement(measurement_with_depth);
 
-            // Set information matrix (only weight u,v; ignore depth)
-            double pixel_noise = config.sliding_window_pixel_noise;
-            Eigen::Vector3d information_diag(1.0/(pixel_noise*pixel_noise),
-                                            1.0/(pixel_noise*pixel_noise),
-                                            0.0);  // Zero weight for depth
-            edge->setInformation(information_diag.asDiagonal());
+                // Set information matrix (only weight u,v; ignore depth)
+                double pixel_noise = config.sliding_window_pixel_noise;
+                Eigen::Vector3d information_diag(1.0/(pixel_noise*pixel_noise),
+                                                1.0/(pixel_noise*pixel_noise),
+                                                0.0);  // Zero weight for depth
+                edge->setInformation(information_diag.asDiagonal());
 
-            // Link to camera parameters for this keyframe
-            edge->setParameterId(0, kf->id);
+                // Link to camera parameters for this keyframe
+                edge->setParameterId(0, kf->id);
 
-            optimizer_->addEdge(edge);
+                optimizer_->addEdge(edge);
+            }
         }
     }
 

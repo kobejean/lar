@@ -2,10 +2,12 @@
 #define LAR_TRACKING_POSE_FILTERING_SLIDING_WINDOW_BA_H
 
 #include "pose_filter_strategy_base.h"
+#include "../measurement_context.h"
 #include <deque>
 #include <memory>
 #include <unordered_map>
 #include <unordered_set>
+#include <opencv2/opencv.hpp>
 
 // Forward declarations for g2o
 namespace g2o {
@@ -21,13 +23,14 @@ class Landmark;
 
 /**
  * Keyframe for sliding window bundle adjustment
+ * Uses inlier format to avoid unnecessary allocations
  */
 struct Keyframe {
     size_t id;
     double timestamp;
-    Eigen::Matrix4d pose;                  // T_world_from_camera
-    std::vector<std::pair<Landmark*, Eigen::Vector2d>> observations;  // Landmark observations
-    Eigen::MatrixXd covariance;           // 6x6 pose covariance
+    Eigen::Matrix4d pose;                                                            // T_world_from_camera
+    std::shared_ptr<std::vector<std::pair<Landmark*, cv::KeyPoint>>> inliers;       // Shared inlier landmark-keypoint pairs (zero-copy from MeasurementContext)
+    Eigen::MatrixXd covariance;                                                      // 6x6 pose covariance
     bool is_marginalized = false;
 };
 
@@ -59,12 +62,6 @@ public:
     double getPositionUncertainty() const override;
     bool isInitialized() const override;
     void reset() override;
-
-    /**
-     * Add landmark observations from current frame
-     * Should be called before update() to provide observations for BA
-     */
-    void addObservations(const std::vector<std::pair<Landmark*, Eigen::Vector2d>>& observations);
 
     /**
      * Set camera intrinsics for reprojection constraints
@@ -105,7 +102,7 @@ private:
     std::unordered_map<size_t, g2o::VertexSE3Expmap*> pose_vertices_;
     std::unordered_map<Landmark*, g2o::VertexPointXYZ*> landmark_vertices_;
 
-    // === Helper methods ===
+    // === Keyframe Management ===
 
     /**
      * Check if current frame should be a keyframe
@@ -113,14 +110,21 @@ private:
     bool shouldCreateKeyframe(const Eigen::Matrix4d& current_pose) const;
 
     /**
-     * Create new keyframe from current state
+     * Create new keyframe from current state and MeasurementContext
      */
     void createKeyframe(const Eigen::Matrix4d& pose, const Eigen::MatrixXd& covariance);
+
+    /**
+     * Process inliers from MeasurementContext and store them efficiently
+     */
+    void processInliers(const MeasurementContext& context);
 
     /**
      * Marginalize oldest keyframe when window is full
      */
     void marginalizeOldestKeyframe();
+
+    // === Bundle Adjustment ===
 
     /**
      * Build optimization graph with current keyframes and landmarks
@@ -137,6 +141,8 @@ private:
      */
     void updateStateFromOptimization();
 
+    // === Covariance Extraction ===
+
     /**
      * Extract covariance matrix from bundle adjustment optimization
      */
@@ -146,6 +152,8 @@ private:
      * Calculate information matrix from covariance
      */
     Eigen::MatrixXd calculateInformationMatrix(const Eigen::MatrixXd& covariance) const;
+
+    // === Projection Utilities ===
 
     /**
      * Project 3D point to image coordinates

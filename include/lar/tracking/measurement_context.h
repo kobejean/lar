@@ -2,6 +2,7 @@
 #define LAR_TRACKING_MEASUREMENT_CONTEXT_H
 
 #include <vector>
+#include <memory>
 #include <Eigen/Core>
 #include <opencv2/opencv.hpp>
 
@@ -17,9 +18,9 @@ struct Frame;
  */
 struct MeasurementContext {
     // === Core Data ===
-    std::vector<std::pair<Landmark*, cv::KeyPoint>> inliers;        // Inlier landmark-keypoint pairs
-    size_t total_matches = 0;                                        // Total feature matches found
-    const Frame* frame = nullptr;                                    // Camera frame with intrinsics/extrinsics
+    std::shared_ptr<std::vector<std::pair<Landmark*, cv::KeyPoint>>> inliers;  // Shared inlier landmark-keypoint pairs (zero-copy)
+    size_t total_matches = 0;                                                   // Total feature matches found
+    const Frame* frame = nullptr;                                               // Camera frame with intrinsics/extrinsics
 
     // === Poses ===
     Eigen::Matrix4d measured_pose = Eigen::Matrix4d::Identity();     // LAR measurement result

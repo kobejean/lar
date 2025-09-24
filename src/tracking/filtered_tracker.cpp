@@ -219,7 +219,7 @@ FilteredTracker::MeasurementResult FilteredTracker::measurementUpdate(
 
     // Create measurement context for pluggable components
     MeasurementContext context;
-    context.inliers = result.inliers;
+    context.inliers = std::make_shared<std::vector<std::pair<Landmark*, cv::KeyPoint>>>(result.inliers);
     context.total_matches = base_tracker_->matches.size();
     context.frame = &frame;
     context.measured_pose = T_lar_from_camera_measured;

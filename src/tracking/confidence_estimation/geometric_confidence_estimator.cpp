@@ -15,19 +15,22 @@ double GeometricConfidenceEstimator::calculateConfidence(
     const MeasurementContext& context,
     const FilteredTrackerConfig& config) const {
 
-    const auto& inliers = context.inliers;
     const Eigen::Matrix4d& T_lar_from_camera = context.measured_pose;
 
-    if (inliers.size() < config.min_inliers_for_tracking) {
+    if (!context.inliers) {
+        throw std::runtime_error("MeasurementContext.inliers is null - this should never happen");
+    }
+
+    if (context.inliers->size() < config.min_inliers_for_tracking) {
         return 0.0;
     }
 
     // Base confidence from number of inliers
-    double inlier_confidence = std::min(1.0, static_cast<double>(inliers.size()) / config.max_inliers_for_confidence);
+    double inlier_confidence = std::min(1.0, static_cast<double>(context.inliers->size()) / config.max_inliers_for_confidence);
 
     // Geometric distribution factor
     Eigen::Vector3d camera_position = T_lar_from_camera.block<3,1>(0,3);
-    double spatial_distribution = calculateSpatialDistribution(inliers, camera_position, config);
+    double spatial_distribution = calculateSpatialDistribution(*context.inliers, camera_position, config);
 
     // Combined confidence
     return inlier_confidence * spatial_distribution;
@@ -37,12 +40,15 @@ Eigen::MatrixXd GeometricConfidenceEstimator::calculateMeasurementNoise(
     const MeasurementContext& context,
     const FilteredTrackerConfig& config) const {
 
-    const auto& inliers = context.inliers;
     double confidence = context.confidence;
+
+    if (!context.inliers) {
+        throw std::runtime_error("MeasurementContext.inliers is null - this should never happen");
+    }
 
     // Scene-dependent measurement noise based on confidence and geometry
     double confidence_factor = 1.0 / std::max(config.min_confidence_factor, confidence);
-    double sparsity_factor = std::max(1.0, config.min_inliers_for_noise / static_cast<double>(inliers.size()));
+    double sparsity_factor = std::max(1.0, config.min_inliers_for_noise / static_cast<double>(context.inliers->size()));
     double total_factor = confidence_factor * sparsity_factor;
 
     Eigen::MatrixXd R = Eigen::MatrixXd::Identity(6, 6);

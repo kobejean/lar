@@ -16,7 +16,10 @@ double ReprojectionBasedConfidenceEstimator::calculateConfidence(
     const MeasurementContext& context,
     const FilteredTrackerConfig& config) const {
 
-    const auto& inliers = context.inliers;
+    if (!context.inliers) {
+        throw std::runtime_error("MeasurementContext.inliers is null - this should never happen");
+    }
+    const auto& inliers = *context.inliers;
     const Eigen::Matrix4d& T_lar_from_camera = context.measured_pose;
     const Frame& frame = *context.frame;
 
@@ -86,7 +89,10 @@ Eigen::MatrixXd ReprojectionBasedConfidenceEstimator::calculateMeasurementNoise(
     const MeasurementContext& context,
     const FilteredTrackerConfig& config) const {
 
-    const auto& inliers = context.inliers;
+    if (!context.inliers) {
+        throw std::runtime_error("MeasurementContext.inliers is null - this should never happen");
+    }
+    const auto& inliers = *context.inliers;
     const Eigen::Matrix4d& T_lar_from_camera = context.measured_pose;
     const Frame& frame = *context.frame;
     double confidence = context.confidence;

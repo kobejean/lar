@@ -119,8 +119,8 @@ void ExtendedKalmanFilter::updateWithAnchors(const MeasurementContext& context,
     update(context, measurement_noise, config);
 
     // Check if this measurement qualifies as an anchor
-    if (shouldAddAnchor(context.measured_pose, context.confidence, context.inliers.size(), config)) {
-        addAnchor(context.measured_pose, context.confidence, context.inliers.size(), config);
+    if (shouldAddAnchor(context.measured_pose, context.confidence, context.inliers ? context.inliers->size() : 0, config)) {
+        addAnchor(context.measured_pose, context.confidence, context.inliers ? context.inliers->size() : 0, config);
     }
 
     // Apply rotational constraints from historical anchors

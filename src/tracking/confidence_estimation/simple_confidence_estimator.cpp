@@ -13,14 +13,16 @@ double SimpleConfidenceEstimator::calculateConfidence(
     const MeasurementContext& context,
     const FilteredTrackerConfig& config) const {
 
-    const auto& inliers = context.inliers;
+    if (!context.inliers) {
+        throw std::runtime_error("MeasurementContext.inliers is null - this should never happen");
+    }
 
-    if (inliers.size() < config.min_inliers_for_tracking) {
+    if (context.inliers->size() < config.min_inliers_for_tracking) {
         return 0.0;
     }
 
     // Simple confidence based only on inlier count
-    return std::min(1.0, static_cast<double>(inliers.size()) / config.max_inliers_for_confidence);
+    return std::min(1.0, static_cast<double>(context.inliers->size()) / config.max_inliers_for_confidence);
 }
 
 Eigen::MatrixXd SimpleConfidenceEstimator::calculateMeasurementNoise(
