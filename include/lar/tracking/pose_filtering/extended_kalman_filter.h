@@ -38,16 +38,12 @@ public:
 
     /**
      * Enhanced update with anchor constraints (optional)
-     * @param measurement Pose measurement
+     * @param context Measurement context with pose, confidence, and observation count
      * @param measurement_noise Measurement covariance
-     * @param confidence Confidence of this measurement
-     * @param observation_count Number of features used
      * @param config Configuration parameters
      */
-    void updateWithAnchors(const Eigen::Matrix4d& measurement,
+    void updateWithAnchors(const MeasurementContext& context,
                           const Eigen::MatrixXd& measurement_noise,
-                          double confidence,
-                          size_t observation_count,
                           const FilteredTrackerConfig& config);
 
     PoseState getState() const override { return state_; }

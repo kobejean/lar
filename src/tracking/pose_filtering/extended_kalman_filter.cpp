@@ -112,19 +112,15 @@ void ExtendedKalmanFilter::reset() {
 // Historical Anchor Constraints Implementation
 // ============================================================================
 
-void ExtendedKalmanFilter::updateWithAnchors(const Eigen::Matrix4d& measurement,
+void ExtendedKalmanFilter::updateWithAnchors(const MeasurementContext& context,
                                             const Eigen::MatrixXd& measurement_noise,
-                                            double confidence,
-                                            size_t observation_count,
                                             const FilteredTrackerConfig& config) {
     // First, do standard EKF update
-    MeasurementContext temp_context;
-    temp_context.measured_pose = measurement;
-    update(temp_context, measurement_noise, config);
+    update(context, measurement_noise, config);
 
     // Check if this measurement qualifies as an anchor
-    if (shouldAddAnchor(measurement, confidence, observation_count, config)) {
-        addAnchor(measurement, confidence, observation_count, config);
+    if (shouldAddAnchor(context.measured_pose, context.confidence, context.inliers.size(), config)) {
+        addAnchor(context.measured_pose, context.confidence, context.inliers.size(), config);
     }
 
     // Apply rotational constraints from historical anchors
