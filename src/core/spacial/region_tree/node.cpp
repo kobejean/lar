@@ -107,20 +107,21 @@ inline bool RegionTree<T>::Node::isLeaf() const {
 
 template <typename T>
 struct RegionTree<T>::Node::InsertScore {
-  double overlap, expansion, area;
+  double coverage, expansion, area;
 
-  InsertScore() : overlap(0), expansion(0), area(0) {}
-  InsertScore(const Node *parent, const Rect &bounds) :
-    overlap(parent->bounds.overlap(bounds)),
-    area(parent->bounds.area()) {
-    expansion = parent->bounds.minBoundingBox(bounds).area() - area;
+  InsertScore() : coverage(0), expansion(0), area(0) {}
+  InsertScore(const Node *child, const Rect &bounds) :
+    coverage(child->bounds.overlap(bounds)),
+    area(child->bounds.area()) {
+    expansion = child->bounds.minBoundingBox(bounds).area() - area;
   }
 
   bool operator<(const InsertScore &other) const {
-    if (overlap < other.overlap) return true;
-    if (expansion > other.expansion) return true;
-    if (area < other.area) return true;
-    return false;
+    // Returns true if 'this' is worse than 'other' for insertion
+    // Prefer: high coverage, low expansion, small area
+    if (std::abs(coverage - other.coverage) > 1e-5) return coverage < other.coverage;
+    if (std::abs(expansion - other.expansion) > 1e-5) return expansion > other.expansion;
+    return area > other.area;
   }
 };
 
