@@ -183,7 +183,8 @@ std::size_t RegionTree<T>::Node::findChildIndex(Node *child) const {
   for (size_t i = 0; i < children.size(); i++) {
     if (children[i] == child) return i;
   }
-  return -1;
+  assert(false && "Child not found in parent - tree structure corrupted");
+  return static_cast<std::size_t>(-1);  // Unreachable, but silences warnings
 }
 
 
