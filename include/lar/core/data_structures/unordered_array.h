@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <utility>
 
 namespace lar {
 
@@ -15,21 +16,21 @@ namespace lar {
       T& operator[](std::size_t index) { return _data[index]; }
       const T& operator[](std::size_t index) const { return _data[index]; }
 
+      void push_back(T&& value) { _data[_size++] = std::move(value); }
+      void push_back(const T& value) { _data[_size++] = value; }
 
-      void push_back(T value) { _data[_size++] = value; }
-
-      void pop_front() { _data[0] = _data[--_size]; }
+      void pop_front() { _data[0] = std::move(_data[--_size]); }
       void pop_front(std::size_t k) {
         auto end = _data + _size;
         _size -= k;
         std::size_t offset = std::max(k, _size);
-        std::copy(_data + offset, end, _data);
+        std::move(_data + offset, end, _data);
       }
-      
+
       void pop_back() { _size--; }
       void pop_back(std::size_t k) { _size -= k; }
 
-      void erase(std::size_t index) { _data[index] = _data[--_size]; }
+      void erase(std::size_t index) { _data[index] = std::move(_data[--_size]); }
 
       void clear() { _size = 0; }
 
