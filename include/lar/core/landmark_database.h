@@ -12,8 +12,10 @@ namespace lar {
     public:
 
       LandmarkDatabase();
-      LandmarkDatabase(const LandmarkDatabase& other);
-      LandmarkDatabase& operator=(const LandmarkDatabase& other);
+      LandmarkDatabase(const LandmarkDatabase& other) = delete;
+      LandmarkDatabase& operator=(const LandmarkDatabase& other) = delete;
+      LandmarkDatabase(LandmarkDatabase&& other);
+      LandmarkDatabase& operator=(LandmarkDatabase&& other);
       
       Landmark& operator[](size_t id);
 

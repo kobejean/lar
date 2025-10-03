@@ -5,7 +5,7 @@
 
 namespace lar {
 
-  Tracker::Tracker(Map map) : map(map), last_gravity_angle_difference(0.0) {
+  Tracker::Tracker(Map& map) : map(map), last_gravity_angle_difference(0.0) {
     usac_params = cv::UsacParams();
     usac_params.confidence=0.99;
     usac_params.isParallel=false;

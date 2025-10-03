@@ -10,7 +10,7 @@ namespace lar {
 
 // Forward declarations
 class Landmark;
-struct Frame;
+class Frame;
 
 /**
  * Minimal context for measurement processing

@@ -14,6 +14,11 @@ namespace lar {
     public:
       // lifecycle
       RegionTree();
+      ~RegionTree();
+      RegionTree(const RegionTree& other) = delete;
+      RegionTree& operator=(const RegionTree& other) = delete;
+      RegionTree(RegionTree&& other);
+      RegionTree& operator=(RegionTree&& other);
 
       // operations
       T& operator[](size_t id);
@@ -29,7 +34,7 @@ namespace lar {
     private:
       class Node;
       class LeafNode;
-      std::shared_ptr<Node> root;
+      std::unique_ptr<Node> root;
       using leaf_container = std::unordered_map<size_t, LeafNode*>;
       leaf_container leaf_map;
   };

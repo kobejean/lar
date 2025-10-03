@@ -15,9 +15,18 @@ namespace lar {
 // lifecycle
 
 template <typename T>
-RegionTree<T>::RegionTree() : root(new Node(1)) {
-  
+RegionTree<T>::RegionTree() : root(std::make_unique<Node>(1)) {
+
 }
+
+template <typename T>
+RegionTree<T>::~RegionTree() = default;
+
+template <typename T>
+RegionTree<T>::RegionTree(RegionTree&& other) = default;
+
+template <typename T>
+RegionTree<T>& RegionTree<T>::operator=(RegionTree&& other) = default;
 
 
 // operations

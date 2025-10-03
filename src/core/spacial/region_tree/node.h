@@ -29,7 +29,6 @@ class RegionTree<T>::Node {
 
     // lifecycle
     Node(std::size_t height);
-    ~Node();
 
     // operations
     void insert(std::unique_ptr<Node> node);

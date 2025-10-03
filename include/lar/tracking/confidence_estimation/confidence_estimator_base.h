@@ -11,8 +11,8 @@ namespace lar {
 
 // Forward declarations
 class Landmark;
+class Frame;
 struct FilteredTrackerConfig;
-struct Frame;
 
 /**
  * Abstract interface for confidence estimation strategies.

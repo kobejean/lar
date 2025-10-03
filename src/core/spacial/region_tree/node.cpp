@@ -20,9 +20,6 @@ RegionTree<T>::Node::Node(std::size_t height) : height(height), parent(nullptr) 
 }
 
 template <typename T>
-RegionTree<T>::Node::~Node() {};
-
-template <typename T>
 void RegionTree<T>::Node::insert(std::unique_ptr<Node> node) {
   bounds = bounds.minBoundingBox(node->bounds);
 

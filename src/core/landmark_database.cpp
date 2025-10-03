@@ -5,13 +5,13 @@ namespace lar {
   LandmarkDatabase::LandmarkDatabase() : _rtree() {
   }
 
-  LandmarkDatabase::LandmarkDatabase(const LandmarkDatabase& other) 
-    : _rtree(other._rtree), next_id(other.next_id.load()) {
+  LandmarkDatabase::LandmarkDatabase(LandmarkDatabase&& other)
+    : _rtree(std::move(other._rtree)), next_id(other.next_id.load()) {
   }
 
-  LandmarkDatabase& LandmarkDatabase::operator=(const LandmarkDatabase& other) {
+  LandmarkDatabase& LandmarkDatabase::operator=(LandmarkDatabase&& other) {
     if (this != &other) {
-      _rtree = other._rtree;
+      _rtree = std::move(other._rtree);
       next_id.store(other.next_id.load());
     }
     return *this;
