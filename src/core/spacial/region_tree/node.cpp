@@ -64,16 +64,16 @@ typename RegionTree<T>::Node *RegionTree<T>::Node::erase() {
 }
 
 template <typename T>
-void RegionTree<T>::Node::find(const Rect &query, std::vector<T*> &result) { 
+void RegionTree<T>::Node::find(const Rect &query, std::vector<T*> &results) { 
   if (this->isLeaf()) {
     LeafNode *leaf = static_cast<LeafNode*>(this);
-    result.push_back(&leaf->value);
+    results.push_back(&leaf->value);
     return;
   }
 
   for (auto & child : this->children) {
     if (child->bounds.intersectsWith(query)) {
-      child->find(query, result);
+      child->find(query, results);
     }
   }
 }

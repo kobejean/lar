@@ -75,10 +75,8 @@ void RegionTree<T>::reinsert(size_t id, Rect &bounds) {
 }
 
 template <typename T>
-std::vector<T*> RegionTree<T>::find(const Rect &query) const {
-  std::vector<T*> result;
-  if (root->children.size() > 0) root->find(query, result);
-  return result;
+void RegionTree<T>::find(const Rect &query, std::vector<T*> &results) const {
+  if (root->children.size() > 0) root->find(query, results);
 }
 
 template <typename T>

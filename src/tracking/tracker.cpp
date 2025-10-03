@@ -112,7 +112,8 @@ namespace lar {
       // Use spatial query with explicit parameters
       std::cout << "Spatial query: Point(" << query_x << ", " << query_z << ") diameter=" << query_diameter << std::endl;
       Rect query = Rect(Point(query_x, query_z), query_diameter, query_diameter);
-      local_landmarks = map.landmarks.find(query);
+      local_landmarks.clear();
+      map.landmarks.find(query, local_landmarks);
     }
     
     // Limit local_landmarks to prevent OpenCV crashes (max 250k landmarks)

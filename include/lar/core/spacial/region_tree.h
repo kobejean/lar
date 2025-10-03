@@ -26,7 +26,7 @@ namespace lar {
       void insert(T value, Rect bounds, size_t id);
       void erase(size_t id);
       void reinsert(size_t id, Rect &bounds);
-      std::vector<T*> find(const Rect &query) const;
+      void find(const Rect &query, std::vector<T*> &results) const;
       void print(std::ostream &os);
 
       // collection
