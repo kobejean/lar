@@ -1,5 +1,6 @@
 #include <iostream>
 #include <algorithm>
+#include <memory>
 #include <vector>
 #include <cassert>
 #include "lar/core/spacial/region_tree.h"
@@ -19,22 +20,18 @@ RegionTree<T>::Node::Node(std::size_t height) : height(height), parent(nullptr) 
 }
 
 template <typename T>
-RegionTree<T>::Node::~Node() {
-  for (auto &child : children) {
-    delete child;
-  }
-};
+RegionTree<T>::Node::~Node() {};
 
 template <typename T>
-void RegionTree<T>::Node::insert(Node *node) {
+void RegionTree<T>::Node::insert(std::unique_ptr<Node> node) {
   bounds = bounds.minBoundingBox(node->bounds);
 
   if (height > node->height+1) {
     Node *best_child = findBestInsertChild(node->bounds);
-    best_child->insert(node);
+    best_child->insert(std::move(node));
   } else {
     assert(height == node->height+1);
-    addChild(node);
+    addChild(std::move(node));
   }
 }
 
@@ -42,24 +39,25 @@ template <typename T>
 typename RegionTree<T>::Node *RegionTree<T>::Node::erase() {
   if (parent != nullptr) {
     Node* insert_root = nullptr;
-    size_t index = parent->findChildIndex(this);
-    parent->children.erase(index);
-    assert(parent != nullptr);
-    parent->subtractBounds(bounds);
+    Node* parent_node = parent;
+    size_t index = parent_node->findChildIndex(this);
+    parent_node->children.erase(index);
+    parent_node->subtractBounds(bounds);
 
-    if (parent->children.size() < (MAX_CHILDREN / 2)) {
-      children_container siblings = parent->children;
+    if (parent_node->children.size() < (MAX_CHILDREN / 2)) {
+      children_container siblings;
+      for (auto &child : parent_node->children) {
+        siblings.push_back(std::move(child));
+      }
       // unlink from parent
-      parent->children.clear();
-      insert_root = parent->erase();
-      parent = nullptr;
+      parent_node->children.clear();
+      insert_root = parent_node->erase();
       for (auto &sibling : siblings) {
-        insert_root->insert(sibling);
+        insert_root->insert(std::move(sibling));
       }
     } else {
-      insert_root = parent;
+      insert_root = parent_node;
     }
-    delete this;
     return insert_root;
   } else {
     // we will not delete the root
@@ -110,10 +108,10 @@ struct RegionTree<T>::Node::InsertScore {
   double coverage, expansion, area;
 
   InsertScore() : coverage(0), expansion(0), area(0) {}
-  InsertScore(const Node *child, const Rect &bounds) :
-    coverage(child->bounds.overlap(bounds)),
-    area(child->bounds.area()) {
-    expansion = child->bounds.minBoundingBox(bounds).area() - area;
+  InsertScore(const Node &child, const Rect &bounds) :
+    coverage(child.bounds.overlap(bounds)),
+    area(child.bounds.area()) {
+    expansion = child.bounds.minBoundingBox(bounds).area() - area;
   }
 
   bool operator<(const InsertScore &other) const {
@@ -127,14 +125,14 @@ struct RegionTree<T>::Node::InsertScore {
 
 template <typename T>
 typename RegionTree<T>::Node *RegionTree<T>::Node::findBestInsertChild(const Rect &bounds) const {
-  InsertScore best_score(children[0], bounds);
-  Node *best_child = children[0];
+  InsertScore best_score(*children[0], bounds);
+  Node *best_child = children[0].get();
   // find the best child to insert into
   for (auto &child : children) {
-    InsertScore score(child, bounds);
+    InsertScore score(*child, bounds);
     if (best_score < score ) {
       best_score = score;
-      best_child = child;
+      best_child = child.get();
     }
   }
   return best_child;
@@ -142,29 +140,25 @@ typename RegionTree<T>::Node *RegionTree<T>::Node::findBestInsertChild(const Rec
 
 
 template <typename T>
-void RegionTree<T>::Node::addChild(Node *child) {
+void RegionTree<T>::Node::addChild(std::unique_ptr<Node> child) {
   if (children.size() < MAX_CHILDREN) {
-    linkChild(child);
+    linkChild(std::move(child));
   } else {
     overflow_container nodes;
-    for (auto &child : children) nodes.push_back(child);
-    nodes.push_back(child);
-    RegionTree<T>::Node *split = new RegionTree<T>::Node(height);
+    for (auto &child : children) nodes.push_back(std::move(child));
+    nodes.push_back(std::move(child));
     // reset parent
     children.clear();
-    Partition::partition(nodes, this, split);
     if (this->parent != nullptr) {
-      this->parent->addChild(split);
+      auto split = std::make_unique<Node>(height);
+      Partition::partition(nodes, this, split.get());
+      this->parent->addChild(std::move(split));
     } else {
-      // if we have a spit at root, create a new root
-      // with a copy of the old root and the split as a children
-      Node *copy = new Node(*this);
-      for (auto &child : children) {
-        child->parent = copy;
-      }
-      children.clear();
-      linkChild(copy);
-      linkChild(split);
+      auto split1 = std::make_unique<Node>(height);
+      auto split2 = std::make_unique<Node>(height);
+      Partition::partition(nodes, split1.get(), split2.get());
+      linkChild(std::move(split1));
+      linkChild(std::move(split2));
       this->height++;
     }
   }
@@ -172,16 +166,16 @@ void RegionTree<T>::Node::addChild(Node *child) {
 
 
 template <typename T>
-void RegionTree<T>::Node::linkChild(Node *child) {
-  children.push_back(child);
+void RegionTree<T>::Node::linkChild(std::unique_ptr<Node> child) {
   child->parent = this;
+  children.push_back(std::move(child));
 }
 
 
 template <typename T>
 std::size_t RegionTree<T>::Node::findChildIndex(Node *child) const {
   for (size_t i = 0; i < children.size(); i++) {
-    if (children[i] == child) return i;
+    if (children[i].get() == child) return i;
   }
   assert(false && "Child not found in parent - tree structure corrupted");
   return static_cast<std::size_t>(-1);  // Unreachable, but silences warnings
