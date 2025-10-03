@@ -15,8 +15,8 @@ namespace lar {
       LandmarkDatabase();
       LandmarkDatabase(const LandmarkDatabase& other) = delete;
       LandmarkDatabase& operator=(const LandmarkDatabase& other) = delete;
-      LandmarkDatabase(LandmarkDatabase&& other);
-      LandmarkDatabase& operator=(LandmarkDatabase&& other);
+      LandmarkDatabase(LandmarkDatabase&& other) noexcept;
+      LandmarkDatabase& operator=(LandmarkDatabase&& other) noexcept;
       
       Landmark& operator[](size_t id);
 
@@ -31,7 +31,7 @@ namespace lar {
 // #endif
     private:
       RegionTree<Landmark> rtree_;
-      std::atomic<size_t> next_id_{0};
+      size_t next_id_ = 0;
       mutable std::shared_mutex mutex_;
   };
   

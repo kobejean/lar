@@ -5,14 +5,23 @@ namespace lar {
   LandmarkDatabase::LandmarkDatabase() : rtree_() {
   }
 
-  LandmarkDatabase::LandmarkDatabase(LandmarkDatabase&& other)
-    : rtree_(std::move(other.rtree_)), next_id_(other.next_id_.load()) {
+  LandmarkDatabase::LandmarkDatabase(LandmarkDatabase&& other) noexcept {
+    std::unique_lock<std::shared_mutex> this_lock(mutex_, std::defer_lock);
+    std::unique_lock<std::shared_mutex> other_lock(other.mutex_, std::defer_lock);
+    std::lock(this_lock, other_lock);
+
+    rtree_ = std::move(other.rtree_);
+    next_id_ = other.next_id_;
   }
 
-  LandmarkDatabase& LandmarkDatabase::operator=(LandmarkDatabase&& other) {
+  LandmarkDatabase& LandmarkDatabase::operator=(LandmarkDatabase&& other) noexcept {
     if (this != &other) {
+      std::unique_lock<std::shared_mutex> this_lock(mutex_, std::defer_lock);
+      std::unique_lock<std::shared_mutex> other_lock(other.mutex_, std::defer_lock);
+      std::lock(this_lock, other_lock);
+
       rtree_ = std::move(other.rtree_);
-      next_id_.store(other.next_id_.load());
+      next_id_ = other.next_id_;
     }
     return *this;
   }
@@ -29,7 +38,7 @@ namespace lar {
     std::unique_lock lock(mutex_);
     for (Landmark& landmark : landmarks) {
       if (landmark.id == 0) {  // Assuming 0 means unassigned
-        landmark.id = next_id_.fetch_add(1);
+        landmark.id = ++next_id_;
       }
       ids.push_back(landmark.id);
       rtree_.insert(landmark, landmark.bounds, landmark.id);
