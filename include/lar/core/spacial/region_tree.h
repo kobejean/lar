@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <memory>
 #include <iostream>
+#include <functional>
 #include "lar/core/spacial/rect.h"
 
 namespace lar {
@@ -24,6 +25,7 @@ namespace lar {
       T& operator[](size_t id);
       void insert(T value, Rect bounds, size_t id);
       void erase(size_t id);
+      void reinsert(size_t id, Rect &bounds);
       std::vector<T*> find(const Rect &query) const;
       void print(std::ostream &os);
 

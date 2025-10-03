@@ -68,6 +68,13 @@ void RegionTree<T>::erase(size_t id) {
 }
 
 template <typename T>
+void RegionTree<T>::reinsert(size_t id, Rect &bounds) {
+  T item = std::move((*this)[id]);
+  this->erase(id);
+  this->insert(std::move(item), bounds, id);
+}
+
+template <typename T>
 std::vector<T*> RegionTree<T>::find(const Rect &query) const {
   std::vector<T*> result;
   if (root->children.size() > 0) root->find(query, result);
