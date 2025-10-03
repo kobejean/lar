@@ -16,8 +16,14 @@ namespace lar {
       T& operator[](std::size_t index) { return _data[index]; }
       const T& operator[](std::size_t index) const { return _data[index]; }
 
-      void push_back(T&& value) { _data[_size++] = std::move(value); }
-      void push_back(const T& value) { _data[_size++] = value; }
+      void push_back(T&& value) {
+        assert(_size < N && "unordered_array overflow");
+        _data[_size++] = std::move(value);
+      }
+      void push_back(const T& value) {
+        assert(_size < N && "unordered_array overflow");
+        _data[_size++] = value;
+      }
 
       void pop_front() { _data[0] = std::move(_data[--_size]); }
       void pop_front(std::size_t k) {
