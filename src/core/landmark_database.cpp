@@ -59,7 +59,7 @@ namespace lar {
     std::unique_lock lock(mutex_);
     // TODO: find better way to do this
     std::vector<Landmark> landmarks;
-    for (Landmark* landmark : all()) {
+    for (Landmark* landmark : rtree_.all()) {
       landmarks.push_back(*landmark);
     }
     for (Landmark landmark : landmarks) {
