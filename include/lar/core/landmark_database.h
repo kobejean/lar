@@ -1,6 +1,7 @@
 #ifndef LAR_CORE_LANDMARK_DATABASE_H
 #define LAR_CORE_LANDMARK_DATABASE_H
 
+#include <shared_mutex>
 #include <nlohmann/json.hpp>
 #include "lar/core/utils/json.h"
 #include "lar/core/landmark.h"
@@ -29,8 +30,9 @@ namespace lar {
       void addObservation(size_t id, Landmark::Observation observation);
 // #endif
     private:
-      RegionTree<Landmark> _rtree;
-      std::atomic<size_t> next_id{0};
+      RegionTree<Landmark> rtree_;
+      std::atomic<size_t> next_id_{0};
+      mutable std::shared_mutex mutex_;
   };
   
 

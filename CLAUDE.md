@@ -87,6 +87,24 @@ The `script/colmap/` directory contains Python utilities for COLMAP integration:
 - CI runs `make tests && ./bin/lar_test`
 - Test framework in `test/all_tests.cpp`
 
+## Known Issues & Technical Debt
+
+### Thread Safety
+**Current State**: The codebase is NOT thread-safe. `LandmarkDatabase` uses `std::atomic<size_t>` for ID generation, but this doesn't protect the underlying `RegionTree` from concurrent modifications.
+
+**Real-World Impact**: AR applications typically run localization on background threads (to avoid blocking the main render thread), which can cause race conditions when:
+- Multiple threads call `insert()` simultaneously
+- Background thread calls `addObservation()` while main thread reads landmarks
+- Concurrent access to the same `Map` instance from `Tracker`
+
+**Current Mitigation**: None. This is a known issue deferred until the architecture stabilizes.
+
+**Future Solution Options**:
+1. Add mutex-based locking to `LandmarkDatabase` operations
+2. Use lock-free data structures for the spatial index
+3. Implement a message-passing architecture with a dedicated map thread
+4. Document single-threaded usage and require external synchronization
+
 ## Comment From Lead Developer
 The project is in an experimental phase and not structured ideally. We are trying different ways of mapping and localization and code is frequently being changed. Once we have a good idea of how to approach mapping and localization, we will refactor and optimize the code. 
 
