@@ -78,10 +78,11 @@ TEST(RegionTreeTest, Find) {
   tree.insert(6, lar::Rect(9, 14, 13, 18), 6);
   tree.insert(7, lar::Rect(5, 19, 8, 23), 7);
   tree.insert(8, lar::Rect(20, 14, 26, 22), 8);
-  std::vector<size_t*> result = tree.find(Rect(1, 1, 24, 15));
+  std::vector<size_t*> result;
+  tree.find(Rect(1, 1, 24, 15), result);
   // Then
-  // EXPECT_EQ(std::count(result.begin(), result.end(), 1), 1);
-  // EXPECT_EQ(std::count(result.begin(), result.end(), 5), 1);
-  // EXPECT_EQ(std::count(result.begin(), result.end(), 6), 1);
-  // EXPECT_EQ(std::count(result.begin(), result.end(), 8), 1);
+  EXPECT_EQ(std::count_if(result.begin(), result.end(), [](size_t* p) { return *p == 1; }), 1);
+  EXPECT_EQ(std::count_if(result.begin(), result.end(), [](size_t* p) { return *p == 5; }), 1);
+  EXPECT_EQ(std::count_if(result.begin(), result.end(), [](size_t* p) { return *p == 6; }), 1);
+  EXPECT_EQ(std::count_if(result.begin(), result.end(), [](size_t* p) { return *p == 8; }), 1);
 }

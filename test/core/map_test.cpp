@@ -4,16 +4,16 @@
 
 using namespace lar;
 
-// TEST(MapTest, GlobalPointNotReady) {
-//   // Given
-//   Map map;
-//   Eigen::Vector3d relative{ 0, 4, 0 };
-//   // When
-//   Eigen::Vector3d global;
-//   bool success = map.globalPointFrom(relative, global);
-//   // Then
-//   EXPECT_FALSE(success);
-// }
+TEST(MapTest, DISABLED_GlobalPointNotReady) {
+  // Given
+  Map map;
+  Eigen::Vector3d relative{ 0, 4, 0 };
+  // When
+  Eigen::Vector3d global;
+  map.globalPointFrom(relative, global);
+  // Then
+  // EXPECT_FALSE(success);
+}
 
 TEST(MapTest, GlobalPointFromExample1) {
   // Given
@@ -53,16 +53,16 @@ TEST(MapTest, GlobalPointFromExample2) {
   EXPECT_NEAR(global.z(), 208, 1e-5);
 }
 
-// TEST(MapTest, RelativePointNotReady) {
-//   // Given
-//   Map map;
-//   Eigen::Vector3d global{ 37.5236728, 139.9380725, 212 };
-//   // When
-//   Eigen::Vector3d relative;
-//   map.relativePointFrom(relative, global);
-//   // Then
-//   EXPECT_FALSE(success);
-// }
+TEST(MapTest, DISABLED_RelativePointNotReady) {
+  // Given
+  Map map;
+  Eigen::Vector3d global{ 37.5236728, 139.9380725, 212 };
+  // When
+  Eigen::Vector3d relative;
+  map.relativePointFrom(relative, global);
+  // Then
+  // EXPECT_FALSE(success);
+}
 
 TEST(MapTest, RelativePointFromExample1) {
   // Given
@@ -122,19 +122,19 @@ TEST(MapTest, DISABLED_JSONDeserialization) {  // Disabled: complex serializatio
   // When
   lar::Map map = map_json;
   // Then
-  // size_t id = 45347;
-  // std::vector<uint8_t> expected_desc = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 64, 128, 63, 64, 64, 64, 64, 128, 63};
-  // cv::Mat actual_desc = map.landmarks[710].desc;
+  size_t id = 45347;
+  std::vector<uint8_t> expected_desc = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 64, 128, 63, 64, 64, 64, 64, 128, 63};
+  cv::Mat actual_desc = map.landmarks[710].desc;
 
-  // // Check `desc` values
-  // for (int i = 0; i < actual_desc.cols; ++i) {
-  //   EXPECT_EQ(actual_desc.at<uint8_t>(0,i), expected_desc[i]) << " index:" << i;
-  // }
-  // EXPECT_EQ(actual_desc.rows, 1);
-  // EXPECT_EQ(actual_desc.cols, expected_desc.size());
+  // Check `desc` values
+  for (int i = 0; i < actual_desc.cols; ++i) {
+    EXPECT_EQ(actual_desc.at<uint8_t>(0,i), expected_desc[i]) << " index:" << i;
+  }
+  EXPECT_EQ(actual_desc.rows, 1);
+  EXPECT_EQ(actual_desc.cols, expected_desc.size());
 
-  // EXPECT_EQ(map.landmarks[710].id, 710);
-  // EXPECT_NEAR(map.landmarks[710].position.x(), 28.99345023444182, 1e-10);
-  // EXPECT_NEAR(map.landmarks[710].position.y(), 8.76631960321935, 1e-10);
-  // EXPECT_NEAR(map.landmarks[710].position.z(), -17.06995683511346, 1e-10);
+  EXPECT_EQ(map.landmarks[710].id, 710);
+  EXPECT_NEAR(map.landmarks[710].position.x(), 28.99345023444182, 1e-10);
+  EXPECT_NEAR(map.landmarks[710].position.y(), 8.76631960321935, 1e-10);
+  EXPECT_NEAR(map.landmarks[710].position.z(), -17.06995683511346, 1e-10);
 }
