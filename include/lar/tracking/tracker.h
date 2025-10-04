@@ -14,13 +14,13 @@ namespace lar {
   class Tracker {
     public:
       Vision vision;
-      Map map;
+      Map& map;
       std::vector<Landmark*> local_landmarks;
       std::vector<std::pair<Landmark*, cv::KeyPoint>> matches;
       std::vector<std::pair<Landmark*, cv::KeyPoint>> inliers;
 
-      Tracker(Map map);
-      bool localize(cv::InputArray image, const Frame &frame, double query_x, double query_z, double query_diameter, Eigen::Matrix4d &result_transform);
+      Tracker(Map& map);
+      bool localize(cv::InputArray image, const Frame &frame, double query_x, double query_z, double query_diameter, Eigen::Matrix4d &result_transform, const Eigen::Matrix4d &initial_guess = Eigen::Matrix4d(), bool use_initial_guess = false);
       bool localize(cv::InputArray image, const cv::Mat& intrinsics, cv::Mat &transform, const cv::Mat &gvec);
       bool localize(cv::InputArray image, const cv::Mat& intrinsics, const cv::Mat& dist_coeffs, cv::Mat &rvec, cv::Mat &tvec, const cv::Mat &gvec, double query_x = 0.0, double query_z = 0.0, double query_diameter = 0.0);
       

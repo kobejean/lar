@@ -11,6 +11,7 @@
 
 #include "lar/processing/colmap_refiner.h"
 #include "lar/core/utils/json.h"
+#include "lar/core/utils/transform.h"
 #include "lar/mapping/location_matcher.h"
 
 namespace lar {
@@ -104,7 +105,7 @@ namespace lar {
     for (size_t i = 0; i < localizations.size(); i ++) {
       const Frame &frame = data->frames[i];
       g2o::VertexSE3Expmap* v = dynamic_cast<g2o::VertexSE3Expmap*>(bundle_adjustment.optimizer.vertex(frame.id));
-      g2o::SE3Quat pose = BundleAdjustment::poseFromExtrinsics(localizations[i]);
+      g2o::SE3Quat pose = utils::TransformUtils::arkitToG2oPose(localizations[i]);
       v->setEstimate(pose);
     }
     bundle_adjustment.optimize();
@@ -114,7 +115,7 @@ namespace lar {
     for (size_t i = 0; i < data->frames.size(); i++) {
       g2o::VertexSE3Expmap* v = dynamic_cast<g2o::VertexSE3Expmap*>(bundle_adjustment.optimizer.vertex(i));
       if (v) {
-        optimized_poses[i] = BundleAdjustment::extrinsicsFromPose(v->estimate());
+        optimized_poses[i] = utils::TransformUtils::g2oToArkitPose(v->estimate());
       } else {
         optimized_poses[i] = data->frames[i].extrinsics; // fallback
       }
@@ -259,7 +260,7 @@ namespace lar {
     for (size_t i = 0; i < localizations.size(); i ++) {
       Frame &frame = data->frames[i];
       g2o::VertexSE3Expmap* v = dynamic_cast<g2o::VertexSE3Expmap*>(bundle_adjustment.optimizer.vertex(frame.id));
-      frame.extrinsics = BundleAdjustment::extrinsicsFromPose(v->estimate());
+      frame.extrinsics = utils::TransformUtils::g2oToArkitPose(v->estimate());
     }
     
     // Re-interpolate GPS observations using updated frame positions

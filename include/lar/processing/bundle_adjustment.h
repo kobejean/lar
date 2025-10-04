@@ -25,9 +25,6 @@ namespace lar {
       void update(double marginRatio = 0.2);
       void updateAfterRescaling(double scale_factor, double marginRatio = 0.2);
       void performRescaling(double scale_factor);
-
-      static g2o::SE3Quat poseFromExtrinsics(const Eigen::Matrix4d& extrinsics);
-      static Eigen::Matrix4d extrinsicsFromPose(const g2o::SE3Quat& pose);
     private:
       struct Stats {
         size_t total_usable_landmarks = 0;

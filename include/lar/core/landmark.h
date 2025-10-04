@@ -5,7 +5,7 @@
 #include <opencv2/features2d.hpp>
 #include "lar/core/utils/base64.h"
 #include "lar/core/utils/json.h"
-#include "lar/core/spacial/rect.h"
+#include "lar/core/spatial/rect.h"
 
 namespace lar {
 
@@ -72,42 +72,41 @@ namespace lar {
       bool isUseable() const;
 
 #endif
+      friend void to_json(nlohmann::json& j, const Landmark& l) {
+        cv::Mat desc;
+        l.desc.convertTo(desc, CV_8U);
+        std::string desc64 = base64::base64_encode(desc);
+
+        j = nlohmann::json{
+          {"id", l.id},
+          {"desc", desc64},
+          {"position", l.position},
+          {"orientation", l.orientation},
+          {"bounds", l.bounds},
+          {"sightings", l.sightings}
+        };
+      }
+
+      friend void from_json(const nlohmann::json& j, Landmark& l) {
+        const std::string& desc64 = j.at("desc").get_ref<const std::string&>();
+        l.desc = base64::base64_decode(desc64, 1, -1, CV_8U);
+
+        j.at("id").get_to(l.id);
+        j.at("position").get_to(l.position);
+        j.at("orientation").get_to(l.orientation);
+        j.at("bounds").get_to(l.bounds);
+        j.at("sightings").get_to(l.sightings);
+
+        #ifndef LAR_COMPACT_BUILD
+        // Initialize members not in JSON to default values
+        l.last_seen = -1;
+        l.is_matched = false;
+        l.obs.clear(); // Clear any existing observations
+        #endif
+      }
 
   };
 
-  static void to_json(nlohmann::json& j, const Landmark& l) {
-    cv::Mat desc;
-    l.desc.convertTo(desc, CV_8U);
-    std::string desc64 = base64::base64_encode(desc);
-
-    j = nlohmann::json{
-      {"id", l.id},
-      {"desc", desc64},
-      {"position", l.position},
-      {"orientation", l.orientation},
-      {"bounds", l.bounds},
-      {"sightings", l.sightings}
-    };
-  }
-
-  static void from_json(const nlohmann::json& j, Landmark& l) {
-    std::string desc64 = j.at("desc").get<std::string>();
-    cv::Mat desc = base64::base64_decode(desc64, 1, -1, CV_8U);
-
-    j.at("id").get_to(l.id);
-    l.desc = desc;
-    j.at("position").get_to(l.position);
-    j.at("orientation").get_to(l.orientation);
-    j.at("bounds").get_to(l.bounds);
-    j.at("sightings").get_to(l.sightings);
-       
-    #ifndef LAR_COMPACT_BUILD
-    // Initialize members not in JSON to default values
-    l.last_seen = -1;
-    l.is_matched = false;
-    l.obs.clear(); // Clear any existing observations
-    #endif
-  }
 
 }
 

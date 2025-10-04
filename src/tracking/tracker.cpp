@@ -5,7 +5,7 @@
 
 namespace lar {
 
-  Tracker::Tracker(Map map) : map(map), last_gravity_angle_difference(0.0) {
+  Tracker::Tracker(Map& map) : map(map), last_gravity_angle_difference(0.0) {
     usac_params = cv::UsacParams();
     usac_params.confidence=0.99;
     usac_params.isParallel=false;
@@ -15,10 +15,12 @@ namespace lar {
     usac_params.maxIterations=5000;
     usac_params.sampler=cv::SamplingMethod::SAMPLING_PROSAC;
     usac_params.score=cv::ScoreMethod::SCORE_METHOD_MAGSAC;
+    // usac_params.final_polisher = cv::PolishingMethod::POLISHING_MAGSAC;
+    // usac_params.final_polisher_iterations = 10;
     usac_params.threshold=8.0;
   }
 
-  bool Tracker::localize(cv::InputArray image, const Frame &frame, double query_x, double query_z, double query_diameter, Eigen::Matrix4d &result_transform) {
+  bool Tracker::localize(cv::InputArray image, const Frame &frame, double query_x, double query_z, double query_diameter, Eigen::Matrix4d &result_transform, const Eigen::Matrix4d &initial_guess, bool use_initial_guess) {
     Eigen::Matrix3f frameIntrinsics = frame.intrinsics.cast<float>().transpose(); // transpose so that the order of data matches opencv
     cv::Mat intrinsics(3, 3, CV_32FC1, frameIntrinsics.data());
 
@@ -30,7 +32,18 @@ namespace lar {
     // Convert to opencv
     cv::Mat gvec = (cv::Mat_<double>(3,1) << cameraGravity(0), -cameraGravity(1), -cameraGravity(2));
 
+    // Prepare initial guess if provided
     cv::Mat rvec, tvec;
+    if (use_initial_guess) {
+      cv::Mat initial_transform(4, 4, CV_64FC1);
+      for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) {
+          initial_transform.at<double>(i, j) = initial_guess(i, j);
+        }
+      }
+      fromTransform(initial_transform, rvec, tvec);
+    }
+
     bool success = localize(image, intrinsics, cv::Mat(), rvec, tvec, gvec, query_x, query_z, query_diameter);
     
     if (success) {
@@ -99,7 +112,8 @@ namespace lar {
       // Use spatial query with explicit parameters
       std::cout << "Spatial query: Point(" << query_x << ", " << query_z << ") diameter=" << query_diameter << std::endl;
       Rect query = Rect(Point(query_x, query_z), query_diameter, query_diameter);
-      local_landmarks = map.landmarks.find(query);
+      local_landmarks.clear();
+      map.landmarks.find(query, local_landmarks);
     }
     
     // Limit local_landmarks to prevent OpenCV crashes (max 250k landmarks)

@@ -2,72 +2,81 @@
 
 namespace lar {
 
-  LandmarkDatabase::LandmarkDatabase() : _rtree() {
+  LandmarkDatabase::LandmarkDatabase() : rtree_() {
   }
 
-  LandmarkDatabase::LandmarkDatabase(const LandmarkDatabase& other) 
-    : _rtree(other._rtree), next_id(other.next_id.load()) {
+  LandmarkDatabase::LandmarkDatabase(LandmarkDatabase&& other) noexcept {
+    std::unique_lock<std::shared_mutex> this_lock(mutex_, std::defer_lock);
+    std::unique_lock<std::shared_mutex> other_lock(other.mutex_, std::defer_lock);
+    std::lock(this_lock, other_lock);
+
+    rtree_ = std::move(other.rtree_);
+    next_id_ = other.next_id_;
   }
 
-  LandmarkDatabase& LandmarkDatabase::operator=(const LandmarkDatabase& other) {
+  LandmarkDatabase& LandmarkDatabase::operator=(LandmarkDatabase&& other) noexcept {
     if (this != &other) {
-      _rtree = other._rtree;
-      next_id.store(other.next_id.load());
+      std::unique_lock<std::shared_mutex> this_lock(mutex_, std::defer_lock);
+      std::unique_lock<std::shared_mutex> other_lock(other.mutex_, std::defer_lock);
+      std::lock(this_lock, other_lock);
+
+      rtree_ = std::move(other.rtree_);
+      next_id_ = other.next_id_;
     }
     return *this;
   }
 
   Landmark& LandmarkDatabase::operator[](size_t id) {
-    return _rtree[id];
+    std::shared_lock lock(mutex_);
+    return rtree_[id];
   }
 
-  std::vector<size_t> LandmarkDatabase::insert(std::vector<Landmark>& landmarks) {
-    std::vector<size_t> ids;
-    ids.reserve(landmarks.size());
-    
+  void LandmarkDatabase::insert(std::vector<Landmark>& landmarks, std::vector<Landmark*>* pointers) {
+    std::unique_lock lock(mutex_);
     for (Landmark& landmark : landmarks) {
-      if (landmark.id == 0) {  // Assuming 0 means unassigned
-        landmark.id = next_id.fetch_add(1);
-      }
-      ids.push_back(landmark.id);
-      _rtree.insert(landmark, landmark.bounds, landmark.id);
+      if (landmark.id == 0) landmark.id = ++next_id_; // Assuming 0 means unassigned
+      Landmark* ptr = rtree_.insert(std::move(landmark), landmark.bounds, landmark.id);
+      if (pointers) pointers->push_back(ptr);
     }
-    return ids;
   }
 
-  std::vector<Landmark*> LandmarkDatabase::find(const Rect &query) const {
-    return _rtree.find(query);
+  void LandmarkDatabase::find(const Rect &query, std::vector<Landmark*> &results, int limit) const {
+    std::shared_lock lock(mutex_);
+    rtree_.find(query, results);
+    if (limit >= 0 && results.size() > static_cast<size_t>(limit)) {
+      std::partial_sort(results.begin(), results.begin() + limit, results.end(), [](const Landmark* a, const Landmark* b) { return a->sightings > b->sightings; });
+      results.resize(limit);
+    }
   }
 
   size_t LandmarkDatabase::size() const {
-    return _rtree.size();
+    std::shared_lock lock(mutex_);
+    return rtree_.size();
   }
 
 
   std::vector<Landmark*> LandmarkDatabase::all() const {
-    return _rtree.all();
+    std::shared_lock lock(mutex_);
+    return rtree_.all();
   }
 
 // #ifndef LAR_COMPACT_BUILD
 
   void LandmarkDatabase::cull() {
-    // TODO: find better way to do this
-    std::vector<Landmark> landmarks;
-    for (Landmark* landmark : all()) {
-      landmarks.push_back(*landmark);
-    }
-    for (Landmark landmark : landmarks) {
-      if (!landmark.isUseable()) {
-        _rtree.erase(landmark.id);
+    std::unique_lock lock(mutex_);
+    // TODO: implement bulk culling in rtree
+    for (Landmark* landmark : rtree_.all()) {
+      if (!landmark->isUseable()) {
+        rtree_.erase(landmark->id);
       }
     }
   }
 
   void LandmarkDatabase::addObservation(size_t id, Landmark::Observation observation) {
-    Landmark landmark = _rtree[id];
-    _rtree.erase(id);
+    std::unique_lock lock(mutex_);
+    Landmark &landmark = rtree_[id];
     landmark.recordObservation(observation);
-    _rtree.insert(landmark, landmark.bounds, id);
+    rtree_.updateBounds(id, landmark.bounds);
   }
   
 // #endif

@@ -51,6 +51,12 @@ find_package(OpenCV 4.5.4 REQUIRED core calib3d features2d imgcodecs imgproc)
 find_package(nlohmann_json 3.11.3 REQUIRED)
 find_package(g2o 1.0.0 REQUIRED)
 
+# Add g2o library directory to linker search path
+if(g2o_DIR)
+    get_filename_component(G2O_LIB_DIR "${g2o_DIR}/../../" ABSOLUTE)
+    link_directories(${G2O_LIB_DIR})
+endif()
+
 # Find OpenGL for g2o visualization support
 if(APPLE)
     find_library(OPENGL_FRAMEWORK OpenGL REQUIRED)

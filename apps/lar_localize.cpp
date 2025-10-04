@@ -27,7 +27,7 @@ int main(int argc, const char* argv[]){
   // string localize = "./input/aizu-park-4-proc/";
   string localize = "./input/aizu-park-sunny/";
 
-  std::ifstream map_data_ifs("./output/map/map.json");
+  std::ifstream map_data_ifs("./output/aizu-park-map/map.json");
   std::cout << "parse map" << std::endl;
   nlohmann::json map_data = nlohmann::json::parse(map_data_ifs);
   lar::Map map = map_data;

@@ -39,7 +39,8 @@ namespace lar {
     auto depth_values = depth.depthAt(kpts);
     auto confidence_values = depth.confidenceAt(kpts);
     auto surface_normals = depth.surfaceNormaslAt(kpts);
-    std::vector<size_t> landmark_ids = extractLandmarks(frame, desc, kpts, depth_values);
+    local_landmarks.clear();
+    extractLandmarks(frame, desc, kpts, depth_values, local_landmarks);
 
     // Create record observations
     for (size_t i=0; i<kpts.size(); i++) {
@@ -52,12 +53,7 @@ namespace lar {
         .depth_confidence=confidence_values[i],
         .surface_normal=surface_normals[i],
       };
-      data->map.landmarks.addObservation(landmark_ids[i], obs);
-    }
-
-    local_landmarks.clear();
-    for (size_t lansmark_id : landmark_ids) {
-      local_landmarks.push_back(&data->map.landmarks[lansmark_id]);
+      data->map.landmarks.addObservation(local_landmarks[i]->id, obs);
     }
 
     frame.processed = true;
@@ -66,17 +62,23 @@ namespace lar {
   // Private methods
 
   // TODO: See if there is a better way to deal with the side effect of inserting into map.landmarks
-  std::vector<size_t> FrameProcessor::extractLandmarks(const Frame &frame, const cv::Mat &desc, const std::vector<cv::KeyPoint>& kpts, const std::vector<float>& depth) {
-    // Filter out features that have been matched
-    double query_diameter = 30.0;
-    Rect query = Rect(Point(frame.extrinsics(0,3), frame.extrinsics(2,3)), query_diameter, query_diameter);
-    std::map<size_t, size_t> matches = getMatches(desc, query);
-    Projection projection(frame.intrinsics, frame.extrinsics);
+  void FrameProcessor::extractLandmarks(const Frame &frame, const cv::Mat &desc, const std::vector<cv::KeyPoint>& kpts, const std::vector<float>& depth, std::vector<Landmark*> &results) {
+    // get local descriptors
+    static const double QUERY_DIAMETER = 30.0;
+    static const int LOCAL_LANDMARKS_LIMIT = (1 << 17);
+    Rect query_rect = Rect(Point(frame.extrinsics(0,3), frame.extrinsics(2,3)), QUERY_DIAMETER, QUERY_DIAMETER);
+    data->map.landmarks.find(query_rect, results, LOCAL_LANDMARKS_LIMIT);
+    const cv::Mat &local_desc = Landmark::concatDescriptions(results);
+    std::cout << "local_landmarks: " << results.size() << std::endl;
 
+    // get matches
+    std::map<size_t, size_t> matches = getMatches(desc, local_desc);
+    
     size_t landmark_count = kpts.size();
     std::vector<Landmark> new_landmarks;
     std::vector<size_t> landmark_ids;
     landmark_ids.reserve(landmark_count);
+    Projection projection(frame.intrinsics, frame.extrinsics);
     
     for (size_t i = 0; i < landmark_count; i++) {
       if (matches.find(i) == matches.end()) {
@@ -84,39 +86,14 @@ namespace lar {
         Eigen::Vector3d pt3d = projection.projectToWorld(kpts[i].pt, depth[i]);
         Landmark landmark(pt3d, desc.row(i), 0);
         new_landmarks.push_back(landmark);
-      } else {
-        // We have a match so just push the match index
-        landmark_ids.push_back(matches[i]);
       }
     }
-
-    // Insert new landmarks and get their assigned IDs
-    std::vector<size_t> new_ids = data->map.landmarks.insert(new_landmarks);
-    
-    // Merge new IDs with existing match IDs in the correct order
-    size_t new_id_index = 0;
-    for (size_t i = 0; i < landmark_count; i++) {
-      if (matches.find(i) == matches.end()) {
-        landmark_ids.insert(landmark_ids.begin() + i, new_ids[new_id_index++]);
-      }
-    }
-    
-    return landmark_ids;
+    data->map.landmarks.insert(new_landmarks, &results);
   }
 
-  std::map<size_t, size_t> FrameProcessor::getMatches(const cv::Mat &desc, const Rect &query) {
+  std::map<size_t, size_t> FrameProcessor::getMatches(const cv::Mat &query_desc, const cv::Mat &train_desc) {
     // Get matches
-    static const int MATCH_LIMIT = (1 << 17);
-    local_landmarks = data->map.landmarks.find(query);
-    if (local_landmarks.size() >= MATCH_LIMIT) {
-      std::partial_sort(local_landmarks.begin(), local_landmarks.begin() + MATCH_LIMIT, local_landmarks.end(), [](const Landmark* a, const Landmark* b) {
-        return a->sightings > b->sightings;
-      });
-      local_landmarks.resize(MATCH_LIMIT);
-    }
-    const cv::Mat &existing_desc = Landmark::concatDescriptions(local_landmarks);
-    std::vector<cv::DMatch> matches = vision.match(desc, existing_desc);
-    std::cout << "local_landmarks: " << local_landmarks.size() << std::endl;
+    std::vector<cv::DMatch> matches = vision.match(query_desc, train_desc);
     std::cout << "matches: " << matches.size() << std::endl;
 
     // Populate `idx_matched` map
@@ -128,9 +105,9 @@ namespace lar {
 
     // Populate unmatched descriptions
     cv::Mat unmatched_desc; // TODO: see if there's a way to reserve capacity
-    for (size_t i = 0; i < (unsigned)desc.rows; i++) {
+    for (size_t i = 0; i < (unsigned)query_desc.rows; i++) {
       if (idx_matched.find(i) == idx_matched.end()) {
-        unmatched_desc.push_back(desc.row(i));
+        unmatched_desc.push_back(query_desc.row(i));
       }
     }
 

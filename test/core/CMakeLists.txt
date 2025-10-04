@@ -7,7 +7,7 @@ set(LAR_CORE_TEST_LIBS lar_core)
 add_executable(lar_core_test ${LAR_CORE_TEST_SRCS})
 target_link_libraries(lar_core_test ${LAR_CORE_TEST_LIBS} gtest_main)
 
-add_subdirectory(spacial)
+add_subdirectory(spatial)
 add_subdirectory(utils)
 
 include(GoogleTest)

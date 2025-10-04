@@ -9,7 +9,8 @@
 using namespace std;
 
 int main(int argc, const char* argv[]){
-  string input = "./input/aizu-park-4";
+  string input = "./input/dwell-crane-202";
+  // string input = "./input/aizu-park-4";
   // string input = "./input/my-room-3";
   if (argc > 1) {
     input = argv[1];
