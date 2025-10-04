@@ -84,8 +84,7 @@ namespace lar {
       if (matches.find(i) == matches.end()) {
         // No match so create landmark with ID 0 (will be assigned by insert)
         Eigen::Vector3d pt3d = projection.projectToWorld(kpts[i].pt, depth[i]);
-        Landmark landmark(pt3d, desc.row(i), 0);
-        new_landmarks.push_back(landmark);
+        new_landmarks.emplace_back(pt3d, desc.row(i), 0);
       }
     }
     data->map.landmarks.insert(new_landmarks, &results);

@@ -48,9 +48,8 @@ void RegionTree<T>::rootInsert(std::unique_ptr<Node> node) {
 }
 
 template <typename T>
-template <typename U>
-T* RegionTree<T>::insert(U&& value, Rect bounds, size_t id) {
-  auto node = std::make_unique<LeafNode>(std::forward<U>(value), bounds, id);
+T* RegionTree<T>::insert(T&& value, Rect bounds, size_t id) {
+  auto node = std::make_unique<LeafNode>(std::move(value), bounds, id);
   LeafNode* leaf_ptr = node.get();
   leaf_map_.emplace(id, leaf_ptr);
 
@@ -115,18 +114,7 @@ std::vector<T*> RegionTree<T>::all() const {
 }
 
 // explicit instantiations
-template class RegionTree<size_t>;
 template class RegionTree<Landmark>;
-
-// Explicit instantiations for insert<U> member template
-// For size_t tree - supports literals and variables
-template size_t* RegionTree<size_t>::insert<size_t>(size_t&&, Rect, size_t);
-template size_t* RegionTree<size_t>::insert<size_t&>(size_t&, Rect, size_t);  // lvalue
-template size_t* RegionTree<size_t>::insert<int>(int&&, Rect, size_t);  // for integer literals
-
-// For Landmark tree - supports move and copy
-template Landmark* RegionTree<Landmark>::insert<Landmark>(Landmark&&, Rect, size_t);
-template Landmark* RegionTree<Landmark>::insert<Landmark&>(Landmark&, Rect, size_t);  // lvalue
-template Landmark* RegionTree<Landmark>::insert<const Landmark&>(const Landmark&, Rect, size_t);
+template class RegionTree<int>;
 
 } // namespace lar

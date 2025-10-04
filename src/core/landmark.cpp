@@ -10,6 +10,40 @@ namespace lar {
     id(id), position(position), desc(desc) {
   }
 
+  // Move constructor
+  Landmark::Landmark(Landmark&& other) noexcept
+    : id(other.id),
+      position(std::move(other.position)),
+      orientation(std::move(other.orientation)),
+      desc(std::move(other.desc)),
+      bounds(std::move(other.bounds))
+#ifndef LAR_COMPACT_BUILD
+      , sightings(other.sightings),
+      obs(std::move(other.obs)),
+      last_seen(other.last_seen),
+      is_matched(other.is_matched)
+#endif
+  {
+  }
+
+  // Move assignment operator
+  Landmark& Landmark::operator=(Landmark&& other) noexcept {
+    if (this != &other) {
+      id = other.id;
+      position = std::move(other.position);
+      orientation = std::move(other.orientation);
+      desc = std::move(other.desc);
+      bounds = std::move(other.bounds);
+#ifndef LAR_COMPACT_BUILD
+      sightings = other.sightings;
+      obs = std::move(other.obs);
+      last_seen = other.last_seen;
+      is_matched = other.is_matched;
+#endif
+    }
+    return *this;
+  }
+
   // Static Methods
 
   cv::Mat Landmark::concatDescriptions(const std::vector<Landmark*>& landmarks) {

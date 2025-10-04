@@ -35,30 +35,8 @@ void RegionTree<T>::Node::insert(std::unique_ptr<Node> node) {
 template <typename T>
 typename RegionTree<T>::Node *RegionTree<T>::Node::erase() {
   if (parent != nullptr) {
-    // Node* insert_root = nullptr;
-    Node* parent_node = parent;
-    size_t index = parent_node->findChildIndex(this);
-    // parent_node->children.erase(index);
-    // parent_node->subtractBounds(bounds);
-
-    // if (parent_node->children.size() < (MAX_CHILDREN / 2)) {
-    //   children_container siblings;
-    //   for (auto &child : parent_node->children) {
-    //     siblings.push_back(std::move(child));
-    //   }
-    //   // unlink from parent
-    //   parent_node->children.clear();
-    //   insert_root = parent_node->erase();
-    //   for (auto &sibling : siblings) {
-    //     insert_root->insert(std::move(sibling));
-    //   }
-    // } else {
-    //   insert_root = parent_node;
-    // }
-    return parent_node->removeChild(index);
+    return parent->removeChild(parent->findChildIndex(this));
   } else {
-    // we will not delete the root
-    // we will just return the root as the insert root
     return this;
   }
 }
@@ -233,7 +211,7 @@ void RegionTree<T>::Node::subtractBounds(const Rect &bounds) {
 }
 
 template <typename T>
-RegionTree<T>::LeafNode::LeafNode(T value, Rect bounds, size_t id) : Node(0), id(id), value(value) {
+RegionTree<T>::LeafNode::LeafNode(T&& value, Rect bounds, size_t id) : Node(0), id(id), value(std::move(value)) {
   this->bounds = bounds;
   this->height = 0;
 };

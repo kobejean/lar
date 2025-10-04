@@ -43,8 +43,7 @@ namespace lar {
       T& operator[](size_t id);
 
       // Returns pointer to inserted value. Pointer remains valid until erase().
-      template<typename U>
-      T* insert(U&& value, Rect bounds, size_t id);
+      T* insert(T&& value, Rect bounds, size_t id);
 
       void erase(size_t id);
 

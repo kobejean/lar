@@ -127,13 +127,11 @@ namespace lar {
       }
 
       // Create complete landmark
-      Landmark landmark(position, descriptor, point3d_id);
-      landmark.orientation = Eigen::Vector3f(0.0f, 0.0f, 1.0f); // Default orientation like Python script
-      landmark.updateBounds(observing_camera_positions);
-      landmark.sightings = observations.size();
-      landmark.obs = observations;
-
-      landmarks.push_back(landmark);
+      landmarks.emplace_back(position, descriptor, point3d_id);
+      landmarks.back().orientation = Eigen::Vector3f(0.0f, 0.0f, 1.0f);
+      landmarks.back().updateBounds(observing_camera_positions);
+      landmarks.back().sightings = observations.size();
+      landmarks.back().obs = std::move(observations);
       landmarks_created++;
       if (landmarks_created % 10000 == 0) {
         std::cout << "landmarks_created: " << landmarks_created << std::endl;

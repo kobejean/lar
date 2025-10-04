@@ -31,16 +31,11 @@ namespace lar {
 // #endif
 
       friend void to_json(nlohmann::json& j, const LandmarkDatabase& l) {
-        std::vector<Landmark> landmarks;
-        for (Landmark* landmark : l.all()) {
-          landmarks.push_back(*landmark);
-        }
-
         // TODO: use hilbert curve ordering to improve bulk insert performance
-        std::sort(landmarks.begin(), landmarks.end(), [](const Landmark& a, const Landmark& b) {
-          return a.id < b.id;
-        });
-        j = landmarks;
+        j = nlohmann::json::array();
+        for (Landmark* landmark : l.all()) {
+          j.push_back(*landmark);
+        }
       }
 
       friend void from_json(const nlohmann::json& j, LandmarkDatabase& l) {
