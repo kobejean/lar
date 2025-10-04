@@ -58,45 +58,56 @@ namespace lar {
       return ret;
     }
 
-    static std::vector<uchar> base64_decode(std::string const& encoded_string) {
+    // Decode into provided buffer, returns number of bytes written
+    // buffer_size: maximum bytes that can be written (0 = no limit, unsafe!)
+    static size_t base64_decode(std::string const& encoded_string, uchar* output_buffer, size_t buffer_size = 0) {
       int in_len = static_cast<int>(encoded_string.size());
       int i = 0;
       int j = 0;
       int in_ = 0;
       uchar char_array_4[4], char_array_3[3];
-      std::vector<uchar> ret;
+      size_t out_pos = 0;
 
-      while (in_len-- && ( encoded_string[in_] != '=') && is_base64(encoded_string[in_])) {
+      while (in_len-- && (encoded_string[in_] != '=') && is_base64(encoded_string[in_])) {
         char_array_4[i++] = encoded_string[in_]; in_++;
-        if (i ==4) {
-          for (i = 0; i <4; i++)
-            char_array_4[i] = base64_chars.find(char_array_4[i]);
+        if (i == 4) {
+          for (i = 0; i < 4; i++)
+            char_array_4[i] = static_cast<uchar>(base64_chars.find(char_array_4[i]));
 
           char_array_3[0] = (char_array_4[0] << 2) + ((char_array_4[1] & 0x30) >> 4);
           char_array_3[1] = ((char_array_4[1] & 0xf) << 4) + ((char_array_4[2] & 0x3c) >> 2);
           char_array_3[2] = ((char_array_4[2] & 0x3) << 6) + char_array_4[3];
 
-          for (i = 0; (i < 3); i++)
-              ret.push_back(char_array_3[i]);
+          for (i = 0; (i < 3); i++) {
+            if (buffer_size > 0 && out_pos >= buffer_size) {
+              throw std::runtime_error("Base64 decode buffer overflow: decoded data exceeds buffer size");
+            }
+            output_buffer[out_pos++] = char_array_3[i];
+          }
           i = 0;
         }
       }
 
       if (i) {
-        for (j = i; j <4; j++)
+        for (j = i; j < 4; j++)
           char_array_4[j] = 0;
 
-        for (j = 0; j <4; j++)
-          char_array_4[j] = base64_chars.find(char_array_4[j]);
+        for (j = 0; j < 4; j++)
+          char_array_4[j] = static_cast<uchar>(base64_chars.find(char_array_4[j]));
 
         char_array_3[0] = (char_array_4[0] << 2) + ((char_array_4[1] & 0x30) >> 4);
         char_array_3[1] = ((char_array_4[1] & 0xf) << 4) + ((char_array_4[2] & 0x3c) >> 2);
         char_array_3[2] = ((char_array_4[2] & 0x3) << 6) + char_array_4[3];
 
-        for (j = 0; (j < i - 1); j++) ret.push_back(char_array_3[j]);
+        for (j = 0; (j < i - 1); j++) {
+          if (buffer_size > 0 && out_pos >= buffer_size) {
+            throw std::runtime_error("Base64 decode buffer overflow: decoded data exceeds buffer size");
+          }
+          output_buffer[out_pos++] = char_array_3[j];
+        }
       }
 
-      return ret;
+      return out_pos;
     }
 
     static std::string base64_encode(const cv::Mat& mat) {
@@ -111,13 +122,18 @@ namespace lar {
     }
 
     static cv::Mat base64_decode(std::string const& encoded_string, int rows, int cols, int type) {
-      std::vector<uchar> data = base64_decode(encoded_string);
-      if (cols <= 0) {
-        // TODO: surely there is a better way to get the element size
-        int elemSize = cv::Mat(1, 1, type).elemSize();
-        cols = data.size() / rows / elemSize;
+      cv::Mat mat(rows, cols, type);
+      size_t expected_bytes = mat.total() * mat.elemSize();
+      size_t decoded_bytes = base64_decode(encoded_string, mat.data, expected_bytes);
+
+      if (decoded_bytes != expected_bytes) {
+        throw std::runtime_error(
+          "Base64 decode size mismatch: expected " + std::to_string(expected_bytes) +
+          " bytes but decoded " + std::to_string(decoded_bytes) + " bytes"
+        );
       }
-      return cv::Mat(rows, cols, type, &data[0]).clone();
+
+      return mat;
     }
 
   }

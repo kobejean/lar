@@ -6,7 +6,7 @@ using namespace lar;
 TEST(RegionTreeTest, Print) {
   // Given
   std::ostringstream output;
-  RegionTree<size_t> tree;
+  RegionTree<int> tree;
   tree.insert(1, Rect(1, 2, 3, 4), 1);
   // When
   tree.print(output);
@@ -19,7 +19,7 @@ TEST(RegionTreeTest, Print) {
 TEST(RegionTreeTest, Insert) {
   // Given
   std::ostringstream output;
-  RegionTree<size_t> tree;
+  RegionTree<int> tree;
   // When
   tree.insert(1, lar::Rect(12, 4, 24, 15), 1);
   tree.insert(2, lar::Rect(23, 24, 26, 26), 2);
@@ -43,7 +43,7 @@ TEST(RegionTreeTest, Insert) {
 TEST(RegionTreeTest, Erase) {
   // Given
   std::ostringstream output;
-  RegionTree<size_t> tree;
+  RegionTree<int> tree;
   // When
   tree.insert(1, lar::Rect(12, 4, 24, 15), 1);
   tree.insert(2, lar::Rect(23, 24, 26, 26), 2);
@@ -68,7 +68,7 @@ TEST(RegionTreeTest, Erase) {
 TEST(RegionTreeTest, Find) {
   // Given
   std::ostringstream output;
-  RegionTree<size_t> tree;
+  RegionTree<int> tree;
   // When
   tree.insert(1, lar::Rect(12, 4, 24, 15), 1);
   tree.insert(2, lar::Rect(23, 24, 26, 26), 2);
@@ -78,21 +78,21 @@ TEST(RegionTreeTest, Find) {
   tree.insert(6, lar::Rect(9, 14, 13, 18), 6);
   tree.insert(7, lar::Rect(5, 19, 8, 23), 7);
   tree.insert(8, lar::Rect(20, 14, 26, 22), 8);
-  std::vector<size_t*> result;
+  std::vector<int*> result;
   tree.find(Rect(1, 1, 24, 15), result);
   // Then
-  EXPECT_EQ(std::count_if(result.begin(), result.end(), [](size_t* p) { return *p == 1; }), 1);
-  EXPECT_EQ(std::count_if(result.begin(), result.end(), [](size_t* p) { return *p == 5; }), 1);
-  EXPECT_EQ(std::count_if(result.begin(), result.end(), [](size_t* p) { return *p == 6; }), 1);
-  EXPECT_EQ(std::count_if(result.begin(), result.end(), [](size_t* p) { return *p == 8; }), 1);
+  EXPECT_EQ(std::count_if(result.begin(), result.end(), [](int* p) { return *p == 1; }), 1);
+  EXPECT_EQ(std::count_if(result.begin(), result.end(), [](int* p) { return *p == 5; }), 1);
+  EXPECT_EQ(std::count_if(result.begin(), result.end(), [](int* p) { return *p == 6; }), 1);
+  EXPECT_EQ(std::count_if(result.begin(), result.end(), [](int* p) { return *p == 8; }), 1);
 }
 
 TEST(RegionTreeTest, UpdateBoundsPreservesPointers) {
   // Given
-  RegionTree<size_t> tree;
-  size_t* ptr1 = tree.insert(100, Rect(10, 10, 20, 20), 1);
-  size_t* ptr2 = tree.insert(200, Rect(30, 30, 40, 40), 2);
-  size_t* ptr3 = tree.insert(300, Rect(50, 50, 60, 60), 3);
+  RegionTree<int> tree;
+  int* ptr1 = tree.insert(100, Rect(10, 10, 20, 20), 1);
+  int* ptr2 = tree.insert(200, Rect(30, 30, 40, 40), 2);
+  int* ptr3 = tree.insert(300, Rect(50, 50, 60, 60), 3);
 
   // When - update bounds to trigger tree reorganization
   tree.updateBounds(1, Rect(100, 100, 110, 110)); // Move far away
@@ -104,15 +104,15 @@ TEST(RegionTreeTest, UpdateBoundsPreservesPointers) {
   EXPECT_EQ(*ptr3, 300) << "Pointer to item 3 should still be valid";
 
   // Verify we can still find items in new locations
-  std::vector<size_t*> result;
+  std::vector<int*> result;
   tree.find(Rect(95, 95, 115, 115), result);
-  EXPECT_EQ(std::count_if(result.begin(), result.end(), [](size_t* p) { return *p == 100; }), 1);
+  EXPECT_EQ(std::count_if(result.begin(), result.end(), [](int* p) { return *p == 100; }), 1);
 }
 
 TEST(RegionTreeTest, UpdateBoundsOnce) {
   // Given
-  RegionTree<size_t> tree;
-  size_t* ptr = tree.insert(42, Rect(0, 0, 10, 10), 1);
+  RegionTree<int> tree;
+  int* ptr = tree.insert(42, Rect(0, 0, 10, 10), 1);
 
   // When - update bounds once
   tree.updateBounds(1, Rect(20, 20, 30, 30));
@@ -123,8 +123,8 @@ TEST(RegionTreeTest, UpdateBoundsOnce) {
 
 TEST(RegionTreeTest, UpdateBoundsMultipleTimes) {
   // Given
-  RegionTree<size_t> tree;
-  size_t* ptr = tree.insert(42, Rect(0, 0, 10, 10), 1);
+  RegionTree<int> tree;
+  int* ptr = tree.insert(42, Rect(0, 0, 10, 10), 1);
 
   // When - update bounds multiple times
   tree.updateBounds(1, Rect(20, 20, 30, 30));
@@ -137,7 +137,7 @@ TEST(RegionTreeTest, UpdateBoundsMultipleTimes) {
   EXPECT_EQ(*ptr, 42) << "Pointer should remain valid after third update";
 
   // Then - verify final location
-  std::vector<size_t*> result;
+  std::vector<int*> result;
   tree.find(Rect(55, 55, 75, 75), result);
   EXPECT_EQ(result.size(), 1);
   EXPECT_EQ(*result[0], 42);
@@ -146,26 +146,26 @@ TEST(RegionTreeTest, UpdateBoundsMultipleTimes) {
 // ============================================================================
 // Comprehensive Underflow/Overflow Tests
 // ============================================================================
-// Note: MAX_CHILDREN = 4 for RegionTree<size_t>
+// Note: MAX_CHILDREN = 4 for RegionTree<int>
 // Underflow: < 2 children, Overflow: > 4 children
 
 TEST(RegionTreeTest, CascadingUnderflow) {
   // Given - Build tree with 3 levels
   // Root -> 2 internal nodes -> 4 leaves each
-  RegionTree<size_t> tree;
+  RegionTree<int> tree;
 
   // Insert 8 items to create multi-level tree
   // Group 1: ids 1-4 in region (0-50, 0-50)
-  size_t* ptr1 = tree.insert(1, Rect(0, 0, 10, 10), 1);
-  size_t* ptr2 = tree.insert(2, Rect(10, 10, 20, 20), 2);
-  size_t* ptr3 = tree.insert(3, Rect(20, 20, 30, 30), 3);
-  size_t* ptr4 = tree.insert(4, Rect(30, 30, 40, 40), 4);
+  int* ptr1 = tree.insert(1, Rect(0, 0, 10, 10), 1);
+  int* ptr2 = tree.insert(2, Rect(10, 10, 20, 20), 2);
+  int* ptr3 = tree.insert(3, Rect(20, 20, 30, 30), 3);
+  int* ptr4 = tree.insert(4, Rect(30, 30, 40, 40), 4);
 
   // Group 2: ids 5-8 in region (100-150, 100-150)
-  size_t* ptr5 = tree.insert(5, Rect(100, 100, 110, 110), 5);
-  size_t* ptr6 = tree.insert(6, Rect(110, 110, 120, 120), 6);
-  size_t* ptr7 = tree.insert(7, Rect(120, 120, 130, 130), 7);
-  size_t* ptr8 = tree.insert(8, Rect(130, 130, 140, 140), 8);
+  int* ptr5 = tree.insert(5, Rect(100, 100, 110, 110), 5);
+  int* ptr6 = tree.insert(6, Rect(110, 110, 120, 120), 6);
+  int* ptr7 = tree.insert(7, Rect(120, 120, 130, 130), 7);
+  int* ptr8 = tree.insert(8, Rect(130, 130, 140, 140), 8);
 
   // When - Erase items to trigger cascading underflow
   tree.erase(1);
@@ -183,11 +183,11 @@ TEST(RegionTreeTest, CascadingUnderflow) {
 
 TEST(RegionTreeTest, UnderflowPropagationToRoot) {
   // Given - Create minimal tree that will underflow all the way to root
-  RegionTree<size_t> tree;
+  RegionTree<int> tree;
 
-  size_t* ptr1 = tree.insert(1, Rect(0, 0, 10, 10), 1);
-  size_t* ptr2 = tree.insert(2, Rect(20, 20, 30, 30), 2);
-  size_t* ptr3 = tree.insert(3, Rect(40, 40, 50, 50), 3);
+  int* ptr1 = tree.insert(1, Rect(0, 0, 10, 10), 1);
+  int* ptr2 = tree.insert(2, Rect(20, 20, 30, 30), 2);
+  int* ptr3 = tree.insert(3, Rect(40, 40, 50, 50), 3);
 
   // When - Erase to trigger underflow
   tree.erase(2);
@@ -197,20 +197,20 @@ TEST(RegionTreeTest, UnderflowPropagationToRoot) {
   EXPECT_EQ(*ptr3, 3);
   EXPECT_EQ(tree.size(), 2);
 
-  std::vector<size_t*> result;
+  std::vector<int*> result;
   tree.find(Rect(0, 0, 50, 50), result);
   EXPECT_EQ(result.size(), 2);
 }
 
 TEST(RegionTreeTest, UpdateBoundsDuringUnderflow) {
   // Given - Tree with items that will trigger underflow
-  RegionTree<size_t> tree;
+  RegionTree<int> tree;
 
-  size_t* ptr1 = tree.insert(1, Rect(0, 0, 10, 10), 1);
-  size_t* ptr2 = tree.insert(2, Rect(10, 10, 20, 20), 2);
-  size_t* ptr3 = tree.insert(3, Rect(20, 20, 30, 30), 3);
-  size_t* ptr4 = tree.insert(4, Rect(30, 30, 40, 40), 4);
-  size_t* ptr5 = tree.insert(5, Rect(40, 40, 50, 50), 5);
+  int* ptr1 = tree.insert(1, Rect(0, 0, 10, 10), 1);
+  int* ptr2 = tree.insert(2, Rect(10, 10, 20, 20), 2);
+  int* ptr3 = tree.insert(3, Rect(20, 20, 30, 30), 3);
+  int* ptr4 = tree.insert(4, Rect(30, 30, 40, 40), 4);
+  int* ptr5 = tree.insert(5, Rect(40, 40, 50, 50), 5);
 
   // When - Erase to cause underflow, then update bounds
   tree.erase(2);
@@ -222,20 +222,20 @@ TEST(RegionTreeTest, UpdateBoundsDuringUnderflow) {
   EXPECT_EQ(*ptr4, 4);
   EXPECT_EQ(*ptr5, 5);
 
-  std::vector<size_t*> result;
+  std::vector<int*> result;
   tree.find(Rect(95, 95, 115, 115), result);
-  EXPECT_EQ(std::count_if(result.begin(), result.end(), [](size_t* p) { return *p == 1; }), 1);
+  EXPECT_EQ(std::count_if(result.begin(), result.end(), [](int* p) { return *p == 1; }), 1);
 }
 
 TEST(RegionTreeTest, AlternatingInsertErase) {
   // Given - Empty tree
-  RegionTree<size_t> tree;
-  std::vector<size_t*> pointers;
+  RegionTree<int> tree;
+  std::vector<int*> pointers;
 
   // When - Alternate insert and erase to stress tree rebalancing
   for (int i = 0; i < 20; i++) {
-    size_t id = i + 1;
-    size_t* ptr = tree.insert(id, Rect(i * 10, i * 10, i * 10 + 5, i * 10 + 5), id);
+    int id = i + 1;
+    int* ptr = tree.insert(std::move(id), Rect(i * 10, i * 10, i * 10 + 5, i * 10 + 5), id);
     pointers.push_back(ptr);
 
     if (i % 3 == 0 && i > 0) {
@@ -244,7 +244,7 @@ TEST(RegionTreeTest, AlternatingInsertErase) {
   }
 
   // Then - Remaining pointers should be valid
-  for (size_t* ptr : pointers) {
+  for (int* ptr : pointers) {
     if (ptr != nullptr) {
       EXPECT_GT(*ptr, 0);
       EXPECT_LE(*ptr, 20);
@@ -254,13 +254,13 @@ TEST(RegionTreeTest, AlternatingInsertErase) {
 
 TEST(RegionTreeTest, UpdateBoundsWithComplexRebalancing) {
   // Given - Build complex tree
-  RegionTree<size_t> tree;
-  std::vector<size_t*> pointers;
+  RegionTree<int> tree;
+  std::vector<int*> pointers;
 
   // Insert 12 items to create multi-level tree
   for (int i = 0; i < 12; i++) {
-    size_t id = i + 1;
-    size_t* ptr = tree.insert(id, Rect(i * 5, i * 5, i * 5 + 3, i * 5 + 3), id);
+    int id = i + 1;
+    int* ptr = tree.insert(std::move(id), Rect(i * 5, i * 5, i * 5 + 3, i * 5 + 3), id);
     pointers.push_back(ptr);
   }
 
@@ -270,7 +270,7 @@ TEST(RegionTreeTest, UpdateBoundsWithComplexRebalancing) {
   tree.updateBounds(9, Rect(220, 220, 223, 223));
 
   // Then - All original pointers still valid
-  for (size_t i = 0; i < pointers.size(); i++) {
+  for (int i = 0; i < pointers.size(); i++) {
     EXPECT_EQ(*pointers[i], i + 1) << "Pointer " << i << " should still be valid";
   }
   EXPECT_EQ(tree.size(), 12);
@@ -278,13 +278,13 @@ TEST(RegionTreeTest, UpdateBoundsWithComplexRebalancing) {
 
 TEST(RegionTreeTest, StressTestMassiveRebalancing) {
   // Given - Large tree
-  RegionTree<size_t> tree;
-  std::map<size_t, size_t*> id_to_ptr;
+  RegionTree<int> tree;
+  std::map<int, int*> id_to_ptr;
 
   // Insert many items
   for (int i = 0; i < 50; i++) {
-    size_t id = i + 1;
-    size_t* ptr = tree.insert(id, Rect(i * 2, i * 2, i * 2 + 1, i * 2 + 1), id);
+    int id = i + 1;
+    int* ptr = tree.insert(std::move(id), Rect(i * 2, i * 2, i * 2 + 1, i * 2 + 1), id);
     id_to_ptr[id] = ptr;
   }
 
@@ -303,13 +303,13 @@ TEST(RegionTreeTest, StressTestMassiveRebalancing) {
 
 TEST(RegionTreeTest, PointerStabilityThroughComplexOperations) {
   // Given
-  RegionTree<size_t> tree;
+  RegionTree<int> tree;
 
-  size_t* p1 = tree.insert(100, Rect(0, 0, 5, 5), 1);
-  size_t* p2 = tree.insert(200, Rect(10, 10, 15, 15), 2);
-  size_t* p3 = tree.insert(300, Rect(20, 20, 25, 25), 3);
-  size_t* p4 = tree.insert(400, Rect(30, 30, 35, 35), 4);
-  size_t* p5 = tree.insert(500, Rect(40, 40, 45, 45), 5);
+  int* p1 = tree.insert(100, Rect(0, 0, 5, 5), 1);
+  int* p2 = tree.insert(200, Rect(10, 10, 15, 15), 2);
+  int* p3 = tree.insert(300, Rect(20, 20, 25, 25), 3);
+  int* p4 = tree.insert(400, Rect(30, 30, 35, 35), 4);
+  int* p5 = tree.insert(500, Rect(40, 40, 45, 45), 5);
 
   // When - Complex sequence of operations
   tree.updateBounds(1, Rect(100, 100, 105, 105)); // Move
@@ -324,17 +324,17 @@ TEST(RegionTreeTest, PointerStabilityThroughComplexOperations) {
   EXPECT_EQ(*p5, 500);
 
   // Verify values are findable
-  std::vector<size_t*> result;
+  std::vector<int*> result;
   tree.find(Rect(0, 0, 200, 200), result);
   EXPECT_GE(result.size(), 1);
 }
 
 TEST(RegionTreeTest, UpdateBoundsWithOverflow) {
   // Given - Build tree with 8 items (MAX_CHILDREN=4, so this creates splits)
-  RegionTree<size_t> tree;
-  std::vector<size_t*> ptrs;
+  RegionTree<int> tree;
+  std::vector<int*> ptrs;
 
-  for (size_t i = 1; i <= 8; i++) {
+  for (int i = 1; i <= 8; i++) {
     ptrs.push_back(tree.insert(i * 100, Rect(i*10, i*10, i*10+5, i*10+5), i));
   }
 
@@ -343,7 +343,7 @@ TEST(RegionTreeTest, UpdateBoundsWithOverflow) {
   tree.updateBounds(5, Rect(50, 50, 55, 55));     // Move to middle
 
   // Then - All pointers should remain valid
-  for (size_t i = 0; i < 8; i++) {
+  for (int i = 0; i < 8; i++) {
     EXPECT_EQ(*ptrs[i], (i+1) * 100) << "Pointer " << i << " should remain valid";
   }
 
@@ -354,12 +354,12 @@ TEST(RegionTreeTest, UpdateBoundsWithOverflow) {
 TEST(RegionTreeTest, UpdateBoundsTriggersUnderflow) {
   // Given - Build tree with exactly 5 items to create specific structure
   // (With MAX_CHILDREN=4, this forces one split)
-  RegionTree<size_t> tree;
-  size_t* ptr1 = tree.insert(100, Rect(0, 0, 10, 10), 1);
-  size_t* ptr2 = tree.insert(200, Rect(20, 0, 30, 10), 2);
-  size_t* ptr3 = tree.insert(300, Rect(40, 0, 50, 10), 3);
-  size_t* ptr4 = tree.insert(400, Rect(60, 0, 70, 10), 4);
-  size_t* ptr5 = tree.insert(500, Rect(80, 0, 90, 10), 5);
+  RegionTree<int> tree;
+  int* ptr1 = tree.insert(100, Rect(0, 0, 10, 10), 1);
+  int* ptr2 = tree.insert(200, Rect(20, 0, 30, 10), 2);
+  int* ptr3 = tree.insert(300, Rect(40, 0, 50, 10), 3);
+  int* ptr4 = tree.insert(400, Rect(60, 0, 70, 10), 4);
+  int* ptr5 = tree.insert(500, Rect(80, 0, 90, 10), 5);
 
   // When - Erase some to get close to underflow, then updateBounds
   tree.erase(4);
@@ -380,7 +380,7 @@ TEST(RegionTreeTest, UpdateBoundsTriggersUnderflow) {
 
 TEST(RegionTreeTest, MoveConstructorTransfersOwnership) {
   // Given - Tree with data
-  RegionTree<size_t> tree1;
+  RegionTree<int> tree1;
   tree1.insert(42, Rect(0, 0, 1, 1), 1);
   tree1.insert(99, Rect(2, 2, 3, 3), 2);
 
@@ -388,7 +388,7 @@ TEST(RegionTreeTest, MoveConstructorTransfersOwnership) {
   EXPECT_EQ(tree1[1], 42);
 
   // When - Move construct tree2 from tree1
-  RegionTree<size_t> tree2(std::move(tree1));
+  RegionTree<int> tree2(std::move(tree1));
 
   // Then - tree2 should have the data
   EXPECT_EQ(tree2.size(), 2);
@@ -401,11 +401,11 @@ TEST(RegionTreeTest, MoveConstructorTransfersOwnership) {
 
 TEST(RegionTreeTest, MoveAssignmentTransfersOwnership) {
   // Given - Two trees
-  RegionTree<size_t> tree1;
+  RegionTree<int> tree1;
   tree1.insert(42, Rect(0, 0, 1, 1), 1);
   tree1.insert(99, Rect(2, 2, 3, 3), 2);
 
-  RegionTree<size_t> tree2;
+  RegionTree<int> tree2;
   tree2.insert(100, Rect(5, 5, 6, 6), 10);
 
   EXPECT_EQ(tree1.size(), 2);
@@ -425,11 +425,11 @@ TEST(RegionTreeTest, MoveAssignmentTransfersOwnership) {
 
 TEST(RegionTreeTest, MovedFromTreeState) {
   // Given - Tree with data
-  RegionTree<size_t> tree1;
+  RegionTree<int> tree1;
   tree1.insert(42, Rect(0, 0, 1, 1), 1);
 
   // When - Move construct tree2 from tree1
-  RegionTree<size_t> tree2(std::move(tree1));
+  RegionTree<int> tree2(std::move(tree1));
 
   // Then - tree2 has the data, tree1 is in valid but unspecified state
   EXPECT_EQ(tree2.size(), 1);
@@ -451,7 +451,7 @@ TEST(RegionTreeTest, RootNeverBecomesLeaf) {
   // The concern: After certain erase operations, root might become a leaf node
 
   // Given - Tree that will trigger root replacement
-  RegionTree<size_t> tree;
+  RegionTree<int> tree;
 
   // Insert items to create a 3-level tree
   // Root (height=2) -> Internal nodes (height=1) -> Leaves (height=0)

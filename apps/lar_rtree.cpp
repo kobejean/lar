@@ -7,7 +7,7 @@ using namespace std;
 
 
 int main(int argc, const char* argv[]){
-  lar::RegionTree<size_t> tree;
+  lar::RegionTree<int> tree;
 
   tree.insert(1, lar::Rect(12, 4, 24, 15), 1);
   tree.print(std::cout);
@@ -62,14 +62,14 @@ int main(int argc, const char* argv[]){
   std::cout << "node17 inserted #17\n";
   
 
-  size_t n = 25;
-  for (size_t i = 18; i < n; i++) {
-    tree.insert(i, lar::Rect(i, i, i+1, i+1), i);
+  int n = 25;
+  for (int i = 18; i < n; i++) {
+    tree.insert(std::move(i), lar::Rect(i, i, i+1, i+1), i);
     tree.print(std::cout);
     std::cout << "node" << i << " inserted #" << i << '\n';
   }
 
-  for (size_t i = 1; i < n; i++) {
+  for (int i = 1; i < n; i++) {
     tree.erase(i);
     tree.print(std::cout);
     std::cout << "node" << i << " removed #" << i << '\n';

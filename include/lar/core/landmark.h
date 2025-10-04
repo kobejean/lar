@@ -20,6 +20,12 @@ namespace lar {
       Landmark();
       Landmark(const Eigen::Vector3d& position, const cv::Mat& desc, size_t id);
 
+      Landmark(Landmark&& other) noexcept;
+      Landmark& operator=(Landmark&& other) noexcept;
+
+      Landmark(const Landmark& other) = delete;
+      Landmark& operator=(const Landmark& other) = delete;
+
       static cv::Mat concatDescriptions(const std::vector<Landmark*>& landmarks);
       
       /**
@@ -89,7 +95,7 @@ namespace lar {
 
       friend void from_json(const nlohmann::json& j, Landmark& l) {
         const std::string& desc64 = j.at("desc").get_ref<const std::string&>();
-        l.desc = base64::base64_decode(desc64, 1, -1, CV_8U);
+        l.desc = base64::base64_decode(desc64, 1, 128, CV_8U);
 
         j.at("id").get_to(l.id);
         j.at("position").get_to(l.position);

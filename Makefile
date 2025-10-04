@@ -23,7 +23,11 @@ all: CMAKE_ARGS = -DCMAKE_BUILD_TYPE=Release
 all: configure
 	$(MAKE) $(QUIET) -C build
 
-compact: CMAKE_ARGS = -DLAR_COMPACT_BUILD=ON -DCMAKE_BUILD_TYPE=Release
+compact: CMAKE_ARGS = -DCMAKE_BUILD_TYPE=Release \
+                      -DCMAKE_CXX_FLAGS="-Oz -flto=thin -ffunction-sections -fdata-sections -fvisibility=hidden -fvisibility-inlines-hidden" \
+                      -DCMAKE_C_FLAGS="-Oz -flto=thin -ffunction-sections -fdata-sections -fvisibility=hidden" \
+                      -DCMAKE_EXE_LINKER_FLAGS="-Wl,-dead_strip -Wl,-S -flto=thin" \
+                      -DCMAKE_SHARED_LINKER_FLAGS="-Wl,-dead_strip -Wl,-S -flto=thin"
 compact: configure
 	$(MAKE) $(QUIET) -C build -j 8
 

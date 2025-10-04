@@ -58,7 +58,7 @@ class RegionTree<T>::LeafNode : public Node {
   public:
     size_t id;
     T value;
-    LeafNode(T value, Rect bounds, size_t id);
+    LeafNode(T&& value, Rect bounds, size_t id);
 };
 
 } // namespace lar
