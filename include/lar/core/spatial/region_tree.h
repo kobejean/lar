@@ -1,12 +1,12 @@
-#ifndef LAR_CORE_SPACIAL_REGION_TREE_H
-#define LAR_CORE_SPACIAL_REGION_TREE_H
+#ifndef LAR_CORE_SPATIAL_REGION_TREE_H
+#define LAR_CORE_SPATIAL_REGION_TREE_H
 
 #include <vector>
 #include <unordered_map>
 #include <memory>
 #include <iostream>
 #include <functional>
-#include "lar/core/spacial/rect.h"
+#include "lar/core/spatial/rect.h"
 
 namespace lar {
 
@@ -54,4 +54,4 @@ namespace lar {
 
 }
 
-#endif /* LAR_CORE_SPACIAL_REGION_TREE_H */
+#endif /* LAR_CORE_SPATIAL_REGION_TREE_H */

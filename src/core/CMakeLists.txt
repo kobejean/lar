@@ -25,4 +25,4 @@ target_link_libraries(lar_core
 )
 
 add_subdirectory(data_structures)
-add_subdirectory(spacial)
+add_subdirectory(spatial)

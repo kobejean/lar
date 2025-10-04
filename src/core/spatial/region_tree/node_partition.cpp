@@ -3,7 +3,7 @@
 #include <array>
 #include <vector>
 #include <cassert>
-#include "lar/core/spacial/region_tree.h"
+#include "lar/core/spatial/region_tree.h"
 #include "lar/core/landmark.h"
 
 #include "node_partition.h"

@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "lar/core/spacial/region_tree.h"
+#include "lar/core/spatial/region_tree.h"
 
 using namespace lar;
 

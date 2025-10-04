@@ -1,5 +1,5 @@
-#ifndef LAR_CORE_SPACIAL_POINT_H
-#define LAR_CORE_SPACIAL_POINT_H
+#ifndef LAR_CORE_SPATIAL_POINT_H
+#define LAR_CORE_SPATIAL_POINT_H
 
 #include <nlohmann/json.hpp>
 #include <iostream>
@@ -20,4 +20,4 @@ namespace lar {
 
 }
 
-#endif /* LAR_CORE_SPACIAL_POINT_H */
+#endif /* LAR_CORE_SPATIAL_POINT_H */

@@ -1,5 +1,5 @@
 #include <iostream>
-#include "lar/core/spacial/rect.h"
+#include "lar/core/spatial/rect.h"
 
 namespace lar {
 

@@ -1,12 +1,12 @@
-#ifndef LAR_CORE_SPACIAL_REGION_TREE__NODE_H
-#define LAR_CORE_SPACIAL_REGION_TREE__NODE_H
+#ifndef LAR_CORE_SPATIAL_REGION_TREE__NODE_H
+#define LAR_CORE_SPATIAL_REGION_TREE__NODE_H
 
 #include <iostream>
 #include <algorithm>
 #include <memory>
 #include <vector>
 #include "lar/core/data_structures/unordered_array.h"
-#include "lar/core/spacial/region_tree.h"
+#include "lar/core/spatial/region_tree.h"
 #include "lar/core/landmark.h"
 
 #include "node_traits.h"
@@ -64,4 +64,4 @@ class RegionTree<T>::LeafNode : public Node {
 } // namespace lar
 
 
-#endif /* LAR_CORE_SPACIAL_REGION_TREE__NODE_H */
+#endif /* LAR_CORE_SPATIAL_REGION_TREE__NODE_H */

@@ -1,7 +1,7 @@
 #include <stdint.h>
 
 #include <iostream>
-#include "lar/core/spacial/region_tree.h"
+#include "lar/core/spatial/region_tree.h"
 
 using namespace std;
 

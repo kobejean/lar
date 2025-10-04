@@ -5,7 +5,7 @@
 #include <opencv2/features2d.hpp>
 #include "lar/core/utils/base64.h"
 #include "lar/core/utils/json.h"
-#include "lar/core/spacial/rect.h"
+#include "lar/core/spatial/rect.h"
 
 namespace lar {
 

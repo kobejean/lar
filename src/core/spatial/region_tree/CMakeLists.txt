@@ -1,5 +1,5 @@
 set(HEADER_LIST
-  "${PROJECT_SOURCE_DIR}/include/lar/core/spacial/region_tree.h"
+  "${PROJECT_SOURCE_DIR}/include/lar/core/spatial/region_tree.h"
   node.h
   node_traits.h
   node_partition.h

@@ -1,5 +1,5 @@
 #include <iostream>
-#include "lar/core/spacial/point.h"
+#include "lar/core/spatial/point.h"
 
 namespace lar {
 

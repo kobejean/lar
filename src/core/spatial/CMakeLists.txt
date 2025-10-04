@@ -1,6 +1,6 @@
 set(HEADER_LIST
-  "${PROJECT_SOURCE_DIR}/include/lar/core/spacial/point.h"
-  "${PROJECT_SOURCE_DIR}/include/lar/core/spacial/rect.h"
+  "${PROJECT_SOURCE_DIR}/include/lar/core/spatial/point.h"
+  "${PROJECT_SOURCE_DIR}/include/lar/core/spatial/rect.h"
 )
 
 

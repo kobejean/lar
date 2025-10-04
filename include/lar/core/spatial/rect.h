@@ -1,9 +1,9 @@
-#ifndef LAR_CORE_SPACIAL_RECT_H
-#define LAR_CORE_SPACIAL_RECT_H
+#ifndef LAR_CORE_SPATIAL_RECT_H
+#define LAR_CORE_SPATIAL_RECT_H
 
 #include <nlohmann/json.hpp>
 #include <iostream>
-#include "lar/core/spacial/point.h"
+#include "lar/core/spatial/point.h"
 
 namespace lar {
 
@@ -28,4 +28,4 @@ namespace lar {
 
 }
 
-#endif /* LAR_CORE_SPACIAL_RECT_H */
+#endif /* LAR_CORE_SPATIAL_RECT_H */

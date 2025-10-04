@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "lar/core/spacial/rect.h"
+#include "lar/core/spatial/rect.h"
 
 using namespace lar;
 
