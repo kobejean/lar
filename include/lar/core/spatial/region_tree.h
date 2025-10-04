@@ -44,9 +44,9 @@ namespace lar {
     private:
       class Node;
       class LeafNode;
-      std::unique_ptr<Node> root;
+      std::unique_ptr<Node> root_;
       using leaf_container = std::unordered_map<size_t, LeafNode*>;
-      leaf_container leaf_map;
+      leaf_container leaf_map_;
 
       // Helper to insert node into tree
       void rootInsert(std::unique_ptr<Node> node);

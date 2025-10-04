@@ -15,7 +15,7 @@ namespace lar {
 // lifecycle
 
 template <typename T>
-RegionTree<T>::RegionTree() : root(std::make_unique<Node>(1)) {
+RegionTree<T>::RegionTree() : root_(std::make_unique<Node>(1)) {
 
 }
 
@@ -33,17 +33,17 @@ RegionTree<T>& RegionTree<T>::operator=(RegionTree&& other) = default;
 
 template <typename T>
 T& RegionTree<T>::operator[](size_t id) {
-  return leaf_map[id]->value;
+  return leaf_map_[id]->value;
 }
 
 template <typename T>
 void RegionTree<T>::rootInsert(std::unique_ptr<Node> node) {
-  if (root->children.size() == 0) {
+  if (root_->children.size() == 0) {
     // if tree is empty, attach directly to root
-    root->bounds = node->bounds;
-    root->linkChild(std::move(node));
+    root_->bounds = node->bounds;
+    root_->linkChild(std::move(node));
   } else {
-    root->insert(std::move(node));
+    root_->insert(std::move(node));
   }
 }
 
@@ -52,7 +52,7 @@ template <typename U>
 T* RegionTree<T>::insert(U&& value, Rect bounds, size_t id) {
   auto node = std::make_unique<LeafNode>(std::forward<U>(value), bounds, id);
   LeafNode* leaf_ptr = node.get();
-  leaf_map.emplace(id, leaf_ptr);
+  leaf_map_.emplace(id, leaf_ptr);
 
   rootInsert(std::move(node));
   return &leaf_ptr->value;
@@ -60,23 +60,23 @@ T* RegionTree<T>::insert(U&& value, Rect bounds, size_t id) {
 
 template <typename T>
 void RegionTree<T>::erase(size_t id) {
-  Node *node = leaf_map.extract(id).mapped();
+  Node *node = leaf_map_.extract(id).mapped();
   node->erase();
-  if (root->children.size() == 1 && root->height > 1) {
+  if (root_->children.size() == 1 && root_->height > 1) {
     // if root has only one child, replace root with child
-    auto child = std::move(root->children[0]);
+    auto child = std::move(root_->children[0]);
     child->parent = nullptr;
     // clear children of root so that it doesn't delete them
     // when the root is deleted
-    root->children.clear();
-    this->root = std::move(child);
+    root_->children.clear();
+    this->root_ = std::move(child);
   }
 }
 
 template <typename T>
 void RegionTree<T>::updateBounds(size_t id, const Rect &bounds) {
-  auto it = leaf_map.find(id);
-  assert(it != leaf_map.end() && "updateBounds called with invalid id");
+  auto it = leaf_map_.find(id);
+  assert(it != leaf_map_.end() && "updateBounds called with invalid id");
 
   LeafNode* leaf = it->second;
   std::unique_ptr<Node> node = leaf->unlink();
@@ -88,12 +88,12 @@ void RegionTree<T>::updateBounds(size_t id, const Rect &bounds) {
 
 template <typename T>
 void RegionTree<T>::find(const Rect &query, std::vector<T*> &results) const {
-  if (root->children.size() > 0) root->find(query, results);
+  if (root_->children.size() > 0) root_->find(query, results);
 }
 
 template <typename T>
 void RegionTree<T>::print(std::ostream &os) {
-  root->print(os, 0);
+  root_->print(os, 0);
 }
 
 
@@ -101,14 +101,14 @@ void RegionTree<T>::print(std::ostream &os) {
 
 template <typename T>
 size_t RegionTree<T>::size() const {
-  return leaf_map.size();
+  return leaf_map_.size();
 }
 
 template <typename T>
 std::vector<T*> RegionTree<T>::all() const {
   std::vector<T*> all;
-  all.reserve(leaf_map.size());
-  for (const auto& kv : leaf_map) {
+  all.reserve(leaf_map_.size());
+  for (const auto& kv : leaf_map_) {
     all.push_back(&kv.second->value);  
   }
   return all;

@@ -31,27 +31,20 @@ namespace lar {
     return rtree_[id];
   }
 
-  void LandmarkDatabase::insert(std::vector<Landmark>& landmarks, std::vector<Landmark*>* out_pointers) {
+  void LandmarkDatabase::insert(std::vector<Landmark>& landmarks, std::vector<Landmark*>* pointers) {
     std::unique_lock lock(mutex_);
     for (Landmark& landmark : landmarks) {
-      if (landmark.id == 0) {  // Assuming 0 means unassigned
-        landmark.id = ++next_id_;
-      }
+      if (landmark.id == 0) landmark.id = ++next_id_; // Assuming 0 means unassigned
       Landmark* ptr = rtree_.insert(std::move(landmark), landmark.bounds, landmark.id);
-
-      if (out_pointers) {
-        out_pointers->push_back(ptr);
-      }
+      if (pointers) pointers->push_back(ptr);
     }
   }
 
   void LandmarkDatabase::find(const Rect &query, std::vector<Landmark*> &results, int limit) const {
     std::shared_lock lock(mutex_);
     rtree_.find(query, results);
-    if (limit >= 0 && results.size() >= limit) {
-      std::partial_sort(results.begin(), results.begin() + limit, results.end(), [](const Landmark* a, const Landmark* b) {
-        return a->sightings > b->sightings;
-      });
+    if (limit >= 0 && results.size() > limit) {
+      std::partial_sort(results.begin(), results.begin() + limit, results.end(), [](const Landmark* a, const Landmark* b) { return a->sightings > b->sightings; });
       results.resize(limit);
     }
   }
