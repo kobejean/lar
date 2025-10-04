@@ -29,31 +29,33 @@ namespace lar {
       void cull();
       void addObservation(size_t id, Landmark::Observation observation);
 // #endif
+
+      friend void to_json(nlohmann::json& j, const LandmarkDatabase& l) {
+        std::vector<Landmark> landmarks;
+        for (Landmark* landmark : l.all()) {
+          landmarks.push_back(*landmark);
+        }
+
+        // TODO: use hilbert curve ordering to improve bulk insert performance
+        std::sort(landmarks.begin(), landmarks.end(), [](const Landmark& a, const Landmark& b) {
+          return a.id < b.id;
+        });
+        j = landmarks;
+      }
+
+      friend void from_json(const nlohmann::json& j, LandmarkDatabase& l) {
+        std::vector<Landmark> landmarks;
+        landmarks.reserve(j.size());
+        landmarks = std::move(j);
+        l.insert(landmarks);
+      }
+
     private:
       RegionTree<Landmark> rtree_;
       size_t next_id_ = 0;
       mutable std::shared_mutex mutex_;
   };
-  
 
-  static void to_json(nlohmann::json& j, const LandmarkDatabase& l) {
-    std::vector<Landmark> landmarks;
-    for (Landmark* landmark : l.all()) {
-      landmarks.push_back(*landmark);
-    }
-
-    // TODO: use hilbert curve ordering to improve bulk insert performance
-    std::sort(landmarks.begin(), landmarks.end(), [](const Landmark& a, const Landmark& b) {
-      return a.id < b.id;
-    });
-    j = landmarks;
-  }
-
-  static void from_json(const nlohmann::json& j, LandmarkDatabase& l) {
-    std::vector<Landmark> landmarks = j;
-    l.insert(landmarks);
-  }
-  
 }
 
 #endif /* LAR_CORE_LANDMARK_DATABASE_H */
