@@ -23,9 +23,9 @@ namespace lar {
 
       // operations
       T& operator[](size_t id);
-      void insert(T value, Rect bounds, size_t id);
+      T* insert(T value, Rect bounds, size_t id);
       void erase(size_t id);
-      void reinsert(size_t id, Rect &bounds);
+      void updateBounds(size_t id, Rect &bounds);
       void find(const Rect &query, std::vector<T*> &results) const;
       void print(std::ostream &os);
 

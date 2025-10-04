@@ -37,19 +37,21 @@ T& RegionTree<T>::operator[](size_t id) {
 }
 
 template <typename T>
-void RegionTree<T>::insert(T value, Rect bounds, size_t id) {
+T* RegionTree<T>::insert(T value, Rect bounds, size_t id) {
   // create new leaf node
   auto node = std::make_unique<LeafNode>(value, bounds, id);
-  leaf_map.emplace(id, node.get());
+  LeafNode* leaf_ptr = node.get();
+  leaf_map.emplace(id, leaf_ptr);
 
   if (root->children.size() == 0) {
     // if tree is empty
     root->bounds = node->bounds;
     root->linkChild(std::move(node));
-    return;
+    return &leaf_ptr->value;
   }
 
   root->insert(std::move(node));
+  return &leaf_ptr->value;
 }
 
 template <typename T>
@@ -68,7 +70,7 @@ void RegionTree<T>::erase(size_t id) {
 }
 
 template <typename T>
-void RegionTree<T>::reinsert(size_t id, Rect &bounds) {
+void RegionTree<T>::updateBounds(size_t id, Rect &bounds) {
   T item = std::move((*this)[id]);
   this->erase(id);
   this->insert(std::move(item), bounds, id);

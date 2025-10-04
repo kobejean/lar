@@ -88,17 +88,7 @@ namespace lar {
         new_landmarks.push_back(landmark);
       }
     }
-
-    // Insert new landmarks and get their assigned IDs
-    std::vector<size_t> new_ids = data->map.landmarks.insert(new_landmarks);
-    
-    // Merge new IDs with existing match IDs in the correct order
-    size_t new_id_index = 0;
-    for (size_t i = 0; i < landmark_count; i++) {
-      if (matches.find(i) == matches.end()) {
-        results.push_back(&data->map.landmarks[new_ids[new_id_index++]]);
-      }
-    }
+    data->map.landmarks.insert(new_landmarks, &results);
   }
 
   std::map<size_t, size_t> FrameProcessor::getMatches(const cv::Mat &query_desc, const cv::Mat &train_desc) {

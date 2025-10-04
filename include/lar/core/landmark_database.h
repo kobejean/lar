@@ -20,7 +20,7 @@ namespace lar {
       
       Landmark& operator[](size_t id);
 
-      std::vector<size_t> insert(std::vector<Landmark> &landmarks);
+      void insert(std::vector<Landmark>& landmarks, std::vector<Landmark*>* out_pointers = nullptr);
       void find(const Rect &query, std::vector<Landmark*> &results, int limit = -1) const;
       size_t size() const;
       std::vector<Landmark*> all() const;

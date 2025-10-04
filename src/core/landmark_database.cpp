@@ -31,19 +31,18 @@ namespace lar {
     return rtree_[id];
   }
 
-  std::vector<size_t> LandmarkDatabase::insert(std::vector<Landmark>& landmarks) {
-    std::vector<size_t> ids;
-    ids.reserve(landmarks.size());
-    
+  void LandmarkDatabase::insert(std::vector<Landmark>& landmarks, std::vector<Landmark*>* out_pointers) {
     std::unique_lock lock(mutex_);
     for (Landmark& landmark : landmarks) {
       if (landmark.id == 0) {  // Assuming 0 means unassigned
         landmark.id = ++next_id_;
       }
-      ids.push_back(landmark.id);
-      rtree_.insert(landmark, landmark.bounds, landmark.id);
+      Landmark* ptr = rtree_.insert(landmark, landmark.bounds, landmark.id);
+
+      if (out_pointers) {
+        out_pointers->push_back(ptr);
+      }
     }
-    return ids;
   }
 
   void LandmarkDatabase::find(const Rect &query, std::vector<Landmark*> &results, int limit) const {
@@ -88,7 +87,7 @@ namespace lar {
     std::unique_lock lock(mutex_);
     Landmark &landmark = rtree_[id];
     landmark.recordObservation(observation);
-    rtree_.reinsert(id, landmark.bounds);
+    rtree_.updateBounds(id, landmark.bounds);
   }
   
 // #endif
