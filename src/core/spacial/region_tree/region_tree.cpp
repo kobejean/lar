@@ -37,20 +37,24 @@ T& RegionTree<T>::operator[](size_t id) {
 }
 
 template <typename T>
-T* RegionTree<T>::insert(T value, Rect bounds, size_t id) {
-  // create new leaf node
-  auto node = std::make_unique<LeafNode>(value, bounds, id);
+void RegionTree<T>::rootInsert(std::unique_ptr<Node> node) {
+  if (root->children.size() == 0) {
+    // if tree is empty, attach directly to root
+    root->bounds = node->bounds;
+    root->linkChild(std::move(node));
+  } else {
+    root->insert(std::move(node));
+  }
+}
+
+template <typename T>
+template <typename U>
+T* RegionTree<T>::insert(U&& value, Rect bounds, size_t id) {
+  auto node = std::make_unique<LeafNode>(std::forward<U>(value), bounds, id);
   LeafNode* leaf_ptr = node.get();
   leaf_map.emplace(id, leaf_ptr);
 
-  if (root->children.size() == 0) {
-    // if tree is empty
-    root->bounds = node->bounds;
-    root->linkChild(std::move(node));
-    return &leaf_ptr->value;
-  }
-
-  root->insert(std::move(node));
+  rootInsert(std::move(node));
   return &leaf_ptr->value;
 }
 
@@ -79,13 +83,7 @@ void RegionTree<T>::updateBounds(size_t id, const Rect &bounds) {
   assert(node && "Leaf node should always be unlinkable");
   node->bounds = bounds;
 
-  if (root->children.size() == 0) {
-    // Tree is empty after unlink, directly attach to root
-    root->bounds = node->bounds;
-    root->linkChild(std::move(node));
-  } else {
-    root->insert(std::move(node));
-  }
+  rootInsert(std::move(node));
 }
 
 template <typename T>
@@ -119,5 +117,16 @@ std::vector<T*> RegionTree<T>::all() const {
 // explicit instantiations
 template class RegionTree<size_t>;
 template class RegionTree<Landmark>;
+
+// Explicit instantiations for insert<U> member template
+// For size_t tree - supports literals and variables
+template size_t* RegionTree<size_t>::insert<size_t>(size_t&&, Rect, size_t);
+template size_t* RegionTree<size_t>::insert<size_t&>(size_t&, Rect, size_t);  // lvalue
+template size_t* RegionTree<size_t>::insert<int>(int&&, Rect, size_t);  // for integer literals
+
+// For Landmark tree - supports move and copy
+template Landmark* RegionTree<Landmark>::insert<Landmark>(Landmark&&, Rect, size_t);
+template Landmark* RegionTree<Landmark>::insert<Landmark&>(Landmark&, Rect, size_t);  // lvalue
+template Landmark* RegionTree<Landmark>::insert<const Landmark&>(const Landmark&, Rect, size_t);
 
 } // namespace lar

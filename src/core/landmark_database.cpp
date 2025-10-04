@@ -37,7 +37,7 @@ namespace lar {
       if (landmark.id == 0) {  // Assuming 0 means unassigned
         landmark.id = ++next_id_;
       }
-      Landmark* ptr = rtree_.insert(landmark, landmark.bounds, landmark.id);
+      Landmark* ptr = rtree_.insert(std::move(landmark), landmark.bounds, landmark.id);
 
       if (out_pointers) {
         out_pointers->push_back(ptr);

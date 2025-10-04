@@ -373,3 +373,107 @@ TEST(RegionTreeTest, UpdateBoundsTriggersUnderflow) {
   EXPECT_EQ(*ptr3, 300) << "ptr3 should remain valid";
   EXPECT_EQ(tree.size(), 3);
 }
+
+// ============================================================================
+// Move Semantics and Safety Tests
+// ============================================================================
+
+TEST(RegionTreeTest, MoveConstructorTransfersOwnership) {
+  // Given - Tree with data
+  RegionTree<size_t> tree1;
+  tree1.insert(42, Rect(0, 0, 1, 1), 1);
+  tree1.insert(99, Rect(2, 2, 3, 3), 2);
+
+  EXPECT_EQ(tree1.size(), 2);
+  EXPECT_EQ(tree1[1], 42);
+
+  // When - Move construct tree2 from tree1
+  RegionTree<size_t> tree2(std::move(tree1));
+
+  // Then - tree2 should have the data
+  EXPECT_EQ(tree2.size(), 2);
+  EXPECT_EQ(tree2[1], 42);
+  EXPECT_EQ(tree2[2], 99);
+
+  // tree1 should be empty (moved-from state)
+  EXPECT_EQ(tree1.size(), 0);
+}
+
+TEST(RegionTreeTest, MoveAssignmentTransfersOwnership) {
+  // Given - Two trees
+  RegionTree<size_t> tree1;
+  tree1.insert(42, Rect(0, 0, 1, 1), 1);
+  tree1.insert(99, Rect(2, 2, 3, 3), 2);
+
+  RegionTree<size_t> tree2;
+  tree2.insert(100, Rect(5, 5, 6, 6), 10);
+
+  EXPECT_EQ(tree1.size(), 2);
+  EXPECT_EQ(tree2.size(), 1);
+
+  // When - Move assign tree1 to tree2
+  tree2 = std::move(tree1);
+
+  // Then - tree2 should have tree1's data
+  EXPECT_EQ(tree2.size(), 2);
+  EXPECT_EQ(tree2[1], 42);
+  EXPECT_EQ(tree2[2], 99);
+
+  // tree1 should be empty (moved-from state)
+  EXPECT_EQ(tree1.size(), 0);
+}
+
+TEST(RegionTreeTest, MovedFromTreeState) {
+  // Given - Tree with data
+  RegionTree<size_t> tree1;
+  tree1.insert(42, Rect(0, 0, 1, 1), 1);
+
+  // When - Move construct tree2 from tree1
+  RegionTree<size_t> tree2(std::move(tree1));
+
+  // Then - tree2 has the data, tree1 is in valid but unspecified state
+  EXPECT_EQ(tree2.size(), 1);
+  EXPECT_EQ(tree2[1], 42);
+
+  // Moved-from tree should be empty
+  EXPECT_EQ(tree1.size(), 0);
+
+  // Note: Using moved-from tree beyond checking size() is undefined behavior
+  // We do NOT test insertion into moved-from tree as it's not guaranteed to work
+}
+
+// ============================================================================
+// Root Sentinel Pattern Tests
+// ============================================================================
+
+TEST(RegionTreeTest, RootNeverBecomesLeaf) {
+  // This test verifies that the root maintains the sentinel pattern
+  // The concern: After certain erase operations, root might become a leaf node
+
+  // Given - Tree that will trigger root replacement
+  RegionTree<size_t> tree;
+
+  // Insert items to create a 3-level tree
+  // Root (height=2) -> Internal nodes (height=1) -> Leaves (height=0)
+  tree.insert(1, Rect(0, 0, 5, 5), 1);
+  tree.insert(2, Rect(10, 10, 15, 15), 2);
+  tree.insert(3, Rect(20, 20, 25, 25), 3);
+  tree.insert(4, Rect(30, 30, 35, 35), 4);
+  tree.insert(5, Rect(40, 40, 45, 45), 5);
+  tree.insert(6, Rect(50, 50, 55, 55), 6);
+
+  // When - Erase items until only one remains
+  tree.erase(2);
+  tree.erase(3);
+  tree.erase(4);
+  tree.erase(5);
+  tree.erase(6);
+
+  // Then - Root should never be a leaf (height should be > 0)
+  // This insertion should work without special cases
+  tree.insert(10, Rect(100, 100, 105, 105), 10);
+
+  EXPECT_EQ(tree.size(), 2);
+  EXPECT_EQ(tree[1], 1);
+  EXPECT_EQ(tree[10], 10);
+}

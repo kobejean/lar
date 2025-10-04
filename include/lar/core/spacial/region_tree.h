@@ -25,7 +25,8 @@ namespace lar {
       T& operator[](size_t id);
 
       // Returns pointer to inserted value. Pointer remains valid until erase().
-      T* insert(T value, Rect bounds, size_t id);
+      template<typename U>
+      T* insert(U&& value, Rect bounds, size_t id);
 
       void erase(size_t id);
 
@@ -46,6 +47,9 @@ namespace lar {
       std::unique_ptr<Node> root;
       using leaf_container = std::unordered_map<size_t, LeafNode*>;
       leaf_container leaf_map;
+
+      // Helper to insert node into tree
+      void rootInsert(std::unique_ptr<Node> node);
   };
 
 }
