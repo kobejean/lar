@@ -87,7 +87,8 @@ namespace lar {
     std::unique_lock lock(mutex_);
     Landmark &landmark = rtree_[id];
     landmark.recordObservation(observation);
-    rtree_.updateBounds(id, landmark.bounds);
+    Rect bounds = landmark.bounds; // Copy because landmark may move
+    rtree_.updateBounds(id, bounds);
   }
   
 // #endif

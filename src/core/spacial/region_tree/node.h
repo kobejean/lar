@@ -32,14 +32,17 @@ class RegionTree<T>::Node {
 
     // operations
     void insert(std::unique_ptr<Node> node);
-    Node *erase();
+    Node* erase();
+    std::unique_ptr<Node> unlink();
     void find(const Rect &query, std::vector<T*> &results);
     void print(std::ostream &os, int depth) const;
 
     // helpers
     inline bool isLeaf() const;
-    Node *findBestInsertChild(const Rect &bounds) const;
+    inline bool isUnderflow() const;
+    Node* findBestInsertChild(const Rect &bounds) const;
     void addChild(std::unique_ptr<Node> child);
+    Node* removeChild(size_t index);
     void linkChild(std::unique_ptr<Node> child);
     std::size_t findChildIndex(Node *child) const;
     void subtractBounds(const Rect &bounds);

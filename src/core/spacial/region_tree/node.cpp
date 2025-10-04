@@ -35,32 +35,40 @@ void RegionTree<T>::Node::insert(std::unique_ptr<Node> node) {
 template <typename T>
 typename RegionTree<T>::Node *RegionTree<T>::Node::erase() {
   if (parent != nullptr) {
-    Node* insert_root = nullptr;
+    // Node* insert_root = nullptr;
     Node* parent_node = parent;
     size_t index = parent_node->findChildIndex(this);
-    parent_node->children.erase(index);
-    parent_node->subtractBounds(bounds);
+    // parent_node->children.erase(index);
+    // parent_node->subtractBounds(bounds);
 
-    if (parent_node->children.size() < (MAX_CHILDREN / 2)) {
-      children_container siblings;
-      for (auto &child : parent_node->children) {
-        siblings.push_back(std::move(child));
-      }
-      // unlink from parent
-      parent_node->children.clear();
-      insert_root = parent_node->erase();
-      for (auto &sibling : siblings) {
-        insert_root->insert(std::move(sibling));
-      }
-    } else {
-      insert_root = parent_node;
-    }
-    return insert_root;
+    // if (parent_node->children.size() < (MAX_CHILDREN / 2)) {
+    //   children_container siblings;
+    //   for (auto &child : parent_node->children) {
+    //     siblings.push_back(std::move(child));
+    //   }
+    //   // unlink from parent
+    //   parent_node->children.clear();
+    //   insert_root = parent_node->erase();
+    //   for (auto &sibling : siblings) {
+    //     insert_root->insert(std::move(sibling));
+    //   }
+    // } else {
+    //   insert_root = parent_node;
+    // }
+    return parent_node->removeChild(index);
   } else {
     // we will not delete the root
     // we will just return the root as the insert root
     return this;
   }
+}
+
+template <typename T>
+std::unique_ptr<typename RegionTree<T>::Node> RegionTree<T>::Node::unlink() {
+  size_t index = parent->findChildIndex(this);
+  std::unique_ptr<Node> node = std::move(parent->children[index]);
+  parent->removeChild(index);
+  return node;
 }
 
 template <typename T>
@@ -98,6 +106,34 @@ void RegionTree<T>::Node::print(std::ostream &os, int depth) const {
 template <typename T>
 inline bool RegionTree<T>::Node::isLeaf() const {
   return this->height == 0;
+}
+
+template <typename T>
+inline bool RegionTree<T>::Node::isUnderflow() const {
+  // Root is allowed to have any number of children
+  return parent != nullptr && children.size() < (MAX_CHILDREN / 2);
+}
+
+template <typename T>
+RegionTree<T>::Node* RegionTree<T>::Node::removeChild(size_t index) {
+  children.erase(index);
+  subtractBounds(bounds);
+
+  if (children.size() < (MAX_CHILDREN / 2)) {
+    children_container siblings;
+    for (auto &child : children) {
+      siblings.push_back(std::move(child));
+    }
+    // unlink from parent
+    children.clear();
+    Node* insert_root = erase();
+    for (auto &sibling : siblings) {
+      insert_root->insert(std::move(sibling));
+    }
+    return insert_root;
+  } else {
+    return this;
+  }
 }
 
 template <typename T>
@@ -182,10 +218,14 @@ std::size_t RegionTree<T>::Node::findChildIndex(Node *child) const {
 template <typename T>
 void RegionTree<T>::Node::subtractBounds(const Rect &bounds) {
   if (!bounds.isInsideOf(this->bounds)) {
-    this->bounds = children[0]->bounds;
-    for (size_t i = 1; i < children.size(); i++) {
-      this->bounds = this->bounds.minBoundingBox(children[i]->bounds);
+    if (children.size() > 0) {
+      this->bounds = children[0]->bounds;
+      for (size_t i = 1; i < children.size(); i++) {
+        this->bounds = this->bounds.minBoundingBox(children[i]->bounds);
+      }
     }
+    // Note: If children is empty, bounds becomes undefined until next insert
+
     if (parent != nullptr) {
       parent->subtractBounds(bounds);
     }

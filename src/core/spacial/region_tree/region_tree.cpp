@@ -70,10 +70,22 @@ void RegionTree<T>::erase(size_t id) {
 }
 
 template <typename T>
-void RegionTree<T>::updateBounds(size_t id, Rect &bounds) {
-  T item = std::move((*this)[id]);
-  this->erase(id);
-  this->insert(std::move(item), bounds, id);
+void RegionTree<T>::updateBounds(size_t id, const Rect &bounds) {
+  auto it = leaf_map.find(id);
+  assert(it != leaf_map.end() && "updateBounds called with invalid id");
+
+  LeafNode* leaf = it->second;
+  std::unique_ptr<Node> node = leaf->unlink();
+  assert(node && "Leaf node should always be unlinkable");
+  node->bounds = bounds;
+
+  if (root->children.size() == 0) {
+    // Tree is empty after unlink, directly attach to root
+    root->bounds = node->bounds;
+    root->linkChild(std::move(node));
+  } else {
+    root->insert(std::move(node));
+  }
 }
 
 template <typename T>
@@ -98,7 +110,7 @@ template <typename T>
 std::vector<T*> RegionTree<T>::all() const {
   std::vector<T*> all;
   all.reserve(leaf_map.size());
-  for(auto kv : leaf_map) {
+  for (const auto& kv : leaf_map) {
     all.push_back(&kv.second->value);  
   }
   return all;

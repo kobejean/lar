@@ -23,9 +23,16 @@ namespace lar {
 
       // operations
       T& operator[](size_t id);
+
+      // Returns pointer to inserted value. Pointer remains valid until erase().
       T* insert(T value, Rect bounds, size_t id);
+
       void erase(size_t id);
-      void updateBounds(size_t id, Rect &bounds);
+
+      // Updates spatial bounds while preserving pointer stability.
+      // Pointers returned by insert() remain valid after this call.
+      void updateBounds(size_t id, const Rect &bounds);
+
       void find(const Rect &query, std::vector<T*> &results) const;
       void print(std::ostream &os);
 
