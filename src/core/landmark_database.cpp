@@ -64,14 +64,10 @@ namespace lar {
 
   void LandmarkDatabase::cull() {
     std::unique_lock lock(mutex_);
-    // TODO: find better way to do this
-    std::vector<Landmark> landmarks;
+    // TODO: implement bulk culling in rtree
     for (Landmark* landmark : rtree_.all()) {
-      landmarks.push_back(*landmark);
-    }
-    for (Landmark landmark : landmarks) {
-      if (!landmark.isUseable()) {
-        rtree_.erase(landmark.id);
+      if (!landmark->isUseable()) {
+        rtree_.erase(landmark->id);
       }
     }
   }
