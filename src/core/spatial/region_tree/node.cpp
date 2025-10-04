@@ -115,7 +115,7 @@ inline bool RegionTree<T>::Node::isUnderflow() const {
 }
 
 template <typename T>
-RegionTree<T>::Node* RegionTree<T>::Node::removeChild(size_t index) {
+typename RegionTree<T>::Node* RegionTree<T>::Node::removeChild(size_t index) {
   children.erase(index);
   subtractBounds(bounds);
 
