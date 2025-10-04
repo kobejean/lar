@@ -59,7 +59,8 @@ namespace lar {
     }
 
     // Decode into provided buffer, returns number of bytes written
-    static size_t base64_decode(std::string const& encoded_string, uchar* output_buffer) {
+    // buffer_size: maximum bytes that can be written (0 = no limit, unsafe!)
+    static size_t base64_decode(std::string const& encoded_string, uchar* output_buffer, size_t buffer_size = 0) {
       int in_len = static_cast<int>(encoded_string.size());
       int i = 0;
       int j = 0;
@@ -77,8 +78,12 @@ namespace lar {
           char_array_3[1] = ((char_array_4[1] & 0xf) << 4) + ((char_array_4[2] & 0x3c) >> 2);
           char_array_3[2] = ((char_array_4[2] & 0x3) << 6) + char_array_4[3];
 
-          for (i = 0; (i < 3); i++)
+          for (i = 0; (i < 3); i++) {
+            if (buffer_size > 0 && out_pos >= buffer_size) {
+              throw std::runtime_error("Base64 decode buffer overflow: decoded data exceeds buffer size");
+            }
             output_buffer[out_pos++] = char_array_3[i];
+          }
           i = 0;
         }
       }
@@ -94,8 +99,12 @@ namespace lar {
         char_array_3[1] = ((char_array_4[1] & 0xf) << 4) + ((char_array_4[2] & 0x3c) >> 2);
         char_array_3[2] = ((char_array_4[2] & 0x3) << 6) + char_array_4[3];
 
-        for (j = 0; (j < i - 1); j++)
+        for (j = 0; (j < i - 1); j++) {
+          if (buffer_size > 0 && out_pos >= buffer_size) {
+            throw std::runtime_error("Base64 decode buffer overflow: decoded data exceeds buffer size");
+          }
           output_buffer[out_pos++] = char_array_3[j];
+        }
       }
 
       return out_pos;
@@ -114,7 +123,16 @@ namespace lar {
 
     static cv::Mat base64_decode(std::string const& encoded_string, int rows, int cols, int type) {
       cv::Mat mat(rows, cols, type);
-      base64_decode(encoded_string, mat.data);
+      size_t expected_bytes = mat.total() * mat.elemSize();
+      size_t decoded_bytes = base64_decode(encoded_string, mat.data, expected_bytes);
+
+      if (decoded_bytes != expected_bytes) {
+        throw std::runtime_error(
+          "Base64 decode size mismatch: expected " + std::to_string(expected_bytes) +
+          " bytes but decoded " + std::to_string(decoded_bytes) + " bytes"
+        );
+      }
+
       return mat;
     }
 
