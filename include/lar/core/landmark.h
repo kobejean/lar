@@ -91,16 +91,15 @@ namespace lar {
   }
 
   static void from_json(const nlohmann::json& j, Landmark& l) {
-    std::string desc64 = j.at("desc").get<std::string>();
-    cv::Mat desc = base64::base64_decode(desc64, 1, -1, CV_8U);
+    const std::string& desc64 = j.at("desc").get_ref<const std::string&>();
+    l.desc = base64::base64_decode(desc64, 1, -1, CV_8U);
 
     j.at("id").get_to(l.id);
-    l.desc = desc;
     j.at("position").get_to(l.position);
     j.at("orientation").get_to(l.orientation);
     j.at("bounds").get_to(l.bounds);
     j.at("sightings").get_to(l.sightings);
-       
+
     #ifndef LAR_COMPACT_BUILD
     // Initialize members not in JSON to default values
     l.last_seen = -1;
