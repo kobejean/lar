@@ -42,7 +42,7 @@ jobs:
       run: git submodule update --init --recursive
 
     - name: Build
-      run: make tests
+      run: make debug
 
     - name: Test
       run: ./bin/lar_test

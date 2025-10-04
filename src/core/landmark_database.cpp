@@ -43,7 +43,7 @@ namespace lar {
   void LandmarkDatabase::find(const Rect &query, std::vector<Landmark*> &results, int limit) const {
     std::shared_lock lock(mutex_);
     rtree_.find(query, results);
-    if (limit >= 0 && results.size() > limit) {
+    if (limit >= 0 && results.size() > static_cast<size_t>(limit)) {
       std::partial_sort(results.begin(), results.begin() + limit, results.end(), [](const Landmark* a, const Landmark* b) { return a->sightings > b->sightings; });
       results.resize(limit);
     }
