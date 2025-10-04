@@ -10,6 +10,24 @@
 
 namespace lar {
 
+  /**
+   * RegionTree - Spatial index using R-tree structure for fast 2D queries.
+   *
+   * Thread Safety:
+   *   This class is NOT thread-safe and has no internal synchronization.
+   *
+   *   For concurrent access, use LandmarkDatabase which provides thread-safe
+   *   wrappers with std::shared_mutex protection. Direct usage of RegionTree
+   *   requires external synchronization.
+   *
+   *   Design Decision: RegionTree must remain lock-free to avoid potential
+   *   deadlocks when called from synchronized wrappers like LandmarkDatabase.
+   *
+   * Pointer Stability:
+   *   Pointers returned by insert() remain valid until erase() is called on
+   *   that specific element. Pointers are stable across updateBounds() calls
+   *   and tree rebalancing operations.
+   */
   template <typename T>
   class RegionTree {
     public:
