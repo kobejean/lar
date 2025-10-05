@@ -1,13 +1,20 @@
 #ifndef LAR_TRACKING_FILTERED_TRACKER_CONFIG_H
 #define LAR_TRACKING_FILTERED_TRACKER_CONFIG_H
 
+#include <functional>
+#include <memory>
+
 namespace lar {
+
+// Forward declaration to avoid circular dependency
+class PoseFilterStrategy;
 
 /**
  * Configuration object for FilteredTracker with all tunable parameters.
  * Centralizes all configuration to make tuning and experimentation easier.
  */
 struct FilteredTrackerConfig {
+
     // === Filter Strategy Selection ===
     enum class FilterStrategy {
         EXTENDED_KALMAN_FILTER,
@@ -15,7 +22,9 @@ struct FilteredTrackerConfig {
         AVERAGING,
         PASS_THROUGH
     };
-    FilterStrategy filter_strategy = FilterStrategy::SLIDING_WINDOW_BA;  // Default to Sliding Window BA
+    FilterStrategy filter_strategy = FilterStrategy::SLIDING_WINDOW_BA;
+
+    std::unique_ptr<PoseFilterStrategy> createFilterStrategy() const;
 
     // === Core Timing ===
     double measurement_interval_seconds = 2.0;  // LAR measurement update interval
@@ -125,46 +134,6 @@ struct FilteredTrackerConfig {
                sliding_window_min_observations > 0 &&
                sliding_window_optimization_iterations > 0 &&
                sliding_window_pixel_noise > 0.0;
-    }
-
-    /**
-     * Create a conservative configuration (higher uncertainties, stricter thresholds)
-     */
-    static FilteredTrackerConfig createConservative() {
-        FilteredTrackerConfig config;
-        config.initial_position_uncertainty = 2.0;
-        config.initial_orientation_uncertainty = 0.2;
-        config.outlier_threshold = 9.488;  // 90% confidence instead of 95%
-        config.base_position_noise = 0.2;
-        config.base_orientation_noise = 0.1;
-        config.landmark_position_noise = 0.1;  // Higher uncertainty for fast tracking
-        return config;
-    }
-
-    /**
-     * Create an aggressive configuration (lower uncertainties, looser thresholds)
-     */
-    static FilteredTrackerConfig createAggressive() {
-        FilteredTrackerConfig config;
-        config.initial_position_uncertainty = 0.5;
-        config.initial_orientation_uncertainty = 0.05;
-        config.outlier_threshold = 16.812;  // 99% confidence
-        config.base_position_noise = 0.05;
-        config.base_orientation_noise = 0.025;
-        config.landmark_position_noise = 0.02;  // Lower uncertainty for precision tracking
-        config.min_inliers_for_tracking = 6;
-        return config;
-    }
-
-    /**
-     * Create a debug configuration (verbose output, conservative settings)
-     */
-    static FilteredTrackerConfig createDebug() {
-        FilteredTrackerConfig config = createConservative();
-        config.enable_debug_output = true;
-        config.enable_coordinate_debugging = true;
-        config.enable_motion_debugging = true;
-        return config;
     }
 };
 

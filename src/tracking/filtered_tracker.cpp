@@ -9,43 +9,11 @@
 // - T_lar_from_vio: Coordinate transform FROM VIO TO LAR world (output)
 
 #include "lar/tracking/filtered_tracker.h"
-#include "lar/tracking/pose_filtering/extended_kalman_filter.h"
-#include "lar/tracking/pose_filtering/sliding_window_ba.h"
-#include "lar/tracking/pose_filtering/averaging_filter.h"
-#include "lar/tracking/pose_filtering/pass_through_filter.h"
 #include "lar/tracking/measurement_context.h"
 #include <iostream>
 #include <cmath>
 
 namespace lar {
-
-// ============================================================================
-// Helper Functions
-// ============================================================================
-
-std::unique_ptr<PoseFilterStrategy> createFilterStrategy(const FilteredTrackerConfig& config) {
-    switch (config.filter_strategy) {
-        case FilteredTrackerConfig::FilterStrategy::EXTENDED_KALMAN_FILTER:
-            std::cout << "FilteredTracker: Using Extended Kalman Filter" << std::endl;
-            return std::make_unique<ExtendedKalmanFilter>();
-
-        case FilteredTrackerConfig::FilterStrategy::SLIDING_WINDOW_BA:
-            std::cout << "FilteredTracker: Using Sliding Window Bundle Adjustment" << std::endl;
-            return std::make_unique<SlidingWindowBA>();
-
-        case FilteredTrackerConfig::FilterStrategy::AVERAGING:
-            std::cout << "FilteredTracker: Using Averaging Filter" << std::endl;
-            return std::make_unique<AveragingFilter>();
-
-        case FilteredTrackerConfig::FilterStrategy::PASS_THROUGH:
-            std::cout << "FilteredTracker: Using Pass Through Filter" << std::endl;
-            return std::make_unique<PassThroughFilter>();
-
-        default:
-            std::cout << "FilteredTracker: Unknown strategy, defaulting to EKF" << std::endl;
-            return std::make_unique<ExtendedKalmanFilter>();
-    }
-}
 
 // ============================================================================
 // Constructors
@@ -62,7 +30,7 @@ FilteredTracker::FilteredTracker(std::unique_ptr<Tracker> tracker, double measur
 FilteredTracker::FilteredTracker(std::unique_ptr<Tracker> tracker, const FilteredTrackerConfig& config)
     : FilteredTracker(std::move(tracker),
                      config,
-                     createFilterStrategy(config),
+                     config.createFilterStrategy(),
                      std::make_unique<ReprojectionBasedConfidenceEstimator>(),
                      std::make_unique<ChiSquaredOutlierDetector>()) {
 }
