@@ -541,31 +541,31 @@ namespace lar {
       g2o::VertexSE3Expmap* v = dynamic_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(vertex_id));
       Eigen::Matrix4d extrinsics = lar::utils::TransformUtils::g2oToArkitPose(v->estimate());
       Anchor::Transform transform(extrinsics * anchor.relative_transform.matrix());
-      data->map.updateAnchor(anchor, transform);
+      anchor.transform = transform;
     }
+    data->map.notifyDidUpdateAnchors();
   }
 
   void BundleAdjustment::updateAfterRescaling(double scale_factor, double marginRatio) {
-    // First do normal updates (positions and bounds with camera observations)
+    // First do normal updates (positions and bounds with camera observations from optimizer)
     updateLandmarks(marginRatio);
     updateAnchors();
 
-    // Then rescale bounds for landmarks without camera observations
     // Find anchor pose used during rescaling
     size_t anchor_pose = findMostConnectedPose();
     g2o::VertexSE3Expmap* anchor_vertex = dynamic_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(anchor_pose));
 
     if (!anchor_vertex) {
-      std::cout << "Could not find anchor vertex for bounds rescaling" << std::endl;
+      std::cout << "Could not find anchor vertex for rescaling" << std::endl;
       return;
     }
 
     Eigen::Vector3d anchor_position = anchor_vertex->estimate().inverse().translation();
 
-    // Rescale bounds for landmarks without camera observations
+    // Rescale landmarks that weren't updated by optimizer (no observations/edges)
     for (Landmark* landmark : data->map.landmarks.all()) {
       if (landmark->isUseable()) {
-        // Check if this landmark had no camera observations (bounds weren't updated)
+        // Check if this landmark was updated by the optimizer
         size_t vertex_id = landmark->id + data->frames.size();
         bool has_inlier_cameras = false;
 
@@ -580,19 +580,22 @@ namespace lar {
         }
 
         if (!has_inlier_cameras) {
-          // Rescale the bounds rectangle relative to anchor position
+          // Landmark wasn't in optimizer (no observations) - rescale position and bounds manually
+
+          // Scale position relative to anchor
+          landmark->position = anchor_position + (landmark->position - anchor_position) * scale_factor;
+
+          // Scale bounds relative to anchor
           double min_x = landmark->bounds.lower.x;
           double min_z = landmark->bounds.lower.y;
           double max_x = landmark->bounds.upper.x;
           double max_z = landmark->bounds.upper.y;
 
-          // Scale bounds corners relative to anchor
           double scaled_min_x = anchor_position.x() + (min_x - anchor_position.x()) * scale_factor;
           double scaled_min_z = anchor_position.z() + (min_z - anchor_position.z()) * scale_factor;
           double scaled_max_x = anchor_position.x() + (max_x - anchor_position.x()) * scale_factor;
           double scaled_max_z = anchor_position.z() + (max_z - anchor_position.z()) * scale_factor;
 
-          // Update bounds with scaled coordinates
           landmark->bounds = Rect(
             Point(scaled_min_x, scaled_min_z),
             Point(scaled_max_x, scaled_max_z)

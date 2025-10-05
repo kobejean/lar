@@ -35,15 +35,21 @@ namespace lar {
       using DidUpdateAnchorCallback = std::function<void(Anchor&)>;
       using WillRemoveAnchorCallback = std::function<void(Anchor&)>;
       using DidUpdateOriginCallback = std::function<void(const Transform&)>;
+      using DidUpdateAnchorsCallback = std::function<void()>;  // Bulk anchor update
       void setDidAddAnchorCallback(DidAddAnchorCallback callback);
       void setDidUpdateAnchorCallback(DidUpdateAnchorCallback callback);
       void setWillRemoveAnchorCallback(WillRemoveAnchorCallback callback);
       void setDidUpdateOriginCallback(DidUpdateOriginCallback callback);
+      void setDidUpdateAnchorsCallback(DidUpdateAnchorsCallback callback);
+
+      // Public notification methods (used by BundleAdjustment and other processing classes)
+      void notifyDidUpdateAnchors();
     private:
       DidAddAnchorCallback on_did_add_anchor;
       DidUpdateAnchorCallback on_did_update_anchor;
       WillRemoveAnchorCallback on_will_remove_anchor;
       DidUpdateOriginCallback on_did_update_origin;
+      DidUpdateAnchorsCallback on_did_update_anchors;
       
       void notifyDidAddAnchor(Anchor& anchor);
       void notifyDidUpdateAnchor(Anchor& anchor);

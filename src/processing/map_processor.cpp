@@ -36,30 +36,14 @@ namespace lar {
   }
 
   void MapProcessor::rescale(double scale_factor) {
-    if (scale_factor <= 0.0) {
-      std::cout << "Invalid scale factor: " << scale_factor << std::endl;
-      return;
-    }
-    
-    std::cout << "Manual rescaling by factor: " << scale_factor << std::endl;
-    
-    // Ensure bundle adjustment is constructed before rescaling
-    bundle_adjustment.reset();
-    bundle_adjustment.construct();
-    
-    // Perform rescaling using the core implementation
-    bundle_adjustment.performRescaling(scale_factor);
-
-    // Update the data structures with scaled values (including bounds rescaling)
-    bundle_adjustment.updateAfterRescaling(scale_factor);
-    
+    // Delegate to Map's geometric rescaling (no bundle adjustment needed)
+    data->map.rescale(scale_factor);
     // Re-interpolate GPS observations using updated frame positions
     LocationMatcher temp_matcher;
     temp_matcher.matches = data->gps_obs;
     temp_matcher.reinterpolateMatches(data->frames);
     data->gps_obs = temp_matcher.matches;
     
-    std::cout << "Manual rescaling complete" << std::endl;
   }
 
   void MapProcessor::saveMap(std::string dir) {

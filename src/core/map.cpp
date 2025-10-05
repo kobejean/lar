@@ -1,6 +1,7 @@
 #include <queue>
 #include <unordered_set>
 #include <algorithm>
+#include <iostream>
 #include "lar/core/map.h"
 
 namespace lar {
@@ -112,6 +113,60 @@ namespace lar {
     notifyDidUpdateOrigin(origin);
   }
 
+  void Map::rescale(double scale_factor) {
+    if (scale_factor <= 0.0) {
+      std::cout << "Invalid scale factor: " << scale_factor << std::endl;
+      return;
+    }
+
+    // Find anchor point (use first anchor's position, or origin if no anchors)
+    Eigen::Vector3d anchor_position = Eigen::Vector3d::Zero();
+    if (!anchors.empty()) {
+      anchor_position = anchors.begin()->second.transform.translation();
+    }
+
+    std::cout << "Rescaling map by factor " << scale_factor
+              << " relative to anchor position: " << anchor_position.transpose() << std::endl;
+
+    // Rescale all anchors
+    for (auto& [id, anchor] : anchors) {
+      Eigen::Vector3d position = anchor.transform.translation();
+      Eigen::Vector3d scaled_position = anchor_position + (position - anchor_position) * scale_factor;
+
+      // Update transform with new position (preserving rotation)
+      Transform new_transform = anchor.transform;
+      new_transform.translation() = scaled_position;
+      anchor.transform = new_transform;
+    }
+
+    // Rescale all landmarks
+    for (Landmark* landmark : landmarks.all()) {
+      // Scale position
+      landmark->position = anchor_position + (landmark->position - anchor_position) * scale_factor;
+
+      // Scale bounds
+      double min_x = landmark->bounds.lower.x;
+      double min_z = landmark->bounds.lower.y;
+      double max_x = landmark->bounds.upper.x;
+      double max_z = landmark->bounds.upper.y;
+
+      double scaled_min_x = anchor_position.x() + (min_x - anchor_position.x()) * scale_factor;
+      double scaled_min_z = anchor_position.z() + (min_z - anchor_position.z()) * scale_factor;
+      double scaled_max_x = anchor_position.x() + (max_x - anchor_position.x()) * scale_factor;
+      double scaled_max_z = anchor_position.z() + (max_z - anchor_position.z()) * scale_factor;
+
+      landmark->bounds = Rect(
+        Point(scaled_min_x, scaled_min_z),
+        Point(scaled_max_x, scaled_max_z)
+      );
+    }
+
+    // Notify that all anchors have been updated
+    notifyDidUpdateAnchors();
+
+    std::cout << "Rescaling complete" << std::endl;
+  }
+
   void Map::globalPointFrom(const Eigen::Vector3d& relative, Eigen::Vector3d& global) {
     global = origin * relative;
   }
@@ -141,9 +196,13 @@ namespace lar {
     on_did_update_origin = callback;
   }
 
+  void Map::setDidUpdateAnchorsCallback(DidUpdateAnchorsCallback callback) {
+	on_did_update_anchors = callback;
+  }
+
   void Map::notifyDidAddAnchor(Anchor& anchor) {
     if (on_did_add_anchor) {
-        on_did_add_anchor(anchor);
+	  on_did_add_anchor(anchor);
     }
   }
 
@@ -165,4 +224,9 @@ namespace lar {
     }
   }
 
+  void Map::notifyDidUpdateAnchors() {
+    if (on_did_update_anchors) {
+      on_did_update_anchors();
+    }
+  }
 }
