@@ -535,6 +535,7 @@ namespace lar {
   }
 
   void BundleAdjustment::updateAnchors() {
+    std::vector<std::reference_wrapper<Anchor>> updated_anchors;
     for (auto& it: data->map.anchors) {
       Anchor &anchor = it.second;
       size_t vertex_id = anchor.frame_id;
@@ -542,8 +543,9 @@ namespace lar {
       Eigen::Matrix4d extrinsics = lar::utils::TransformUtils::g2oToArkitPose(v->estimate());
       Anchor::Transform transform(extrinsics * anchor.relative_transform.matrix());
       anchor.transform = transform;
+      updated_anchors.push_back(anchor);
     }
-    data->map.notifyDidUpdateAnchors();
+    data->map.notifyDidUpdateAnchors(updated_anchors);
   }
 
   void BundleAdjustment::updateAfterRescaling(double scale_factor, double marginRatio) {

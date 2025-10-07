@@ -9,32 +9,47 @@ namespace lar {
   Map::Map() {
   }
 
-  Anchor& Map::createAnchor(const Transform &transform) {
-    // Generate ID as max existing ID + 1 to avoid collisions after deletions
-    std::size_t id = 0;
-    if (!anchors.empty()) {
-      auto max_it = std::max_element(anchors.begin(), anchors.end(),
-        [](const auto& a, const auto& b) { return a.first < b.first; });
-      id = max_it->first + 1;
+  // Bulk operations
+  std::vector<std::reference_wrapper<Anchor>> Map::createAnchors(const std::vector<Transform>& transforms) {
+    std::vector<std::reference_wrapper<Anchor>> created;
+    created.reserve(transforms.size());
+
+    for (const auto& transform : transforms) {
+      // Generate ID as max existing ID + 1 to avoid collisions after deletions
+      std::size_t id = 0;
+      if (!anchors.empty()) {
+        auto max_it = std::max_element(anchors.begin(), anchors.end(),
+          [](const auto& a, const auto& b) { return a.first < b.first; });
+        id = max_it->first + 1;
+      }
+      auto [it, inserted] = anchors.emplace(id, Anchor{id, transform});
+      created.push_back(it->second);
     }
-    auto [it, inserted] = anchors.emplace(id,Anchor{id,transform});
-    notifyDidAddAnchor(it->second);
-    return it->second;
+
+    notifyDidAddAnchors(created);
+    return created;
   }
 
-  void Map::updateAnchor(Anchor& anchor, const Transform& transform) {
-    anchor.transform = transform;
-    notifyDidUpdateAnchor(anchor);
+  void Map::updateAnchors(const std::vector<std::pair<std::reference_wrapper<Anchor>, Transform>>& updates) {
+    std::vector<std::reference_wrapper<Anchor>> updated;
+    updated.reserve(updates.size());
+
+    for (auto& [anchor_ref, transform] : updates) {
+      anchor_ref.get().transform = transform;
+      updated.push_back(anchor_ref);
+    }
+
+    notifyDidUpdateAnchors(updated);
   }
 
-  void Map::removeAnchor(const Anchor& anchor) {
-    std::size_t anchor_id = anchor.id;
-    auto it = anchors.find(anchor_id);
-    if (it != anchors.end()) {
-      // Make a copy of the anchor before erasing it to avoid use-after-free
-      Anchor anchor_copy = it->second;
-      notifyWillRemoveAnchor(anchor_copy);
-      anchors.erase(it);
+  void Map::removeAnchors(const std::vector<std::reference_wrapper<const Anchor>>& anchors_to_remove) {
+    // Notify BEFORE deletion so delegates have access to anchor data
+    notifyWillRemoveAnchors(anchors_to_remove);
+
+    // Now delete
+    for (const auto& anchor_ref : anchors_to_remove) {
+      std::size_t anchor_id = anchor_ref.get().id;
+      anchors.erase(anchor_id);
       edges.erase(anchor_id);
       for (auto& [id, edge_list] : edges) {
         edge_list.erase(
@@ -45,9 +60,24 @@ namespace lar {
     }
   }
 
+  // Convenience methods - single operations call bulk internally
+  Anchor& Map::createAnchor(const Transform &transform) {
+    auto result = createAnchors({transform});
+    return result[0].get();
+  }
+
+  void Map::updateAnchor(Anchor& anchor, const Transform& transform) {
+    updateAnchors({{std::ref(anchor), transform}});
+  }
+
+  void Map::removeAnchor(const Anchor& anchor) {
+    removeAnchors({std::cref(anchor)});
+  }
+
   void Map::addEdge(std::size_t anchor_id_u, std::size_t anchor_id_v) {
     edges[anchor_id_u].push_back(anchor_id_v);
     edges[anchor_id_v].push_back(anchor_id_u);
+    notifyDidAddEdge(anchor_id_u, anchor_id_v);
   }
 
   std::vector<Anchor*> Map::getPath(std::size_t start_id, std::size_t goal_id) {
@@ -162,7 +192,11 @@ namespace lar {
     }
 
     // Notify that all anchors have been updated
-    notifyDidUpdateAnchors();
+    std::vector<std::reference_wrapper<Anchor>> all_anchors;
+    for (auto& [id, anchor] : anchors) {
+      all_anchors.push_back(anchor);
+    }
+    notifyDidUpdateAnchors(all_anchors);
 
     std::cout << "Rescaling complete" << std::endl;
   }
@@ -180,41 +214,43 @@ namespace lar {
     relative = origin.inverse() * global;
   }
 
-  void Map::setDidAddAnchorCallback(DidAddAnchorCallback callback) {
-    on_did_add_anchor = callback;
+  // Callback setters
+  void Map::setDidAddAnchorsCallback(DidAddAnchorsCallback callback) {
+    on_did_add_anchors = callback;
   }
 
-  void Map::setDidUpdateAnchorCallback(DidUpdateAnchorCallback callback) {
-    on_did_update_anchor = callback;
+  void Map::setDidUpdateAnchorsCallback(DidUpdateAnchorsCallback callback) {
+    on_did_update_anchors = callback;
   }
 
-  void Map::setWillRemoveAnchorCallback(WillRemoveAnchorCallback callback) {
-    on_will_remove_anchor = callback;
+  void Map::setWillRemoveAnchorsCallback(WillRemoveAnchorsCallback callback) {
+    on_will_remove_anchors = callback;
   }
 
   void Map::setDidUpdateOriginCallback(DidUpdateOriginCallback callback) {
     on_did_update_origin = callback;
   }
 
-  void Map::setDidUpdateAnchorsCallback(DidUpdateAnchorsCallback callback) {
-	on_did_update_anchors = callback;
+  void Map::setDidAddEdgeCallback(DidAddEdgeCallback callback) {
+    on_did_add_edge = callback;
   }
 
-  void Map::notifyDidAddAnchor(Anchor& anchor) {
-    if (on_did_add_anchor) {
-	  on_did_add_anchor(anchor);
+  // Notification methods
+  void Map::notifyDidAddAnchors(const std::vector<std::reference_wrapper<Anchor>>& anchors) {
+    if (on_did_add_anchors) {
+      on_did_add_anchors(anchors);
     }
   }
 
-  void Map::notifyDidUpdateAnchor(Anchor& anchor) {
-    if (on_did_update_anchor) {
-      on_did_update_anchor(anchor);
+  void Map::notifyDidUpdateAnchors(const std::vector<std::reference_wrapper<Anchor>>& anchors) {
+    if (on_did_update_anchors) {
+      on_did_update_anchors(anchors);
     }
   }
 
-  void Map::notifyWillRemoveAnchor(Anchor& anchor) {
-    if (on_will_remove_anchor) {
-      on_will_remove_anchor(anchor);
+  void Map::notifyWillRemoveAnchors(const std::vector<std::reference_wrapper<const Anchor>>& anchors) {
+    if (on_will_remove_anchors) {
+      on_will_remove_anchors(anchors);
     }
   }
 
@@ -224,9 +260,9 @@ namespace lar {
     }
   }
 
-  void Map::notifyDidUpdateAnchors() {
-    if (on_did_update_anchors) {
-      on_did_update_anchors();
+  void Map::notifyDidAddEdge(std::size_t from_id, std::size_t to_id) {
+    if (on_did_add_edge) {
+      on_did_add_edge(from_id, to_id);
     }
   }
 }
