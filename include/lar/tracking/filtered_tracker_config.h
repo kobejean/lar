@@ -22,7 +22,7 @@ struct FilteredTrackerConfig {
         AVERAGING,
         PASS_THROUGH
     };
-    FilterStrategy filter_strategy = FilterStrategy::SLIDING_WINDOW_BA;
+    FilterStrategy filter_strategy = FilterStrategy::PASS_THROUGH;
 
     std::unique_ptr<PoseFilterStrategy> createFilterStrategy() const;
 

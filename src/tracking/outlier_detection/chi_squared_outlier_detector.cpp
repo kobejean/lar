@@ -40,7 +40,9 @@ bool ChiSquaredOutlierDetector::isOutlier(
                   << " (threshold = " << std::sqrt(threshold) << ")" << std::endl;
     }
 
-    return is_outlier;
+    // return is_outlier;
+    // TODO: reenable after tuning
+    return false;
 }
 
 Eigen::VectorXd ChiSquaredOutlierDetector::transformToVector(const Eigen::Matrix4d& T) const {

@@ -24,9 +24,6 @@ void PassThroughFilter::predict(const Eigen::Matrix4d& motion, double dt, const 
 void PassThroughFilter::update(const MeasurementContext& context,
                               const FilteredTrackerConfig& config) {
     const Eigen::Matrix4d& measurement = context.measured_pose;
-    if (!is_initialized_) {
-        return;
-    }
 
     // Simply use the measurement directly (no filtering)
     state_.fromTransform(measurement);
@@ -39,13 +36,14 @@ void PassThroughFilter::update(const MeasurementContext& context,
 Eigen::MatrixXd PassThroughFilter::getCovariance() const {
     // Return a fixed covariance matrix
     Eigen::MatrixXd cov = Eigen::MatrixXd::Identity(6, 6);
-    cov.block<3,3>(0,0) *= 0.1 * 0.1;  // 10cm position uncertainty
-    cov.block<3,3>(3,3) *= 0.05 * 0.05; // ~3 degree orientation uncertainty
+    double posUncertainty = getPositionUncertainty();
+    cov.block<3,3>(0,0) *= posUncertainty * posUncertainty;
+    cov.block<3,3>(3,3) *= 0.2 * 0.2;
     return cov;
 }
 
 double PassThroughFilter::getPositionUncertainty() const {
-    return 0.1; // Fixed 10cm uncertainty
+    return 5;
 }
 
 void PassThroughFilter::reset() {
