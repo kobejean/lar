@@ -28,7 +28,11 @@ set(HEADER_LIST
   "${PROJECT_SOURCE_DIR}/include/lar/tracking/pose_filtering/sliding_window_ba.h"
 )
 
-add_library(lar_tracking
+# Optional Metal-accelerated SIFT (macOS/iOS only)
+option(LAR_USE_METAL_SIFT "Enable Metal-accelerated Gaussian pyramid for SIFT" ON)
+
+# Collect source files
+set(TRACKING_SOURCES
   tracker.cpp
   filtered_tracker.cpp
   vision.cpp
@@ -49,6 +53,16 @@ add_library(lar_tracking
   pose_filtering/averaging_filter.cpp
   pose_filtering/pass_through_filter.cpp
   pose_filtering/sliding_window_ba.cpp
+)
+
+# Add Metal implementation on Apple platforms if enabled
+if(LAR_USE_METAL_SIFT AND APPLE)
+  list(APPEND TRACKING_SOURCES sift_metal.mm)
+  message(STATUS "Metal-accelerated SIFT enabled")
+endif()
+
+add_library(lar_tracking
+  ${TRACKING_SOURCES}
   ${HEADER_LIST}
 )
 
@@ -73,18 +87,36 @@ target_compile_options(lar_tracking PRIVATE
 
 target_link_libraries(lar_tracking
   PUBLIC
-    opencv_core 
-    opencv_calib3d 
+    opencv_core
+    opencv_calib3d
     opencv_imgproc
     opencv_features2d  # For KeyPointsFilter utilities
-    lar_core 
+    lar_core
     lar_mapping
   PRIVATE
-    g2o_core 
-    g2o_types_sba 
-    g2o_types_slam3d 
+    g2o_core
+    g2o_types_sba
+    g2o_types_slam3d
     g2o_solver_eigen
 )
+
+# Link Metal frameworks if Metal SIFT is enabled
+if(LAR_USE_METAL_SIFT AND APPLE)
+  find_library(METAL_LIBRARY Metal)
+  find_library(METAL_PERFORMANCE_SHADERS MetalPerformanceShaders)
+
+  if(METAL_LIBRARY AND METAL_PERFORMANCE_SHADERS)
+    target_link_libraries(lar_tracking PRIVATE
+      ${METAL_LIBRARY}
+      ${METAL_PERFORMANCE_SHADERS}
+    )
+    target_compile_definitions(lar_tracking PRIVATE LAR_USE_METAL_SIFT)
+    # Optional: Enable profiling
+    # target_compile_definitions(lar_tracking PRIVATE LAR_PROFILE_METAL_SIFT)
+  else()
+    message(WARNING "Metal frameworks not found. Metal SIFT will be disabled.")
+  endif()
+endif()
 
 # Set C++ standard if not already set
 target_compile_features(lar_tracking PUBLIC cxx_std_11)

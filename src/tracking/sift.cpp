@@ -6,6 +6,17 @@
 #include <algorithm>
 #include <iostream>
 
+// Define LAR_USE_METAL_SIFT to enable Metal-accelerated Gaussian pyramid
+// #define LAR_USE_METAL_SIFT
+
+#ifdef LAR_USE_METAL_SIFT
+// Forward declaration of Metal implementation (defined in sift_metal.mm)
+namespace lar {
+    void buildGaussianPyramidMetal(const cv::Mat& base, std::vector<cv::Mat>& pyr,
+                                   int nOctaves, const std::vector<double>& sigmas);
+}
+#endif
+
 // SIMD Helper macros for cleaner code
 #if (CV_SIMD || CV_SIMD_SCALABLE)
     #define SIMD_ENABLED 1
@@ -844,6 +855,11 @@ void SIFT::buildGaussianPyramid(const cv::Mat& base, std::vector<cv::Mat>& pyr, 
         sig[i] = std::sqrt(sig_total*sig_total - sig_prev*sig_prev);
     }
 
+#ifdef LAR_USE_METAL_SIFT
+    // Use Metal Performance Shaders for GPU-accelerated Gaussian pyramid
+    buildGaussianPyramidMetal(base, pyr, nOctaves, sig);
+#else
+    // CPU+SIMD path (OpenCV GaussianBlur with hardware acceleration)
     for (int o = 0; o < nOctaves; o++) {
         for (int i = 0; i < nOctaveLayers_ + 3; i++) {
             cv::Mat& dst = pyr[o*(nOctaveLayers_ + 3) + i];
@@ -858,6 +874,7 @@ void SIFT::buildGaussianPyramid(const cv::Mat& base, std::vector<cv::Mat>& pyr, 
             }
         }
     }
+#endif
 }
 
 void SIFT::buildDoGPyramid(const std::vector<cv::Mat>& gpyr, std::vector<cv::Mat>& dogpyr) const {
