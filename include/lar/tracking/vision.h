@@ -1,13 +1,15 @@
 #ifndef LAR_TRACKING_VISION_H
 #define LAR_TRACKING_VISION_H
 
+#include "sift.h"
 #include <opencv2/features2d.hpp>
 
 namespace lar {
 
   class Vision {
     public:
-      cv::Ptr<cv::Feature2D> detector;
+      // cv::Ptr<cv::Feature2D> detector;
+      cv::Ptr<SIFT> detector;
       cv::FlannBasedMatcher flann_matcher;
       cv::BFMatcher bf_matcher;
 

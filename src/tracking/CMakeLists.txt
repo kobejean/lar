@@ -52,8 +52,46 @@ add_library(lar_tracking
   ${HEADER_LIST}
 )
 
+# Floating-point precision configuration
+# These flags balance performance with IEEE 754 compliance for reproducible results
+target_compile_options(lar_tracking PRIVATE
+  $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:
+    -O3                      # High optimization
+    -march=native            # Use best available SIMD for current CPU
+    # -mfpmath=sse             # Use SSE for FP math (consistent 32/64-bit precision)
+    -ffp-contract=fast       # Allow FMA (fused multiply-add) - MORE accurate than separate ops
+    # DO NOT USE -ffast-math # This breaks IEEE 754 compliance!
+    # -fno-unsafe-math-optimizations  # Uncomment for strictest compliance
+  >
+  $<$<CXX_COMPILER_ID:MSVC>:
+    /O2                      # Optimize for speed
+    /arch:AVX2               # AVX2 SIMD (or /arch:AVX512 if available)
+    /fp:precise              # Precise floating-point model (default, good)
+    # /fp:strict             # Uncomment for strictest IEEE 754 compliance (slower)
+  >
+)
+
 target_link_libraries(lar_tracking
-  opencv_core opencv_calib3d opencv_imgproc
-  lar_core lar_mapping
-  g2o_core g2o_types_sba g2o_types_slam3d g2o_solver_eigen
+  PUBLIC
+    opencv_core 
+    opencv_calib3d 
+    opencv_imgproc
+    opencv_features2d  # For KeyPointsFilter utilities
+    lar_core 
+    lar_mapping
+  PRIVATE
+    g2o_core 
+    g2o_types_sba 
+    g2o_types_slam3d 
+    g2o_solver_eigen
+)
+
+# Set C++ standard if not already set
+target_compile_features(lar_tracking PUBLIC cxx_std_11)
+
+# Add include directories
+target_include_directories(lar_tracking
+  PUBLIC
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
 )

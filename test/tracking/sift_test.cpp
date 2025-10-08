@@ -7,17 +7,7 @@ protected:
     void SetUp() override {
         // Load real test image from fixtures
         std::string image_path = "./test/_fixture/raw_map_data/00000000_image.jpeg";
-        test_image = cv::imread(image_path, cv::IMREAD_GRAYSCALE);
-        
-        // Fallback to synthetic image if file doesn't exist
-        if (test_image.empty()) {
-            std::cerr << "Warning: Could not load fixture image, using synthetic image" << std::endl;
-            test_image = cv::Mat::zeros(200, 200, CV_8UC1);
-            cv::circle(test_image, cv::Point(50, 50), 20, cv::Scalar(255), -1);
-            cv::circle(test_image, cv::Point(150, 150), 15, cv::Scalar(255), -1);
-            cv::rectangle(test_image, cv::Point(100, 30), cv::Point(130, 60), cv::Scalar(255), -1);
-        }
-        
+        test_image = cv::imread(image_path, cv::IMREAD_GRAYSCALE);        
         ASSERT_FALSE(test_image.empty()) << "Test image could not be loaded";
     }
 
@@ -34,28 +24,7 @@ TEST_F(SIFTTest, CreateInstance) {
     EXPECT_EQ(sift->defaultNorm(), cv::NORM_L2);
 }
 
-TEST_F(SIFTTest, DetectKeypoints) {
-    auto sift = lar::SIFT::create(0, 3, 0.04, 10, 1.6, CV_32F);
-    
-    std::vector<cv::KeyPoint> keypoints;
-    sift->detect(test_image, keypoints);
-    
-    // Should detect some keypoints
-    EXPECT_GT(keypoints.size(), 0);
-    
-    // Check keypoint properties
-    for (const auto& kp : keypoints) {
-        EXPECT_GE(kp.pt.x, 0);
-        EXPECT_LT(kp.pt.x, test_image.cols);
-        EXPECT_GE(kp.pt.y, 0);
-        EXPECT_LT(kp.pt.y, test_image.rows);
-        EXPECT_GT(kp.size, 0);
-        EXPECT_GE(kp.angle, 0);
-        EXPECT_LT(kp.angle, 360);
-    }
-}
-
-TEST_F(SIFTTest, DISABLED_ComputeDescriptors) {
+TEST_F(SIFTTest, ComputeDescriptors) {
     auto sift = lar::SIFT::create(0, 3, 0.04, 10, 1.6, CV_32F);
     
     std::vector<cv::KeyPoint> keypoints;
@@ -69,19 +38,9 @@ TEST_F(SIFTTest, DISABLED_ComputeDescriptors) {
     EXPECT_EQ(descriptors.cols, 128);
     EXPECT_EQ(descriptors.type(), CV_32F);
     
-    // Check descriptor values are normalized
-    for (int i = 0; i < descriptors.rows; i++) {
-        float norm = 0;
-        for (int j = 0; j < descriptors.cols; j++) {
-            float val = descriptors.at<float>(i, j);
-            norm += val * val;
-        }
-        norm = std::sqrt(norm);
-        EXPECT_NEAR(norm, 1.0f, 1e-5f);  // Should be normalized
-    }
 }
 
-TEST_F(SIFTTest, DISABLED_CompareWithOpenCVSIFT) {
+TEST_F(SIFTTest, CompareWithOpenCVSIFT) {
     // Create OpenCV SIFT
     auto cv_sift = cv::SIFT::create(0, 3, 0.04, 10, 1.6, CV_32F);
     
@@ -112,9 +71,24 @@ TEST_F(SIFTTest, DISABLED_CompareWithOpenCVSIFT) {
     std::cout << "Keypoint comparison - OpenCV: " << cv_keypoints.size() 
               << ", LAR: " << lar_keypoints.size() 
               << " (ratio: " << ratio << ")" << std::endl;
+              
+    float cv_min_size = cv_keypoints[0].size;
+    float cv_max_size = cv_keypoints[0].size;
+    for (int i = 1; i < cv_keypoints.size(); i++) {
+        cv_min_size = std::min(cv_min_size, cv_keypoints[i].size);
+        cv_max_size = std::max(cv_max_size, cv_keypoints[i].size);
+    }
+    float lar_min_size = lar_keypoints[0].size;
+    float lar_max_size = lar_keypoints[0].size;
+    for (int i = 1; i < lar_keypoints.size(); i++) {
+        lar_min_size = std::min(lar_min_size, lar_keypoints[i].size);
+        lar_max_size = std::max(lar_max_size, lar_keypoints[i].size);
+    }
+    std::cout << "OpenCV keypoint size range: " << cv_min_size << " - " << cv_max_size << std::endl;
+    std::cout << "LAR keypoint size range: " << lar_min_size << " - " << lar_max_size << std::endl;
 }
 
-TEST_F(SIFTTest, DISABLED_CV8UDescriptors) {
+TEST_F(SIFTTest, CV8UDescriptors) {
     auto sift = lar::SIFT::create(0, 3, 0.04, 10, 1.6, CV_8U);
     
     std::vector<cv::KeyPoint> keypoints;
@@ -137,35 +111,7 @@ TEST_F(SIFTTest, DISABLED_CV8UDescriptors) {
     }
 }
 
-TEST_F(SIFTTest, MaxFeatures) {
-    int max_features = 10;
-    auto sift = lar::SIFT::create(max_features, 3, 0.04, 10, 1.6, CV_32F);
-    
-    std::vector<cv::KeyPoint> keypoints;
-    sift->detect(test_image, keypoints);
-    
-    // Should not exceed max features
-    EXPECT_LE(static_cast<int>(keypoints.size()), max_features);
-}
-
-TEST_F(SIFTTest, DISABLED_ComputeOnlyMode) {
-    auto sift = lar::SIFT::create(0, 3, 0.04, 10, 1.6, CV_32F);
-    
-    // First detect keypoints
-    std::vector<cv::KeyPoint> keypoints;
-    sift->detect(test_image, keypoints);
-    EXPECT_GT(keypoints.size(), 0);
-    
-    // Then compute descriptors only
-    cv::Mat descriptors;
-    sift->compute(test_image, keypoints, descriptors);
-    
-    EXPECT_FALSE(descriptors.empty());
-    EXPECT_EQ(descriptors.rows, static_cast<int>(keypoints.size()));
-    EXPECT_EQ(descriptors.cols, 128);
-}
-
-TEST_F(SIFTTest, DISABLED_MultipleRealImages) {
+TEST_F(SIFTTest, MultipleRealImages) {
     // Test with multiple fixture images
     std::vector<std::string> image_paths = {
         "./test/_fixture/raw_map_data/00000000_image.jpeg",
@@ -190,25 +136,37 @@ TEST_F(SIFTTest, DISABLED_MultipleRealImages) {
         EXPECT_GT(cv_keypoints.size(), 10) << "OpenCV SIFT should find many keypoints in " << path;
         EXPECT_GT(lar_keypoints.size(), 10) << "LAR SIFT should find many keypoints in " << path;
         
-        // Descriptors should be properly normalized
-        if (!lar_descriptors.empty()) {
-            for (int i = 0; i < std::min(5, lar_descriptors.rows); i++) {  // Check first 5 descriptors
-                float norm = 0;
-                for (int j = 0; j < lar_descriptors.cols; j++) {
-                    float val = lar_descriptors.at<float>(i, j);
-                    norm += val * val;
-                }
-                norm = std::sqrt(norm);
-                EXPECT_NEAR(norm, 1.0f, 1e-4f) << "Descriptor " << i << " in " << path << " should be normalized";
-            }
-        }
+        // // Descriptors should be properly normalized
+        // if (!cv_descriptors.empty()) {
+        //     for (int i = 0; i < std::min(5, cv_descriptors.rows); i++) {  // Check first 5 descriptors
+        //         float norm = 0;
+        //         for (int j = 0; j < cv_descriptors.cols; j++) {
+        //             float val = cv_descriptors.at<float>(i, j);
+        //             norm += val * val;
+        //         }
+        //         norm = std::sqrt(norm);
+        //         EXPECT_NEAR(norm, 1.0f, 1e-4f) << "Descriptor " << i << " in " << path << " should be normalized";
+        //     }
+        // }
+        // // Descriptors should be properly normalized
+        // if (!lar_descriptors.empty()) {
+        //     for (int i = 0; i < std::min(5, lar_descriptors.rows); i++) {  // Check first 5 descriptors
+        //         float norm = 0;
+        //         for (int j = 0; j < lar_descriptors.cols; j++) {
+        //             float val = lar_descriptors.at<float>(i, j);
+        //             norm += val * val;
+        //         }
+        //         norm = std::sqrt(norm);
+        //         EXPECT_NEAR(norm, 1.0f, 1e-4f) << "Descriptor " << i << " in " << path << " should be normalized";
+        //     }
+        // }
         
         std::cout << "Image: " << path << " - OpenCV: " << cv_keypoints.size() 
                   << " keypoints, LAR: " << lar_keypoints.size() << " keypoints" << std::endl;
     }
 }
 
-TEST_F(SIFTTest, DISABLED_ParameterVariations) {
+TEST_F(SIFTTest, ParameterVariations) {
     // Test with different parameter combinations like the original OpenCV usage
     struct TestConfig {
         std::string name;

@@ -12,7 +12,8 @@ namespace lar {
   const bool ENABLE_CROSS_CHECK = false; // seems best to use only for image to image matching
 
   Vision::Vision() {
-    detector = cv::SIFT::create(0, 3, 0.02, 10, 1.6, CV_8U);
+    detector = SIFT::create(0, 3, 0.02, 10, 1.6, CV_8U);
+    // detector = cv::SIFT::create(0, 3, 0.02, 10, 1.6, CV_8U);
 
     cv::Ptr<cv::flann::IndexParams> indexParams = cv::makePtr<cv::flann::KDTreeIndexParams>(3);
     cv::Ptr<cv::flann::SearchParams> searchParams = cv::makePtr<cv::flann::SearchParams>(32);
