@@ -15,7 +15,7 @@ import argparse
 import glob
 from pathlib import Path
 from feature_extraction import extract_colmap_sift_features, extract_opencv_sift_features
-from database_operations import create_colmap_database, export_poses
+from database_operations import create_colmap_database, export_poses, insert_two_view_geometries_from_arkit
 from arkit_integration import load_arkit_data, create_reference_file_from_arkit
 from map_export import export_aligned_map_json
 
@@ -209,6 +209,12 @@ def feature_matching(args, database_path):
             print("COLMAP pipeline failed at feature matching")
             exit(1)
 
+def insert_arkit_odometry(arkit_frames, database_path):
+    """Insert ARKit relative poses as odometry constraints for bundle adjustment"""
+    print("\nInserting ARKit VIO odometry constraints...")
+    count = insert_two_view_geometries_from_arkit(arkit_frames, database_path)
+    print(f"Added {count} relative pose constraints from ARKit VIO")
+
 def sparse_reconstruction(args, database_path, sparse_dir):
     print("\nRunning sparse reconstruction...")
     if not run_colmap_mapping(database_path, sparse_dir):
@@ -280,18 +286,21 @@ def main():
 
     # Step 2: Extract SIFT features
     extract_features(args, work_dir, database_path)
-    
+
     # Step 3: Feature matching
     feature_matching(args, database_path)
 
-    # Step 4: Sparse reconstruction
+    # Step 4: Insert ARKit odometry constraints
+    insert_arkit_odometry(arkit_frames, database_path)
+
+    # Step 5: Sparse reconstruction
     reconstruction_path = sparse_reconstruction(args, database_path, sparse_dir)
     reconstruction_path = sparse_dir / "0"
-    
-    # Step 5: Model alignment
+
+    # Step 6: Model alignment
     reconstruction_path = model_alignment(args, arkit_frames, ref_coords_file, reconstruction_path, database_path)
 
-    # Step 6: Export map
+    # Step 7: Export map
     export_map(args, database_path, map_json_file, arkit_frames, reconstruction_path, poses_dir)
 
     print(f"\n✅ Processing completed successfully!")

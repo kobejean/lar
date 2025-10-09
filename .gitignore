@@ -5,3 +5,4 @@
 /test/_fixture/output
 /lib
 **/.DS_Store
+*.pyc
