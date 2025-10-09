@@ -1,6 +1,86 @@
 import numpy as np
 
 
+# ============================================================================
+# ARKit Extrinsics Parsing and Coordinate Conversion
+# ============================================================================
+
+def parse_arkit_extrinsics(extrinsics):
+    """
+    Parse ARKit extrinsics array into 4x4 transformation matrix.
+
+    ARKit extrinsics is a 16-element array representing a 4x4 transformation
+    matrix in column-major order (camera-from-world transform).
+
+    Args:
+        extrinsics: 16-element array or list from ARKit
+
+    Returns:
+        4x4 numpy array representing camera-from-world transformation
+    """
+    return np.array(extrinsics).reshape(4, 4, order='F')
+
+def extract_rotation_translation_from_extrinsics(extrinsics, apply_colmap_conversion=False):
+    """
+    Extract rotation matrix and translation vector from ARKit extrinsics.
+
+    Args:
+        extrinsics: 16-element array [R00, R10, R20, 0, R01, R11, R21, 0,
+                                       R02, R12, R22, 0, tx, ty, tz, 1]
+        apply_colmap_conversion: If True, apply Y/Z axis flip for COLMAP coordinate system
+
+    Returns:
+        (R, t): 3x3 rotation matrix and 3-element translation vector
+    """
+    matrix = parse_arkit_extrinsics(extrinsics)
+    R = matrix[:3, :3]
+    t = matrix[:3, 3]
+
+    if apply_colmap_conversion:
+        # COLMAP has opposite Y and Z axis from ARKit
+        # Apply coordinate conversion to translation
+        t = np.array([t[0], -t[1], -t[2]])
+        # Apply coordinate conversion to rotation
+        R = R.copy()
+        R[:, 1] = -R[:, 1]  # Flip Y column
+        R[:, 2] = -R[:, 2]  # Flip Z column
+
+    return R, t
+
+def compute_relative_pose_from_arkit(extrinsics1, extrinsics2, for_colmap=False):
+    """
+    Compute relative pose from camera1 to camera2 from ARKit extrinsics.
+
+    Given two camera-from-world transforms T1 and T2, compute the
+    camera2-from-camera1 transform: T_rel = T2 * T1^-1
+
+    Args:
+        extrinsics1: ARKit extrinsics for camera 1
+        extrinsics2: ARKit extrinsics for camera 2
+        for_colmap: If True, work in COLMAP coordinate system (Y/Z flipped)
+
+    Returns:
+        (R_rel, t_rel): Relative rotation matrix and translation vector
+    """
+    # Extract poses (convert to COLMAP coordinates if needed)
+    R1, t1 = extract_rotation_translation_from_extrinsics(extrinsics1, apply_colmap_conversion=for_colmap)
+    R2, t2 = extract_rotation_translation_from_extrinsics(extrinsics2, apply_colmap_conversion=for_colmap)
+
+    # Compute world-from-camera1 (invert T1)
+    R1_inv = R1.T
+    t1_inv = -R1.T @ t1
+
+    # Compute camera2-from-camera1: T2 * T1^-1
+    R_rel = R2 @ R1_inv
+    t_rel = R2 @ t1_inv + t2
+
+    return R_rel, t_rel
+
+
+# ============================================================================
+# Quaternion and Rotation Matrix Conversions
+# ============================================================================
+
 def quaternion_to_rotation_matrix(qw, qx, qy, qz):
     """Convert quaternion to 3x3 rotation matrix"""
     norm = np.sqrt(qw*qw + qx*qx + qy*qy + qz*qz)
