@@ -7,7 +7,17 @@
 #include <iostream>
 #include <chrono>
 #include <vector>
+
 #define LAR_PROFILE_METAL_SIFT 1
+#define METAL_BUFFER_ALIGNMENT 16  // Metal prefers 16-byte alignment
+
+// Helper macro for conditional release
+#if !__has_feature(objc_arc)
+    #define RELEASE_IF_MANUAL(obj) [obj release]
+#else
+    #define RELEASE_IF_MANUAL(obj) (void)0
+#endif
+
 namespace lar {
 
 // Metal resource cache for reusing across frames
@@ -33,31 +43,25 @@ struct MetalSiftResources {
     }
 
     void releaseBuffersAndTextures() {
-#if !__has_feature(objc_arc)
-        // Manual memory management: explicit release
         for (auto& octave : octaveTextures) {
             for (auto& tex : octave) {
-                if (tex) [tex release];
+                RELEASE_IF_MANUAL(tex);
             }
         }
         for (auto& octave : octaveBuffers) {
             for (auto& buf : octave) {
-                if (buf) [buf release];
+                RELEASE_IF_MANUAL(buf);
             }
         }
-#endif
-        // Clear vectors (ARC will auto-release when objects are removed)
         octaveTextures.clear();
         octaveBuffers.clear();
     }
 
     ~MetalSiftResources() {
         releaseBuffersAndTextures();
-#if !__has_feature(objc_arc)
-        if (commandQueue) [commandQueue release];
-        if (device) [device release];
-#else
-        // ARC: just nil out the references
+        RELEASE_IF_MANUAL(commandQueue);
+        RELEASE_IF_MANUAL(device);
+#if __has_feature(objc_arc)
         commandQueue = nil;
         device = nil;
 #endif
@@ -72,11 +76,8 @@ static MetalSiftResources& getMetalResources() {
 
 // Create 1D Gaussian kernel using OpenCV's bit-exact implementation
 static std::vector<float> createGaussianKernel(double sigma) {
-    // Use OpenCV's kernel size formula for CV_32F (float images)
-    int ksize = cvRound(sigma * 4 * 2 + 1) | 1;
-    ksize = ksize | 1;  // Ensure odd (set LSB to 1)
-
-    // Use OpenCV's bit-exact getGaussianKernel (uses softdouble internally)
+    // OpenCV formula for CV_32F: cvRound(sigma*4*2+1)|1 ensures odd size
+    int ksize = cvRound(sigma * 8 + 1) | 1;
     cv::Mat kernelMat = cv::getGaussianKernel(ksize, sigma, CV_32F);
 
     // Convert cv::Mat to std::vector<float>
@@ -128,7 +129,7 @@ void buildGaussianPyramidMetal(const cv::Mat& base, std::vector<cv::Mat>& pyr,
                 int octaveHeight = base.rows >> o;
 
                 size_t rowBytes = octaveWidth * sizeof(float);
-                size_t alignedRowBytes = ((rowBytes + 15) / 16) * 16;
+                size_t alignedRowBytes = ((rowBytes + METAL_BUFFER_ALIGNMENT - 1) / METAL_BUFFER_ALIGNMENT) * METAL_BUFFER_ALIGNMENT;
                 size_t bufferSize = alignedRowBytes * octaveHeight;
 
                 resources.octaveBuffers[o].resize(nLevels);
@@ -181,9 +182,8 @@ void buildGaussianPyramidMetal(const cv::Mat& base, std::vector<cv::Mat>& pyr,
                           cv::Size(octaveWidth, octaveHeight), 0, 0, cv::INTER_NEAREST);
             }
 
-            // Reuse cached buffers and textures
             size_t rowBytes = octaveWidth * sizeof(float);
-            size_t alignedRowBytes = ((rowBytes + 15) / 16) * 16;
+            size_t alignedRowBytes = ((rowBytes + METAL_BUFFER_ALIGNMENT - 1) / METAL_BUFFER_ALIGNMENT) * METAL_BUFFER_ALIGNMENT;
 
             std::vector<id<MTLBuffer>>& levelBuffers = resources.octaveBuffers[o];
             std::vector<id<MTLTexture>>& levelTextures = resources.octaveTextures[o];
@@ -254,19 +254,15 @@ void buildGaussianPyramidMetal(const cv::Mat& base, std::vector<cv::Mat>& pyr,
                                   sourceTexture:tempTexture
                              destinationTexture:levelTextures[i]];
 
-#if !__has_feature(objc_arc)
-                [horizConv release];
-                [vertConv release];
-#endif
+                RELEASE_IF_MANUAL(horizConv);
+                RELEASE_IF_MANUAL(vertConv);
             }
 
             [commandBuffer commit];
             [commandBuffer waitUntilCompleted];
 
-#if !__has_feature(objc_arc)
-            [tempTexture release];
-            [tempBuffer release];
-#endif
+            RELEASE_IF_MANUAL(tempTexture);
+            RELEASE_IF_MANUAL(tempBuffer);
 #ifdef LAR_PROFILE_METAL_SIFT
             gpuTime += std::chrono::duration<double, std::milli>(
                 std::chrono::high_resolution_clock::now() - gpuStart).count();
