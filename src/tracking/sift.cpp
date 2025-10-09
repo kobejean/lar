@@ -10,10 +10,17 @@
 // #define LAR_USE_METAL_SIFT
 
 #ifdef LAR_USE_METAL_SIFT
-// Forward declaration of Metal implementation (defined in sift_metal.mm)
+// Forward declarations of Metal implementations (defined in sift_metal.mm)
 namespace lar {
     void buildGaussianPyramidMetal(const cv::Mat& base, std::vector<cv::Mat>& pyr,
                                    int nOctaves, const std::vector<double>& sigmas);
+    void buildDoGPyramidMetal(const std::vector<cv::Mat>& gauss_pyr, std::vector<cv::Mat>& dog_pyr,
+                              int nOctaves, int nLevels);
+    void findScaleSpaceExtremaMetal(const std::vector<cv::Mat>& gauss_pyr,
+                                    const std::vector<cv::Mat>& dog_pyr,
+                                    std::vector<cv::KeyPoint>& keypoints,
+                                    int nOctaves, int nOctaveLayers, float threshold,
+                                    double contrastThreshold, double edgeThreshold, double sigma);
 }
 #endif
 
@@ -881,6 +888,10 @@ void SIFT::buildDoGPyramid(const std::vector<cv::Mat>& gpyr, std::vector<cv::Mat
     int nOctaves = (int)gpyr.size()/(nOctaveLayers_ + 3);
     dogpyr.resize(nOctaves*(nOctaveLayers_ + 2));
 
+#ifdef LAR_USE_METAL_SIFT
+    // Use Metal Performance Shaders for GPU-accelerated DoG pyramid
+    buildDoGPyramidMetal(gpyr, dogpyr, nOctaves, nOctaveLayers_ + 3);
+#else
     for (int o = 0; o < nOctaves; o++) {
         for (int i = 0; i < nOctaveLayers_ + 2; i++) {
             const cv::Mat& src1 = gpyr[o*(nOctaveLayers_ + 3) + i];
@@ -889,6 +900,7 @@ void SIFT::buildDoGPyramid(const std::vector<cv::Mat>& gpyr, std::vector<cv::Mat
             cv::subtract(src2, src1, dst, cv::noArray(), CV_32F);
         }
     }
+#endif
 }
 
 void SIFT::findScaleSpaceExtrema(const std::vector<cv::Mat>& gauss_pyr,
