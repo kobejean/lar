@@ -103,6 +103,21 @@ static MetalSiftResources& getMetalResources() {
     return resources;
 }
 
+// Structure matching Metal shader GaussianBlurParams
+struct GaussianBlurParams {
+    int width;
+    int height;
+    int rowStride;
+    int kernelSize;
+};
+
+// Gaussian blur kernel modes
+enum class GaussianKernelMode {
+    MPS = 0,           // Apple's Metal Performance Shaders (most accurate)
+    CustomSeparable = 1,  // Separate horizontal + vertical passes (OpenCV-pattern)
+    CustomFused = 2       // Fused pass using threadgroup memory (faster, experimental)
+};
+
 // Create 1D Gaussian kernel using OpenCV's bit-exact implementation
 static std::vector<float> createGaussianKernel(double sigma) {
     // OpenCV formula for CV_32F: cvRound(sigma*4*2+1)|1 ensures odd size
@@ -121,6 +136,7 @@ static std::vector<float> createGaussianKernel(double sigma) {
 // Single-threaded Metal implementation with resource reuse
 void buildGaussianPyramidMetal(const cv::Mat& base, std::vector<cv::Mat>& pyr,
                                 int nOctaves, const std::vector<double>& sigmas) {
+    GaussianKernelMode kernelMode = GaussianKernelMode::CustomFused;
     @autoreleasepool {
         MetalSiftResources& resources = getMetalResources();
         int nLevels = (int)sigmas.size();
@@ -275,43 +291,234 @@ void buildGaussianPyramidMetal(const cv::Mat& base, std::vector<cv::Mat>& pyr,
 #ifdef LAR_PROFILE_METAL_SIFT
             auto gpuStart = std::chrono::high_resolution_clock::now();
 #endif
-            id<MTLCommandBuffer> commandBuffer = [commandQueue commandBuffer];
 
-            for (int i = 1; i < nLevels; i++) {
-                // Create exact Gaussian kernel matching OpenCV
-                std::vector<float> kernel = createGaussianKernel(sigmas[i]);
-                int kernelSize = (int)kernel.size();
+            // Determine which blur implementation to use
+            if (kernelMode == GaussianKernelMode::MPS) {
+                // === MPS Path (default, most accurate) ===
+                id<MTLCommandBuffer> commandBuffer = [commandQueue commandBuffer];
 
-                // Horizontal convolution (1 x kernelSize kernel)
-                MPSImageConvolution* horizConv = [[MPSImageConvolution alloc]
-                    initWithDevice:device
-                       kernelWidth:kernelSize
-                      kernelHeight:1
-                           weights:kernel.data()];
-                horizConv.edgeMode = MPSImageEdgeModeClamp;  // Replicate border
+                for (int i = 1; i < nLevels; i++) {
+                    // Create exact Gaussian kernel matching OpenCV
+                    std::vector<float> kernel = createGaussianKernel(sigmas[i]);
+                    int kernelSize = (int)kernel.size();
 
-                [horizConv encodeToCommandBuffer:commandBuffer
-                                   sourceTexture:levelTextures[i-1]
-                              destinationTexture:tempTexture];
+                    // Horizontal convolution (1 x kernelSize kernel)
+                    MPSImageConvolution* horizConv = [[MPSImageConvolution alloc]
+                        initWithDevice:device
+                           kernelWidth:kernelSize
+                          kernelHeight:1
+                               weights:kernel.data()];
+                    horizConv.edgeMode = MPSImageEdgeModeClamp;  // Replicate border
 
-                // Vertical convolution (kernelSize x 1 kernel)
-                MPSImageConvolution* vertConv = [[MPSImageConvolution alloc]
-                    initWithDevice:device
-                       kernelWidth:1
-                      kernelHeight:kernelSize
-                           weights:kernel.data()];
-                vertConv.edgeMode = MPSImageEdgeModeClamp;  // Replicate border
+                    [horizConv encodeToCommandBuffer:commandBuffer
+                                       sourceTexture:levelTextures[i-1]
+                                  destinationTexture:tempTexture];
 
-                [vertConv encodeToCommandBuffer:commandBuffer
-                                  sourceTexture:tempTexture
-                             destinationTexture:levelTextures[i]];
+                    // Vertical convolution (kernelSize x 1 kernel)
+                    MPSImageConvolution* vertConv = [[MPSImageConvolution alloc]
+                        initWithDevice:device
+                           kernelWidth:1
+                          kernelHeight:kernelSize
+                               weights:kernel.data()];
+                    vertConv.edgeMode = MPSImageEdgeModeClamp;  // Replicate border
 
-                RELEASE_IF_MANUAL(horizConv);
-                RELEASE_IF_MANUAL(vertConv);
+                    [vertConv encodeToCommandBuffer:commandBuffer
+                                      sourceTexture:tempTexture
+                                 destinationTexture:levelTextures[i]];
+
+                    RELEASE_IF_MANUAL(horizConv);
+                    RELEASE_IF_MANUAL(vertConv);
+                }
+
+                [commandBuffer commit];
+                [commandBuffer waitUntilCompleted];
+            }
+            else if (kernelMode == GaussianKernelMode::CustomSeparable) {
+                // === Custom Separable Kernel Path (OpenCV-pattern) ===
+                // Load Metal library for custom Gaussian blur kernels
+                static id<MTLLibrary> library = nil;
+                static id<MTLComputePipelineState> horizPipeline = nil;
+                static id<MTLComputePipelineState> vertPipeline = nil;
+
+                if (!library) {
+                    NSError* error = nil;
+                    NSString* binPath = @"bin/sift.metallib";
+                    NSURL* libraryURL = [NSURL fileURLWithPath:binPath];
+
+                    if (![[NSFileManager defaultManager] fileExistsAtPath:binPath]) {
+                        NSString* execPath = [[NSBundle mainBundle] executablePath];
+                        NSString* execDir = [execPath stringByDeletingLastPathComponent];
+                        libraryURL = [NSURL fileURLWithPath:[execDir stringByAppendingPathComponent:@"sift.metallib"]];
+                    }
+
+                    library = [device newLibraryWithURL:libraryURL error:&error];
+                    if (!library) {
+                        std::cerr << "Failed to load custom blur Metal library: " << [[error localizedDescription] UTF8String] << std::endl;
+                        return;  // Fatal error
+                    }
+
+                    // Create pipeline for horizontal blur
+                    id<MTLFunction> horizFunc = [library newFunctionWithName:@"gaussianBlurHorizontal"];
+                    if (horizFunc) {
+                        horizPipeline = [device newComputePipelineStateWithFunction:horizFunc error:&error];
+                        RELEASE_IF_MANUAL(horizFunc);
+                    }
+
+                    // Create pipeline for vertical blur
+                    id<MTLFunction> vertFunc = [library newFunctionWithName:@"gaussianBlurVertical"];
+                    if (vertFunc) {
+                        vertPipeline = [device newComputePipelineStateWithFunction:vertFunc error:&error];
+                        RELEASE_IF_MANUAL(vertFunc);
+                    }
+
+                    if (!horizPipeline || !vertPipeline) {
+                        std::cerr << "Failed to create custom blur pipelines" << std::endl;
+                        return;  // Fatal error
+                    }
+                }
+
+                // Use custom separable kernels for Gaussian blur
+                id<MTLCommandBuffer> commandBuffer = [commandQueue commandBuffer];
+                int rowStride = (int)(alignedRowBytes / sizeof(float));
+
+                for (int i = 1; i < nLevels; i++) {
+                    // Create exact Gaussian kernel matching OpenCV
+                    std::vector<float> kernel = createGaussianKernel(sigmas[i]);
+                    int kernelSize = (int)kernel.size();
+
+                    // Create kernel buffer
+                    id<MTLBuffer> kernelBuffer = [device newBufferWithBytes:kernel.data()
+                                                                      length:kernel.size() * sizeof(float)
+                                                                     options:MTLResourceStorageModeShared];
+
+                    // Setup parameters
+                    GaussianBlurParams params;
+                    params.width = octaveWidth;
+                    params.height = octaveHeight;
+                    params.rowStride = rowStride;
+                    params.kernelSize = kernelSize;
+
+                    id<MTLBuffer> paramsBuffer = [device newBufferWithBytes:&params
+                                                                      length:sizeof(GaussianBlurParams)
+                                                                     options:MTLResourceStorageModeShared];
+
+                    // Horizontal pass: source → temp
+                    id<MTLComputeCommandEncoder> horizEncoder = [commandBuffer computeCommandEncoder];
+                    [horizEncoder setComputePipelineState:horizPipeline];
+                    [horizEncoder setBuffer:levelBuffers[i-1] offset:0 atIndex:0];  // source
+                    [horizEncoder setBuffer:resources.tempBuffers[o] offset:0 atIndex:1];  // temp destination
+                    [horizEncoder setBuffer:paramsBuffer offset:0 atIndex:2];
+                    [horizEncoder setBuffer:kernelBuffer offset:0 atIndex:3];
+
+                    MTLSize gridSize = MTLSizeMake(octaveWidth, octaveHeight, 1);
+                    NSUInteger threadExecutionWidth = [horizPipeline threadExecutionWidth];
+                    MTLSize threadgroupSize = MTLSizeMake(threadExecutionWidth, 1, 1);
+
+                    [horizEncoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
+                    [horizEncoder endEncoding];
+
+                    // Vertical pass: temp → destination
+                    id<MTLComputeCommandEncoder> vertEncoder = [commandBuffer computeCommandEncoder];
+                    [vertEncoder setComputePipelineState:vertPipeline];
+                    [vertEncoder setBuffer:resources.tempBuffers[o] offset:0 atIndex:0];  // temp source
+                    [vertEncoder setBuffer:levelBuffers[i] offset:0 atIndex:1];  // final destination
+                    [vertEncoder setBuffer:paramsBuffer offset:0 atIndex:2];
+                    [vertEncoder setBuffer:kernelBuffer offset:0 atIndex:3];
+
+                    [vertEncoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
+                    [vertEncoder endEncoding];
+
+                    RELEASE_IF_MANUAL(paramsBuffer);
+                    RELEASE_IF_MANUAL(kernelBuffer);
+                }
+
+                [commandBuffer commit];
+                [commandBuffer waitUntilCompleted];
+            }
+            else if (kernelMode == GaussianKernelMode::CustomFused) {
+                // === Custom Fused Kernel Path (Experimental) ===
+                // Load Metal library for fused Gaussian blur kernel
+                static id<MTLLibrary> library = nil;
+                static id<MTLComputePipelineState> fusedPipeline = nil;
+
+                if (!library) {
+                    NSError* error = nil;
+                    NSString* binPath = @"bin/sift.metallib";
+                    NSURL* libraryURL = [NSURL fileURLWithPath:binPath];
+
+                    if (![[NSFileManager defaultManager] fileExistsAtPath:binPath]) {
+                        NSString* execPath = [[NSBundle mainBundle] executablePath];
+                        NSString* execDir = [execPath stringByDeletingLastPathComponent];
+                        libraryURL = [NSURL fileURLWithPath:[execDir stringByAppendingPathComponent:@"sift.metallib"]];
+                    }
+
+                    library = [device newLibraryWithURL:libraryURL error:&error];
+                    if (!library) {
+                        std::cerr << "Failed to load fused blur Metal library: " << [[error localizedDescription] UTF8String] << std::endl;
+                        return;  // Fatal error
+                    }
+
+                    // Create pipeline for fused blur
+                    id<MTLFunction> fusedFunc = [library newFunctionWithName:@"gaussianBlurFused"];
+                    if (fusedFunc) {
+                        fusedPipeline = [device newComputePipelineStateWithFunction:fusedFunc error:&error];
+                        RELEASE_IF_MANUAL(fusedFunc);
+                    }
+
+                    if (!fusedPipeline) {
+                        std::cerr << "Failed to create fused blur pipeline" << std::endl;
+                        return;  // Fatal error
+                    }
+                }
+
+                // Use fused kernel for Gaussian blur
+                id<MTLCommandBuffer> commandBuffer = [commandQueue commandBuffer];
+                int rowStride = (int)(alignedRowBytes / sizeof(float));
+
+                for (int i = 1; i < nLevels; i++) {
+                    // Create exact Gaussian kernel matching OpenCV
+                    std::vector<float> kernel = createGaussianKernel(sigmas[i]);
+                    int kernelSize = (int)kernel.size();
+
+                    // Create kernel buffer
+                    id<MTLBuffer> kernelBuffer = [device newBufferWithBytes:kernel.data()
+                                                                      length:kernel.size() * sizeof(float)
+                                                                     options:MTLResourceStorageModeShared];
+
+                    // Setup parameters
+                    GaussianBlurParams params;
+                    params.width = octaveWidth;
+                    params.height = octaveHeight;
+                    params.rowStride = rowStride;
+                    params.kernelSize = kernelSize;
+
+                    id<MTLBuffer> paramsBuffer = [device newBufferWithBytes:&params
+                                                                      length:sizeof(GaussianBlurParams)
+                                                                     options:MTLResourceStorageModeShared];
+
+                    // Fused pass: source → destination (single pass)
+                    id<MTLComputeCommandEncoder> encoder = [commandBuffer computeCommandEncoder];
+                    [encoder setComputePipelineState:fusedPipeline];
+                    [encoder setBuffer:levelBuffers[i-1] offset:0 atIndex:0];  // source
+                    [encoder setBuffer:levelBuffers[i] offset:0 atIndex:1];    // destination
+                    [encoder setBuffer:paramsBuffer offset:0 atIndex:2];
+                    [encoder setBuffer:kernelBuffer offset:0 atIndex:3];
+
+                    // Dispatch with 16×16 threadgroups (tile size)
+                    MTLSize gridSize = MTLSizeMake(octaveWidth, octaveHeight, 1);
+                    MTLSize threadgroupSize = MTLSizeMake(16, 16, 1);
+
+                    [encoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
+                    [encoder endEncoding];
+
+                    RELEASE_IF_MANUAL(paramsBuffer);
+                    RELEASE_IF_MANUAL(kernelBuffer);
+                }
+
+                [commandBuffer commit];
+                [commandBuffer waitUntilCompleted];
             }
 
-            [commandBuffer commit];
-            [commandBuffer waitUntilCompleted];
 
 #ifdef LAR_PROFILE_METAL_SIFT
             gpuTime += std::chrono::duration<double, std::milli>(
@@ -327,10 +534,6 @@ void buildGaussianPyramidMetal(const cv::Mat& base, std::vector<cv::Mat>& pyr,
                 float* bufferPtr = (float*)levelBuffers[i].contents;
                 pyr[o * nLevels + i] = cv::Mat(octaveHeight, octaveWidth, CV_32F,
                                                 bufferPtr, alignedRowBytes);
-
-                // Clone to independent memory (Metal buffers stay cached for reuse)
-                // This is the actual "download" - copying from shared buffer to owned memory
-                // pyr[o * nLevels + i] = pyr[o * nLevels + i].clone();
             }
 #ifdef LAR_PROFILE_METAL_SIFT
             downloadTime += std::chrono::duration<double, std::milli>(
@@ -424,10 +627,6 @@ void buildDoGPyramidMetal(const std::vector<cv::Mat>& gauss_pyr, std::vector<cv:
                 float* bufferPtr = (float*)dogBuffers[i].contents;
                 dog_pyr[o * (nLevels - 1) + i] = cv::Mat(octaveHeight, octaveWidth, CV_32F,
                                                           bufferPtr, alignedRowBytes);
-
-                // Clone to independent memory (Metal buffers stay cached for reuse)
-                // Comment out for zero-copy if DoG pyramid consumed immediately
-                // dog_pyr[o * (nLevels - 1) + i] = dog_pyr[o * (nLevels - 1) + i].clone();
             }
         }
 #ifdef LAR_PROFILE_METAL_SIFT

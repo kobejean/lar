@@ -21,6 +21,13 @@ namespace lar {
                                     std::vector<cv::KeyPoint>& keypoints,
                                     int nOctaves, int nOctaveLayers, float threshold,
                                     double contrastThreshold, double edgeThreshold, double sigma);
+#ifdef LAR_USE_METAL_SIFT_FUSED
+    // void findScaleSpaceExtremaMetalFused(const std::vector<cv::Mat>& gauss_pyr,
+    //                                      std::vector<cv::Mat>& dog_pyr,  // Non-const: populated by fused kernel
+    //                                      std::vector<cv::KeyPoint>& keypoints,
+    //                                      int nOctaves, int nOctaveLayers, float threshold,
+    //                                      double contrastThreshold, double edgeThreshold, double sigma);
+#endif
 }
 #endif
 
@@ -69,9 +76,10 @@ namespace lar {
 //#else
 //    #define SIMD_ENABLED 0
 //#endif
- #define SIMD_ENABLED 0
- #define CV_SIMD 0
- #define CV_SIMD_SCALABLE 0
+#define SIMD_ENABLED 0
+#define CV_SIMD 0
+#define CV_SIMD_SCALABLE 0
+// #define LAR_USE_METAL_SIFT 0
 
 namespace lar {
 
@@ -953,10 +961,8 @@ void SIFT::detectAndCompute(cv::InputArray _image, cv::InputArray _mask,
     int nOctaves = cvRound(std::log((double)std::min(base.cols, base.rows)) / std::log(2.) - 2) - firstOctave;
 
     buildGaussianPyramid(base, gpyr, nOctaves);
-    
     std::vector<cv::Mat> dogpyr;
     buildDoGPyramid(gpyr, dogpyr);
-    
     findScaleSpaceExtrema(gpyr, dogpyr, keypoints);
     cv::KeyPointsFilter::removeDuplicatedSorted(keypoints);
 

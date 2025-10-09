@@ -30,6 +30,7 @@ set(HEADER_LIST
 
 # Optional Metal-accelerated SIFT (macOS/iOS only)
 option(LAR_USE_METAL_SIFT "Enable Metal-accelerated Gaussian pyramid for SIFT" ON)
+option(LAR_USE_METAL_SIFT_FUSED "Enable experimental fused Metal SIFT kernel" OFF)
 
 # Collect source files
 set(TRACKING_SOURCES
@@ -122,11 +123,13 @@ if(LAR_USE_METAL_SIFT AND APPLE)
     set(METAL_LIB_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/sift.metallib")
 
     # Step 1: Compile .metal to .air (Apple Intermediate Representation)
+    # Flags optimize for precision matching with MPS:
+    #   -fno-fast-math: Disable aggressive optimizations that hurt precision
     add_custom_command(
       OUTPUT ${METAL_AIR_OUTPUT}
-      COMMAND xcrun -sdk macosx metal -c ${METAL_SHADER_SOURCE} -o ${METAL_AIR_OUTPUT}
+      COMMAND xcrun -sdk macosx metal -c -O3 -fno-fast-math ${METAL_SHADER_SOURCE} -o ${METAL_AIR_OUTPUT}
       DEPENDS ${METAL_SHADER_SOURCE}
-      COMMENT "Compiling Metal shader: sift.metal → sift.air"
+      COMMENT "Compiling Metal shader: sift.metal → sift.air (precision mode)"
     )
 
     # Step 2: Link .air to .metallib
@@ -167,6 +170,63 @@ if(LAR_USE_METAL_SIFT AND APPLE)
     message(STATUS "Metal shader compilation configured: sift.metal → sift.metallib")
   else()
     message(WARNING "Metal frameworks not found. Metal SIFT will be disabled.")
+  endif()
+endif()
+
+# Optional: Compile experimental fused Metal shader
+if(LAR_USE_METAL_SIFT_FUSED AND LAR_USE_METAL_SIFT AND APPLE)
+  if(METAL_LIBRARY AND METAL_PERFORMANCE_SHADERS)
+    # Fused shader compilation
+    set(METAL_FUSED_SHADER_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/sift_fused.metal")
+    set(METAL_FUSED_AIR_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/sift_fused.air")
+    set(METAL_FUSED_LIB_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/sift_fused.metallib")
+
+    # Step 1: Compile .metal to .air (Apple Intermediate Representation)
+    add_custom_command(
+      OUTPUT ${METAL_FUSED_AIR_OUTPUT}
+      COMMAND xcrun -sdk macosx metal -c ${METAL_FUSED_SHADER_SOURCE} -o ${METAL_FUSED_AIR_OUTPUT}
+      DEPENDS ${METAL_FUSED_SHADER_SOURCE}
+      COMMENT "Compiling fused Metal shader: sift_fused.metal → sift_fused.air"
+    )
+
+    # Step 2: Link .air to .metallib
+    add_custom_command(
+      OUTPUT ${METAL_FUSED_LIB_OUTPUT}
+      COMMAND xcrun -sdk macosx metallib ${METAL_FUSED_AIR_OUTPUT} -o ${METAL_FUSED_LIB_OUTPUT}
+      DEPENDS ${METAL_FUSED_AIR_OUTPUT}
+      COMMENT "Linking fused Metal library: sift_fused.air → sift_fused.metallib"
+    )
+
+    # Step 3: Copy .metallib to runtime bin directory
+    add_custom_command(
+      OUTPUT ${RUNTIME_BIN_DIR}/sift_fused.metallib
+      COMMAND ${CMAKE_COMMAND} -E copy ${METAL_FUSED_LIB_OUTPUT} ${RUNTIME_BIN_DIR}/sift_fused.metallib
+      DEPENDS ${METAL_FUSED_LIB_OUTPUT}
+      COMMENT "Copying sift_fused.metallib to ${RUNTIME_BIN_DIR}/"
+    )
+
+    # Also copy to build directory bin for consistency
+    add_custom_command(
+      OUTPUT ${PROJECT_BINARY_DIR}/bin/sift_fused.metallib
+      COMMAND ${CMAKE_COMMAND} -E copy ${METAL_FUSED_LIB_OUTPUT} ${PROJECT_BINARY_DIR}/bin/sift_fused.metallib
+      DEPENDS ${METAL_FUSED_LIB_OUTPUT}
+      COMMENT "Copying sift_fused.metallib to ${PROJECT_BINARY_DIR}/bin/"
+    )
+
+    # Create custom target to ensure fused Metal library is built and copied
+    add_custom_target(metal_sift_fused_shaders ALL
+      DEPENDS ${RUNTIME_BIN_DIR}/sift_fused.metallib ${PROJECT_BINARY_DIR}/bin/sift_fused.metallib
+    )
+
+    # Make lar_tracking depend on the fused Metal shader compilation
+    add_dependencies(lar_tracking metal_sift_fused_shaders)
+
+    # Define compile flag so C++ code can use the fused kernel
+    target_compile_definitions(lar_tracking PRIVATE LAR_USE_METAL_SIFT_FUSED)
+
+    message(STATUS "Experimental fused Metal SIFT shader enabled: sift_fused.metal → sift_fused.metallib")
+  else()
+    message(WARNING "Metal frameworks not found. Fused Metal SIFT will be disabled.")
   endif()
 endif()
 
