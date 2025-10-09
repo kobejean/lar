@@ -64,7 +64,7 @@ def run_colmap_mapping(database_path, output_dir):
     """Run COLMAP sparse reconstruction (mapping)"""
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
-    
+
     cmd = [
         "colmap", "mapper",
         "--database_path", str(database_path),
@@ -82,7 +82,7 @@ def run_colmap_mapping(database_path, output_dir):
         # "--Mapper.tri_merge_max_reproj_error", "6.0", # default: 4.0
         # "--Mapper.tri_complete_max_reproj_error", "6.0", # default: 4.0
     ]
-    
+
     print("Running COLMAP sparse reconstruction...")
     try:
         subprocess.run(cmd, check=True, text=True)
@@ -90,6 +90,30 @@ def run_colmap_mapping(database_path, output_dir):
         return True
     except subprocess.CalledProcessError as e:
         print(f"Sparse reconstruction failed: {e}")
+        return False
+
+def run_glomap_mapping(database_path, output_dir):
+    """Run GLOMAP global structure-from-motion (faster alternative to COLMAP)"""
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    cmd = [
+        "glomap", "mapper",
+        "--database_path", str(database_path),
+        "--image_path", str(Path(database_path).parent),
+        "--output_path", str(output_path),
+        "--BundleAdjustment.optimize_intrinsics", "0",  # Don't refine intrinsics (we have ARKit calibration)
+        "--skip_view_graph_calibration", "1",  # Skip calibration step (we have known intrinsics)
+        "--skip_pruning", "1",  # Keep all points without pruning
+    ]
+
+    print("Running GLOMAP global reconstruction...")
+    try:
+        subprocess.run(cmd, check=True, text=True)
+        print("GLOMAP reconstruction completed successfully")
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"GLOMAP reconstruction failed: {e}")
         return False
 
 def run_colmap_model_aligner(model_path, ref_file_path, database_path, max_error=0.1):
@@ -216,17 +240,23 @@ def insert_arkit_odometry(arkit_frames, database_path):
     print(f"Added {count} relative pose constraints from ARKit VIO")
 
 def sparse_reconstruction(args, database_path, sparse_dir):
-    print("\nRunning sparse reconstruction...")
-    if not run_colmap_mapping(database_path, sparse_dir):
-        print("COLMAP pipeline failed at sparse reconstruction")
-        exit(1)
-    
+    if args.use_glomap:
+        print("\nRunning global reconstruction with GLOMAP...")
+        if not run_glomap_mapping(database_path, sparse_dir):
+            print("GLOMAP pipeline failed at reconstruction")
+            exit(1)
+    else:
+        print("\nRunning sparse reconstruction with COLMAP...")
+        if not run_colmap_mapping(database_path, sparse_dir):
+            print("COLMAP pipeline failed at sparse reconstruction")
+            exit(1)
+
     # Find reconstruction directory
     reconstruction_dirs = list(sparse_dir.glob("*"))
     if not reconstruction_dirs:
         print("No reconstruction found")
         exit(1)
-    
+
     reconstruction_path = reconstruction_dirs[0]
     print(f"Found reconstruction in: {reconstruction_path}")
     return reconstruction_path
@@ -261,7 +291,7 @@ def export_map(args, database_path, map_json_file, arkit_frames, reconstruction_
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Process stereo vision data with COLMAP and ARKit integration")
+    parser = argparse.ArgumentParser(description="Process stereo vision data with COLMAP/GLOMAP and ARKit integration")
     parser.add_argument("source_dir", help="Source directory containing *_image.jpeg files and frames.json")
     parser.add_argument("--use_colmap_sift", action="store_true",
                        help="Use COLMAP's built-in SIFT extractor instead of OpenCV")
@@ -270,8 +300,10 @@ def main():
     parser.add_argument("--alignment_max_error", type=float, default=0.1,
                        help="Maximum error threshold for model alignment (default: 0.1)")
     parser.add_argument("--use_vocab_tree", action="store_true",
-                       help="Launch COLMAP GUI after reconstruction completes")
-    
+                       help="Use vocabulary tree matching instead of exhaustive matching")
+    parser.add_argument("--use_glomap", action="store_true",
+                       help="Use GLOMAP for reconstruction instead of COLMAP (faster, global SfM)")
+
     args = parser.parse_args()
     work_dir = Path(args.source_dir) / "colmap"
     database_path = work_dir / "database.db"
@@ -305,7 +337,8 @@ def main():
 
     print(f"\n✅ Processing completed successfully!")
     print(f"Feature extraction method: {'COLMAP' if args.use_colmap_sift else 'OpenCV'}")
-    print(f"Matching method: Exhaustive")
+    print(f"Matching method: {'Vocabulary Tree' if args.use_vocab_tree else 'Exhaustive'}")
+    print(f"Reconstruction method: {'GLOMAP' if args.use_glomap else 'COLMAP'}")
     print(f"Model alignment: Applied in place")
     print(f"Final map: {map_json_file}")
     print(f"Launch gui with: colmap gui --database_path {database_path} --import_path {reconstruction_path} --image_path {work_dir}")

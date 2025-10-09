@@ -3,7 +3,12 @@ from pathlib import Path
 import subprocess
 import struct
 import sqlite3
-from colmap_pose import ColmapPose, rotation_matrix_to_quaternion
+from colmap_pose import (
+    ColmapPose,
+    rotation_matrix_to_quaternion,
+    extract_rotation_translation_from_extrinsics,
+    compute_relative_pose_from_arkit
+)
 
 def create_colmap_database(frames, database_path, work_dir):
     """Create COLMAP database with proper camera setup for feature import"""
@@ -58,10 +63,12 @@ def create_colmap_database(frames, database_path, work_dir):
         
         print(f"Added image {image_name} with camera {camera_id}")
         
-        # Add pose prior
-        extrinsics = frame['extrinsics']
-        x, y, z = extrinsics[12], extrinsics[13], extrinsics[14]
-        position_blob = struct.pack('ddd', x, -y, -z)
+        # Add pose prior (using centralized function for consistency)
+        _, position = extract_rotation_translation_from_extrinsics(
+            frame['extrinsics'],
+            apply_colmap_conversion=True
+        )
+        position_blob = struct.pack('ddd', position[0], position[1], position[2])
         pos_std = 10.0
         covariance_blob = struct.pack('ddddddddd',
             pos_std, 0, 0,
@@ -160,56 +167,6 @@ def array_to_blob(array):
     """Convert numpy array to binary blob in float64 format for COLMAP database."""
     return array.astype(np.float64).tobytes()
 
-def extract_pose_from_extrinsics(extrinsics):
-    """
-    Extract rotation matrix and translation vector from ARKit extrinsics.
-
-    ARKit extrinsics is a 16-element array representing a 4x4 transformation
-    matrix in column-major order (camera-from-world transform).
-
-    Args:
-        extrinsics: 16-element array [R00, R10, R20, 0, R01, R11, R21, 0,
-                                       R02, R12, R22, 0, tx, ty, tz, 1]
-
-    Returns:
-        (R, t): 3x3 rotation matrix and 3-element translation vector
-    """
-    R = np.array([
-        [extrinsics[0], extrinsics[4], extrinsics[8]],
-        [extrinsics[1], extrinsics[5], extrinsics[9]],
-        [extrinsics[2], extrinsics[6], extrinsics[10]]
-    ])
-    t = np.array([extrinsics[12], extrinsics[13], extrinsics[14]])
-    return R, t
-
-def compute_relative_pose(extrinsics1, extrinsics2):
-    """
-    Compute relative pose from camera1 to camera2.
-
-    Given two camera-from-world transforms T1 and T2, compute the
-    camera2-from-camera1 transform: T_rel = T2 * T1^-1
-
-    Args:
-        extrinsics1: ARKit extrinsics for camera 1
-        extrinsics2: ARKit extrinsics for camera 2
-
-    Returns:
-        (R_rel, t_rel): Relative rotation matrix and translation vector
-    """
-    # Extract poses
-    R1, t1 = extract_pose_from_extrinsics(extrinsics1)
-    R2, t2 = extract_pose_from_extrinsics(extrinsics2)
-
-    # Compute world-from-camera1 (invert T1)
-    R1_inv = R1.T
-    t1_inv = -R1.T @ t1
-
-    # Compute camera2-from-camera1: T2 * T1^-1
-    R_rel = R2 @ R1_inv
-    t_rel = R2 @ t1_inv + t2
-
-    return R_rel, t_rel
-
 def insert_two_view_geometries_from_arkit(frames, database_path, use_empty_matches=True):
     """
     Insert ARKit relative poses into COLMAP's two_view_geometries table.
@@ -244,8 +201,13 @@ def insert_two_view_geometries_from_arkit(frames, database_path, use_empty_match
         image_id1 = frame1['id'] + 1
         image_id2 = frame2['id'] + 1
 
-        # Compute relative pose from frame1 to frame2
-        R_rel, t_rel = compute_relative_pose(frame1['extrinsics'], frame2['extrinsics'])
+        # Compute relative pose from frame1 to frame2 in COLMAP coordinates
+        # (COLMAP uses Y/Z flipped coordinates compared to ARKit)
+        R_rel, t_rel = compute_relative_pose_from_arkit(
+            frame1['extrinsics'],
+            frame2['extrinsics'],
+            for_colmap=True
+        )
 
         # Convert rotation to quaternion (wxyz format) using existing function
         qvec = rotation_matrix_to_quaternion(R_rel)
