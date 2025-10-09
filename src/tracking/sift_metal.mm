@@ -33,27 +33,34 @@ struct MetalSiftResources {
     }
 
     void releaseBuffersAndTextures() {
-        // Release textures
+#if !__has_feature(objc_arc)
+        // Manual memory management: explicit release
         for (auto& octave : octaveTextures) {
             for (auto& tex : octave) {
                 if (tex) [tex release];
             }
         }
-        octaveTextures.clear();
-
-        // Release buffers
         for (auto& octave : octaveBuffers) {
             for (auto& buf : octave) {
                 if (buf) [buf release];
             }
         }
+#endif
+        // Clear vectors (ARC will auto-release when objects are removed)
+        octaveTextures.clear();
         octaveBuffers.clear();
     }
 
     ~MetalSiftResources() {
         releaseBuffersAndTextures();
+#if !__has_feature(objc_arc)
         if (commandQueue) [commandQueue release];
         if (device) [device release];
+#else
+        // ARC: just nil out the references
+        commandQueue = nil;
+        device = nil;
+#endif
     }
 };
 
@@ -247,15 +254,19 @@ void buildGaussianPyramidMetal(const cv::Mat& base, std::vector<cv::Mat>& pyr,
                                   sourceTexture:tempTexture
                              destinationTexture:levelTextures[i]];
 
+#if !__has_feature(objc_arc)
                 [horizConv release];
                 [vertConv release];
+#endif
             }
 
             [commandBuffer commit];
             [commandBuffer waitUntilCompleted];
 
+#if !__has_feature(objc_arc)
             [tempTexture release];
             [tempBuffer release];
+#endif
 #ifdef LAR_PROFILE_METAL_SIFT
             gpuTime += std::chrono::duration<double, std::milli>(
                 std::chrono::high_resolution_clock::now() - gpuStart).count();
