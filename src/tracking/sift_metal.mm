@@ -63,6 +63,24 @@ static MetalSiftResources& getMetalResources() {
     return resources;
 }
 
+// Create 1D Gaussian kernel using OpenCV's bit-exact implementation
+static std::vector<float> createGaussianKernel(double sigma) {
+    // Use OpenCV's kernel size formula for CV_32F (float images)
+    int ksize = cvRound(sigma * 4 * 2 + 1) | 1;
+    ksize = ksize | 1;  // Ensure odd (set LSB to 1)
+
+    // Use OpenCV's bit-exact getGaussianKernel (uses softdouble internally)
+    cv::Mat kernelMat = cv::getGaussianKernel(ksize, sigma, CV_32F);
+
+    // Convert cv::Mat to std::vector<float>
+    std::vector<float> kernel(ksize);
+    for (int i = 0; i < ksize; i++) {
+        kernel[i] = kernelMat.at<float>(i);
+    }
+
+    return kernel;
+}
+
 // Single-threaded Metal implementation with resource reuse
 void buildGaussianPyramidMetal(const cv::Mat& base, std::vector<cv::Mat>& pyr,
                                 int nOctaves, const std::vector<double>& sigmas) {
@@ -181,6 +199,19 @@ void buildGaussianPyramidMetal(const cv::Mat& base, std::vector<cv::Mat>& pyr,
                 std::chrono::high_resolution_clock::now() - uploadStart).count();
 #endif
 
+            // Create temporary texture for separable convolution (horizontal → vertical)
+            size_t tempBufferSize = alignedRowBytes * octaveHeight;
+            id<MTLBuffer> tempBuffer = [device newBufferWithLength:tempBufferSize
+                                                    options:MTLResourceStorageModeShared];
+            MTLTextureDescriptor* tempDesc = [MTLTextureDescriptor
+                texture2DDescriptorWithPixelFormat:MTLPixelFormatR32Float
+                width:octaveWidth height:octaveHeight mipmapped:NO];
+            tempDesc.storageMode = MTLStorageModeShared;
+            tempDesc.usage = MTLTextureUsageShaderRead | MTLTextureUsageShaderWrite;
+            id<MTLTexture> tempTexture = [tempBuffer newTextureWithDescriptor:tempDesc
+                                                                       offset:0
+                                                                  bytesPerRow:alignedRowBytes];
+
             // Batch all blurs for this octave in single command buffer
 #ifdef LAR_PROFILE_METAL_SIFT
             auto gpuStart = std::chrono::high_resolution_clock::now();
@@ -188,19 +219,43 @@ void buildGaussianPyramidMetal(const cv::Mat& base, std::vector<cv::Mat>& pyr,
             id<MTLCommandBuffer> commandBuffer = [commandQueue commandBuffer];
 
             for (int i = 1; i < nLevels; i++) {
-                // Apply Gaussian blur using MPS
-                float sigma = sigmas[i];
-                MPSImageGaussianBlur* blur = [[MPSImageGaussianBlur alloc]
-                    initWithDevice:device sigma:sigma];
+                // Create exact Gaussian kernel matching OpenCV
+                std::vector<float> kernel = createGaussianKernel(sigmas[i]);
+                int kernelSize = (int)kernel.size();
 
-                [blur encodeToCommandBuffer:commandBuffer
-                              sourceTexture:levelTextures[i-1]
-                         destinationTexture:levelTextures[i]];
-                [blur release];
+                // Horizontal convolution (1 x kernelSize kernel)
+                MPSImageConvolution* horizConv = [[MPSImageConvolution alloc]
+                    initWithDevice:device
+                       kernelWidth:kernelSize
+                      kernelHeight:1
+                           weights:kernel.data()];
+                horizConv.edgeMode = MPSImageEdgeModeClamp;  // Replicate border
+
+                [horizConv encodeToCommandBuffer:commandBuffer
+                                   sourceTexture:levelTextures[i-1]
+                              destinationTexture:tempTexture];
+
+                // Vertical convolution (kernelSize x 1 kernel)
+                MPSImageConvolution* vertConv = [[MPSImageConvolution alloc]
+                    initWithDevice:device
+                       kernelWidth:1
+                      kernelHeight:kernelSize
+                           weights:kernel.data()];
+                vertConv.edgeMode = MPSImageEdgeModeClamp;  // Replicate border
+
+                [vertConv encodeToCommandBuffer:commandBuffer
+                                  sourceTexture:tempTexture
+                             destinationTexture:levelTextures[i]];
+
+                [horizConv release];
+                [vertConv release];
             }
 
             [commandBuffer commit];
             [commandBuffer waitUntilCompleted];
+
+            [tempTexture release];
+            [tempBuffer release];
 #ifdef LAR_PROFILE_METAL_SIFT
             gpuTime += std::chrono::duration<double, std::milli>(
                 std::chrono::high_resolution_clock::now() - gpuStart).count();

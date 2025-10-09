@@ -17,54 +17,54 @@ namespace lar {
 }
 #endif
 
-// SIMD Helper macros for cleaner code
-#if (CV_SIMD || CV_SIMD_SCALABLE)
-    #define SIMD_ENABLED 1
-    using cv::v_float32;
-    using cv::v_int32;
-    using cv::v_uint16;
-    using cv::v_uint8;
-    using cv::VTraits;
-    
-    // Bring SIMD functions into scope
-    using cv::vx_load;
-    using cv::vx_load_aligned;
-    using cv::vx_store;
-    using cv::v_store;
-    using cv::v_store_aligned;
-    using cv::vx_setall_f32;
-    using cv::vx_setall_s32;
-    using cv::vx_setzero_s32;
-    using cv::vx_setzero_f32;
-    using cv::v_mul;
-    using cv::v_add;
-    using cv::v_sub;
-    using cv::v_fma;
-    using cv::v_round;
-    using cv::v_floor;
-    using cv::v_cvt_f32;
-    using cv::v_select;
-    using cv::v_ge;
-    using cv::v_lt;
-    using cv::v_gt;
-    using cv::v_le;
-    using cv::v_and;
-    using cv::v_or;
-    using cv::v_abs;
-    using cv::v_max;
-    using cv::v_min;
-    using cv::v_check_any;
-    using cv::v_signmask;
-    using cv::v_reduce_sum;
-    using cv::v_muladd;
-    using cv::v_pack_u;
-    using cv::v_pack_store;
-#else
-    #define SIMD_ENABLED 0
-#endif
-// #define SIMD_ENABLED 0
-// #define CV_SIMD 0
-// #define CV_SIMD_SCALABLE 0
+//// SIMD Helper macros for cleaner code
+//#if (CV_SIMD || CV_SIMD_SCALABLE)
+//    #define SIMD_ENABLED 1
+//    using cv::v_float32;
+//    using cv::v_int32;
+//    using cv::v_uint16;
+//    using cv::v_uint8;
+//    using cv::VTraits;
+//    
+//    // Bring SIMD functions into scope
+//    using cv::vx_load;
+//    using cv::vx_load_aligned;
+//    using cv::vx_store;
+//    using cv::v_store;
+//    using cv::v_store_aligned;
+//    using cv::vx_setall_f32;
+//    using cv::vx_setall_s32;
+//    using cv::vx_setzero_s32;
+//    using cv::vx_setzero_f32;
+//    using cv::v_mul;
+//    using cv::v_add;
+//    using cv::v_sub;
+//    using cv::v_fma;
+//    using cv::v_round;
+//    using cv::v_floor;
+//    using cv::v_cvt_f32;
+//    using cv::v_select;
+//    using cv::v_ge;
+//    using cv::v_lt;
+//    using cv::v_gt;
+//    using cv::v_le;
+//    using cv::v_and;
+//    using cv::v_or;
+//    using cv::v_abs;
+//    using cv::v_max;
+//    using cv::v_min;
+//    using cv::v_check_any;
+//    using cv::v_signmask;
+//    using cv::v_reduce_sum;
+//    using cv::v_muladd;
+//    using cv::v_pack_u;
+//    using cv::v_pack_store;
+//#else
+//    #define SIMD_ENABLED 0
+//#endif
+ #define SIMD_ENABLED 0
+ #define CV_SIMD 0
+ #define CV_SIMD_SCALABLE 0
 
 namespace lar {
 
