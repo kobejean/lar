@@ -155,8 +155,8 @@ static cv::Mat createInitialImage(const cv::Mat& img, bool doubleImageSize, floa
 }
 
 // Calculate orientation histogram with SIMD optimization
-static float calcOrientationHist(const cv::Mat& img, cv::Point pt, int radius,
-                                 float sigma, float* hist, int n) {
+float calcOrientationHist(const cv::Mat& img, cv::Point pt, int radius,
+                          float sigma, float* hist, int n) {
     int len = (radius*2+1)*(radius*2+1);
     float expf_scale = -1.f/(2.f * sigma * sigma);
 
@@ -273,9 +273,9 @@ static float calcOrientationHist(const cv::Mat& img, cv::Point pt, int radius,
 }
 
 // Interpolate extremum location
-static bool adjustLocalExtrema(const std::vector<cv::Mat>& dog_pyr, cv::KeyPoint& kpt, int octv,
-                               int& layer, int& r, int& c, int nOctaveLayers,
-                               float contrastThreshold, float edgeThreshold, float sigma) {
+bool adjustLocalExtrema(const std::vector<cv::Mat>& dog_pyr, cv::KeyPoint& kpt, int octv,
+                        int& layer, int& r, int& c, int nOctaveLayers,
+                        float contrastThreshold, float edgeThreshold, float sigma) {
     const float img_scale = 1.f/(255*SIFT_FIXPT_SCALE);
     const float deriv_scale = img_scale*0.5f;
     const float second_deriv_scale = img_scale;
@@ -911,6 +911,12 @@ void SIFT::findScaleSpaceExtrema(const std::vector<cv::Mat>& gauss_pyr,
 
     keypoints.clear();
 
+#ifdef LAR_USE_METAL_SIFT
+    // Use Metal compute shader for GPU-accelerated extrema detection
+    findScaleSpaceExtremaMetal(gauss_pyr, dog_pyr, keypoints, nOctaves, nOctaveLayers_,
+                               (float)threshold, contrastThreshold_, edgeThreshold_, sigma_);
+#else
+    // CPU+SIMD path (per-layer processing with OpenCV intrinsics)
     for (int o = 0; o < nOctaves; o++) {
         for (int i = 1; i <= nOctaveLayers_; i++) {
             const int idx = o*(nOctaveLayers_+2)+i;
@@ -925,6 +931,7 @@ void SIFT::findScaleSpaceExtrema(const std::vector<cv::Mat>& gauss_pyr,
                                         cv::Range(SIFT_IMG_BORDER, rows-SIFT_IMG_BORDER));
         }
     }
+#endif
 }
 
 void SIFT::detectAndCompute(cv::InputArray _image, cv::InputArray _mask,

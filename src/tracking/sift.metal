@@ -40,7 +40,7 @@ kernel void detectScaleSpaceExtrema(
     device atomic_uint* candidateCount [[buffer(3)]], // Atomic counter for candidates
     device KeypointCandidate* candidates [[buffer(4)]], // Output candidate array
     constant ExtremaParams& params [[buffer(5)]],
-    uint maxCandidates [[buffer(6)]],              // Maximum candidates to prevent overflow
+    constant uint& maxCandidates [[buffer(6)]],    // Maximum candidates to prevent overflow
     uint2 gid [[thread_position_in_grid]])
 {
     int x = gid.x;

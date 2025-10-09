@@ -4,6 +4,7 @@
 #import <MetalPerformanceShaders/MetalPerformanceShaders.h>
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
+#include "lar/tracking/sift.h"
 #include <iostream>
 #include <chrono>
 #include <vector>
@@ -627,9 +628,69 @@ void findScaleSpaceExtremaMetal(
                 candidateCount = std::min(candidateCount, MAX_CANDIDATES);
 
                 if (candidateCount > 0) {
-                    // TODO: Process candidates on CPU (refinement + orientation)
-                    // For now, just count them
-                    std::cout << "Octave " << o << " Layer " << i << ": " << candidateCount << " candidates detected\n";
+                    // Process candidates on CPU (refinement + orientation)
+#ifdef LAR_PROFILE_METAL_SIFT
+                    auto cpuStart = std::chrono::high_resolution_clock::now();
+#endif
+                    KeypointCandidate* candidates = (KeypointCandidate*)candidateBuffer.contents;
+
+                    for (uint32_t c = 0; c < candidateCount; c++) {
+                        KeypointCandidate& cand = candidates[c];
+
+                        // Skip if outside valid bounds (should not happen, but be safe)
+                        if (cand.x < 5 || cand.x >= octaveWidth - 5 ||
+                            cand.y < 5 || cand.y >= octaveHeight - 5) {
+                            continue;
+                        }
+
+                        // Create keypoint for refinement
+                        cv::KeyPoint kpt;
+                        int layer = cand.layer;
+                        int r = cand.y;
+                        int c_pos = cand.x;
+
+                        // Call adjustLocalExtrema (from sift.cpp) for subpixel refinement
+                        if (!adjustLocalExtrema(dog_pyr, kpt, cand.octave, layer, r, c_pos,
+                                               nOctaveLayers, (float)contrastThreshold,
+                                               (float)edgeThreshold, (float)sigma)) {
+                            continue;
+                        }
+
+                        // Calculate orientation histogram (from sift.cpp)
+                        static const int n = 36; // SIFT_ORI_HIST_BINS
+                        float hist[n];
+                        float scl_octv = kpt.size * 0.5f / (1 << cand.octave);
+
+                        int gaussIdx = cand.octave * (nOctaveLayers + 3) + layer;
+                        float omax = calcOrientationHist(gauss_pyr[gaussIdx],
+                                                        cv::Point(c_pos, r),
+                                                        cvRound(4.5f * scl_octv), // SIFT_ORI_RADIUS
+                                                        1.5f * scl_octv,           // SIFT_ORI_SIG_FCTR
+                                                        hist, n);
+
+                        float mag_thr = omax * 0.8f; // SIFT_ORI_PEAK_RATIO
+
+                        // Find orientation peaks and create keypoints
+                        for (int j = 0; j < n; j++) {
+                            int l = j > 0 ? j - 1 : n - 1;
+                            int r2 = j < n-1 ? j + 1 : 0;
+
+                            if (hist[j] > hist[l] && hist[j] > hist[r2] && hist[j] >= mag_thr) {
+                                float bin = j + 0.5f * (hist[l]-hist[r2]) / (hist[l] - 2*hist[j] + hist[r2]);
+                                bin = bin < 0 ? n + bin : bin >= n ? bin - n : bin;
+                                kpt.angle = 360.f - (360.f/n) * bin;
+                                if (std::abs(kpt.angle - 360.f) < FLT_EPSILON)
+                                    kpt.angle = 0.f;
+
+                                keypoints.push_back(kpt);
+                            }
+                        }
+                    }
+
+#ifdef LAR_PROFILE_METAL_SIFT
+                    cpuTime += std::chrono::duration<double, std::milli>(
+                        std::chrono::high_resolution_clock::now() - cpuStart).count();
+#endif
                 }
             }
         }
@@ -638,12 +699,6 @@ void findScaleSpaceExtremaMetal(
         gpuTime = std::chrono::duration<double, std::milli>(
             std::chrono::high_resolution_clock::now() - gpuStart).count();
 #endif
-
-        // TODO: Add CPU refinement loop here
-        // For each candidate:
-        //   - Call adjustLocalExtrema()
-        //   - Call calcOrientationHist()
-        //   - Add refined keypoints to output
 
         RELEASE_IF_MANUAL(candidateBuffer);
         RELEASE_IF_MANUAL(counterBuffer);

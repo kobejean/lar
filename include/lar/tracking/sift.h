@@ -41,6 +41,15 @@ private:
     int descriptorType_;
 };
 
+// Helper functions for SIFT keypoint refinement and orientation
+// These are exposed for use by Metal-accelerated implementation
+float calcOrientationHist(const cv::Mat& img, cv::Point pt, int radius,
+                          float sigma, float* hist, int n);
+
+bool adjustLocalExtrema(const std::vector<cv::Mat>& dog_pyr, cv::KeyPoint& kpt, int octv,
+                        int& layer, int& r, int& c, int nOctaveLayers,
+                        float contrastThreshold, float edgeThreshold, float sigma);
+
 } // namespace lar
 
 #endif // LAR_TRACKING_SIFT_H
