@@ -63,19 +63,19 @@ add_library(lar_tracking
 # These flags balance performance with IEEE 754 compliance for reproducible results
 target_compile_options(lar_tracking PRIVATE
   $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:
-    -O2                      # High optimization
+    -O3                      # High optimization
     -march=native            # Use best available SIMD for current CPU
     # -mfpmath=sse             # Use SSE for FP math (consistent 32/64-bit precision)
     -fno-fast-math
     -ffp-contract=fast       # Allow FMA (fused multiply-add) - MORE accurate than separate ops
     # DO NOT USE -ffast-math # This breaks IEEE 754 compliance!
-    # -fno-unsafe-math-optimizations  # Uncomment for strictest compliance
+    -fno-unsafe-math-optimizations  # Uncomment for strictest compliance
   >
   $<$<CXX_COMPILER_ID:MSVC>:
-    /O2                      # Optimize for speed
+    /O3                      # Optimize for speed
     /arch:AVX2               # AVX2 SIMD (or /arch:AVX512 if available)
     /fp:precise              # Precise floating-point model (default, good)
-    # /fp:strict             # Uncomment for strictest IEEE 754 compliance (slower)
+    /fp:strict             # Uncomment for strictest IEEE 754 compliance (slower)
   >
 )
 

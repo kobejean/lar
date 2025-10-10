@@ -639,15 +639,17 @@ void findScaleSpaceExtremaMetal(
             return;
         }
 
-        // Maximum candidates buffer (generous upper bound: ~10% of pixels per layer)
-        const uint32_t MAX_CANDIDATES = 50000;
+        // Sharded atomic configuration: 128 shards × 1024 capacity = 131,072 total candidates
+        const uint32_t NUM_SHARDS = 128;
+        const uint32_t SHARD_CAPACITY = 1024;
+        const uint32_t TOTAL_CANDIDATES = NUM_SHARDS * SHARD_CAPACITY;
 
-        // Allocate candidate buffer (shared for CPU access)
-        id<MTLBuffer> candidateBuffer = [device newBufferWithLength:MAX_CANDIDATES * sizeof(KeypointCandidate)
+        // Allocate sharded candidate buffer (shared for CPU access)
+        id<MTLBuffer> candidateBuffer = [device newBufferWithLength:TOTAL_CANDIDATES * sizeof(KeypointCandidate)
                                                              options:MTLResourceStorageModeShared];
 
-        // Allocate atomic counter buffer
-        id<MTLBuffer> counterBuffer = [device newBufferWithLength:sizeof(uint32_t)
+        // Allocate sharded atomic counter buffer (128 counters)
+        id<MTLBuffer> counterBuffer = [device newBufferWithLength:NUM_SHARDS * sizeof(uint32_t)
                                                            options:MTLResourceStorageModeShared];
 
         keypoints.clear();
@@ -669,9 +671,9 @@ void findScaleSpaceExtremaMetal(
 
             // Process layers 1 to nOctaveLayers (middle layers only)
             for (int i = 1; i <= nOctaveLayers; i++) {
-                // Reset counter to zero
+                // Reset ALL shard counters to zero
                 uint32_t* counterPtr = (uint32_t*)counterBuffer.contents;
-                *counterPtr = 0;
+                memset(counterPtr, 0, NUM_SHARDS * sizeof(uint32_t));
 
                 // Setup parameters
                 ExtremaParams params;
@@ -679,7 +681,7 @@ void findScaleSpaceExtremaMetal(
                 params.height = octaveHeight;
                 params.rowStride = rowStride;
                 params.threshold = threshold;
-                params.border = 5; // SIFT_IMG_BORDER
+                params.border = SIFT_IMG_BORDER;
                 params.octave = o;
                 params.layer = i;
 
@@ -688,8 +690,8 @@ void findScaleSpaceExtremaMetal(
                                                                   length:sizeof(ExtremaParams)
                                                                  options:MTLResourceStorageModeShared];
 
-                // Create max candidates buffer
-                id<MTLBuffer> maxCandidatesBuffer = [device newBufferWithBytes:&MAX_CANDIDATES
+                // Create shard capacity buffer
+                id<MTLBuffer> shardCapacityBuffer = [device newBufferWithBytes:&SHARD_CAPACITY
                                                                          length:sizeof(uint32_t)
                                                                         options:MTLResourceStorageModeShared];
 
@@ -701,15 +703,15 @@ void findScaleSpaceExtremaMetal(
                 [encoder setBuffer:dogBuffers[i-1] offset:0 atIndex:0]; // prevLayer
                 [encoder setBuffer:dogBuffers[i]   offset:0 atIndex:1]; // currLayer
                 [encoder setBuffer:dogBuffers[i+1] offset:0 atIndex:2]; // nextLayer
-                [encoder setBuffer:counterBuffer offset:0 atIndex:3];
-                [encoder setBuffer:candidateBuffer offset:0 atIndex:4];
+                [encoder setBuffer:counterBuffer offset:0 atIndex:3];   // sharded counters (128)
+                [encoder setBuffer:candidateBuffer offset:0 atIndex:4]; // sharded candidates
                 [encoder setBuffer:paramsBuffer offset:0 atIndex:5];
-                [encoder setBuffer:maxCandidatesBuffer offset:0 atIndex:6];
+                [encoder setBuffer:shardCapacityBuffer offset:0 atIndex:6]; // capacity per shard
 
                 // Dispatch threads (one per pixel, excluding border)
+                // Use 16×16 threadgroups for better cache locality in 2D image processing
                 MTLSize gridSize = MTLSizeMake(octaveWidth, octaveHeight, 1);
-                NSUInteger threadExecutionWidth = [pipeline threadExecutionWidth];
-                MTLSize threadgroupSize = MTLSizeMake(threadExecutionWidth, 1, 1);
+                MTLSize threadgroupSize = MTLSizeMake(16, 16, 1);
 
                 [encoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
                 [encoder endEncoding];
@@ -718,54 +720,46 @@ void findScaleSpaceExtremaMetal(
                 [commandBuffer waitUntilCompleted];
 
                 RELEASE_IF_MANUAL(paramsBuffer);
-                RELEASE_IF_MANUAL(maxCandidatesBuffer);
+                RELEASE_IF_MANUAL(shardCapacityBuffer);
 
-                // Read back candidate count
-                uint32_t candidateCount = *counterPtr;
-                candidateCount = std::min(candidateCount, MAX_CANDIDATES);
-
-                if (candidateCount > 0) {
-                    // Process candidates on CPU (refinement + orientation)
+                // Merge candidates from all shards
 #ifdef LAR_PROFILE_METAL_SIFT
-                    auto cpuStart = std::chrono::high_resolution_clock::now();
+                auto cpuStart = std::chrono::high_resolution_clock::now();
 #endif
-                    KeypointCandidate* candidates = (KeypointCandidate*)candidateBuffer.contents;
+                KeypointCandidate* candidates = (KeypointCandidate*)candidateBuffer.contents;
 
-                    for (uint32_t c = 0; c < candidateCount; c++) {
-                        KeypointCandidate& cand = candidates[c];
+                // Iterate through all shards and process their candidates
+                for (uint32_t shard = 0; shard < NUM_SHARDS; shard++) {
+                    uint32_t shardCount = counterPtr[shard];
+                    shardCount = std::min(shardCount, SHARD_CAPACITY);  // Clamp to capacity
 
-                        // Skip if outside valid bounds (should not happen, but be safe)
-                        if (cand.x < 5 || cand.x >= octaveWidth - 5 ||
-                            cand.y < 5 || cand.y >= octaveHeight - 5) {
-                            continue;
-                        }
+                    for (uint32_t i = 0; i < shardCount; i++) {
+                        uint32_t globalIdx = shard * SHARD_CAPACITY + i;
+                        KeypointCandidate& cand = candidates[globalIdx];
 
                         // Create keypoint for refinement
                         cv::KeyPoint kpt;
-                        int layer = cand.layer;
-                        int r = cand.y;
-                        int c_pos = cand.x;
 
                         // Call adjustLocalExtrema (from sift.cpp) for subpixel refinement
-                        if (!adjustLocalExtrema(dog_pyr, kpt, cand.octave, layer, r, c_pos,
+                        if (!adjustLocalExtrema(dog_pyr, kpt, cand.octave, cand.layer, cand.y, cand.x,
                                                nOctaveLayers, (float)contrastThreshold,
                                                (float)edgeThreshold, (float)sigma)) {
                             continue;
                         }
 
                         // Calculate orientation histogram (from sift.cpp)
-                        static const int n = 36; // SIFT_ORI_HIST_BINS
+                        static const int n = SIFT_ORI_HIST_BINS;
                         float hist[n];
                         float scl_octv = kpt.size * 0.5f / (1 << cand.octave);
 
-                        int gaussIdx = cand.octave * (nOctaveLayers + 3) + layer;
+                        int gaussIdx = cand.octave * (nOctaveLayers + 3) + cand.layer;
                         float omax = calcOrientationHist(gauss_pyr[gaussIdx],
-                                                        cv::Point(c_pos, r),
-                                                        cvRound(4.5f * scl_octv), // SIFT_ORI_RADIUS
+                                                        cv::Point(cand.x, cand.y),
+                                                        cvRound(SIFT_ORI_RADIUS * scl_octv), // SIFT_ORI_RADIUS
                                                         1.5f * scl_octv,           // SIFT_ORI_SIG_FCTR
                                                         hist, n);
 
-                        float mag_thr = omax * 0.8f; // SIFT_ORI_PEAK_RATIO
+                        float mag_thr = omax * SIFT_ORI_PEAK_RATIO;
 
                         // Find orientation peaks and create keypoints
                         for (int j = 0; j < n; j++) {
@@ -783,12 +777,12 @@ void findScaleSpaceExtremaMetal(
                             }
                         }
                     }
+                }
 
 #ifdef LAR_PROFILE_METAL_SIFT
-                    cpuTime += std::chrono::duration<double, std::milli>(
-                        std::chrono::high_resolution_clock::now() - cpuStart).count();
+                cpuTime += std::chrono::duration<double, std::milli>(
+                    std::chrono::high_resolution_clock::now() - cpuStart).count();
 #endif
-                }
             }
         }
 

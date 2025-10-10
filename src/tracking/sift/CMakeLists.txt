@@ -55,7 +55,7 @@ if(LAR_USE_METAL_SIFT AND APPLE)
     #   -I: Include directory for sift_constants.metal header
     add_custom_command(
       OUTPUT ${METAL_AIR_OUTPUT}
-      COMMAND xcrun -sdk macosx metal -c -I${CMAKE_CURRENT_SOURCE_DIR} ${METAL_SHADER_SOURCE} -o ${METAL_AIR_OUTPUT}
+      COMMAND xcrun -sdk macosx metal -c -fno-fast-math -fmetal-math-mode=safe -I${CMAKE_CURRENT_SOURCE_DIR} ${METAL_SHADER_SOURCE} -o ${METAL_AIR_OUTPUT}
       DEPENDS ${METAL_SHADER_SOURCE} ${METAL_CONSTANTS_HEADER}
       COMMENT "Compiling Metal shader: sift.metal → sift.air (precision mode)"
     )
@@ -114,7 +114,7 @@ if(LAR_USE_METAL_SIFT_FUSED AND LAR_USE_METAL_SIFT AND APPLE)
     # -I: Include directory for sift_constants.metal header
     add_custom_command(
       OUTPUT ${METAL_FUSED_AIR_OUTPUT}
-      COMMAND xcrun -sdk macosx metal -c -I${CMAKE_CURRENT_SOURCE_DIR} ${METAL_FUSED_SHADER_SOURCE} -o ${METAL_FUSED_AIR_OUTPUT}
+      COMMAND xcrun -sdk macosx metal -c -fno-fast-math -fmetal-math-mode=safe -I${CMAKE_CURRENT_SOURCE_DIR} ${METAL_FUSED_SHADER_SOURCE} -o ${METAL_FUSED_AIR_OUTPUT}
       DEPENDS ${METAL_FUSED_SHADER_SOURCE} ${METAL_CONSTANTS_HEADER}
       COMMENT "Compiling fused Metal shader: sift_fused.metal → sift_fused.air (precision mode)"
     )

@@ -32,110 +32,119 @@ struct GaussianBlurParams {
     int kernelSize;
 };
 
-// Helper: Sample DoG image with bounds checking
-inline float sampleDoG(const device float* img, int x, int y, int width, int height, int rowStride) {
-    if (x < 0 || x >= width || y < 0 || y >= height) {
-        return 0.0f;
-    }
-    return img[y * rowStride + x];
-}
-
 // Kernel: Detect local extrema in 3D scale space (26-neighbor comparison)
 // Each thread processes one pixel in the middle layer
 // Note: Extrema detection requires precise floating-point comparisons
 // Compiled with -fno-fast-math to ensure IEEE-754 compliant comparisons
+//
+// Performance optimization: Uses sharded atomic counters (128 shards) to reduce
+// contention. Each threadgroup hashes to a shard, dramatically reducing atomic conflicts.
+#pragma METAL fp math_mode(safe)
 kernel void detectScaleSpaceExtrema(
     const device float* prevLayer [[buffer(0)]],   // DoG layer i-1
     const device float* currLayer [[buffer(1)]],   // DoG layer i (center)
     const device float* nextLayer [[buffer(2)]],   // DoG layer i+1
-    device atomic_uint* candidateCount [[buffer(3)]], // Atomic counter for candidates
-    device KeypointCandidate* candidates [[buffer(4)]], // Output candidate array
+    device atomic_uint* candidateCounts [[buffer(3)]], // Array of 128 atomic counters (one per shard)
+    device KeypointCandidate* candidates [[buffer(4)]], // Output candidate array (128 shards × 1024 capacity)
     constant ExtremaParams& params [[buffer(5)]],
-    constant uint& maxCandidates [[buffer(6)]],    // Maximum candidates to prevent overflow
-    uint2 gid [[thread_position_in_grid]])
+    constant uint& shardCapacity [[buffer(6)]],    // Capacity per shard (typically 1024)
+    uint2 gid [[thread_position_in_grid]],
+    uint2 tgid [[threadgroup_position_in_grid]])
 {
     int x = gid.x;
     int y = gid.y;
+    bool isExtremum = false;
+    float val;
 
-    // Skip border pixels
-    if (x < params.border || x >= params.width - params.border ||
-        y < params.border || y >= params.height - params.border) {
-        return;
-    }
+    // Check if this thread should process (not border, not out of bounds)
+    bool shouldProcess = (x >= params.border && x < params.width - params.border &&
+                          y >= params.border && y < params.height - params.border);
+    if (shouldProcess) {
+        // Read center pixel value
+        int step = params.rowStride;
+        int i = y * step + x;
+        val = currLayer[i];
 
-    // Read center pixel value
-    float val = currLayer[y * params.rowStride + x];
+        // Quick threshold rejection
+        if (fabs(val) > params.threshold) {
+            float _00,_01,_02;
+            float _10,    _12;
+            float _20,_21,_22;
 
-    // Quick threshold rejection
-    if (fabs(val) <= params.threshold) {
-        return;
-    }
-
-    // Determine if we're looking for maxima or minima
-    bool isMaxima = val > 0.0f;
-
-    // Compare with 8 neighbors in current layer
-    bool isExtremum = true;
-
-    // Current layer 3x3 neighborhood (8 neighbors, excluding center)
-    for (int dy = -1; dy <= 1 && isExtremum; dy++) {
-        for (int dx = -1; dx <= 1 && isExtremum; dx++) {
-            if (dx == 0 && dy == 0) continue; // Skip center
-
-            float neighbor = currLayer[(y + dy) * params.rowStride + (x + dx)];
-
-            if (isMaxima) {
-                if (val < neighbor) isExtremum = false;
+            if (val > 0) {
+                _00 = currLayer[i-step-1]; _01 = currLayer[i-step]; _02 = currLayer[i-step+1];
+                _10 = currLayer[i-1]; _12 = currLayer[i+1];
+                _20 = currLayer[i+step-1]; _21 = currLayer[i+step]; _22 = currLayer[i+step+1];
+                float vmax = fmax(fmax(fmax(_00,_01),fmax(_02,_10)),fmax(fmax(_12,_20),fmax(_21,_22)));
+                if (val >= vmax) {
+                    _00 = prevLayer[i-step-1]; _01 = prevLayer[i-step]; _02 = prevLayer[i-step+1];
+                    _10 = prevLayer[i-1]; _12 = prevLayer[i+1];
+                    _20 = prevLayer[i+step-1]; _21 = prevLayer[i+step]; _22 = prevLayer[i+step+1];
+                    vmax = fmax(fmax(fmax(_00,_01),fmax(_02,_10)),fmax(fmax(_12,_20),fmax(_21,_22)));
+                    if (val >= vmax) {
+                        _00 = nextLayer[i-step-1]; _01 = nextLayer[i-step]; _02 = nextLayer[i-step+1];
+                        _10 = nextLayer[i-1]; _12 = nextLayer[i+1];
+                        _20 = nextLayer[i+step-1]; _21 = nextLayer[i+step]; _22 = nextLayer[i+step+1];
+                        vmax = fmax(fmax(fmax(_00,_01),fmax(_02,_10)),fmax(fmax(_12,_20),fmax(_21,_22)));
+                        if (val >= vmax) {
+                            vmax = fmax(prevLayer[i], nextLayer[i]);
+                            if (val >= vmax) {
+                                isExtremum = true;
+                            }
+                        }
+                    }
+                }
             } else {
-                if (val > neighbor) isExtremum = false;
+                _00 = currLayer[i-step-1]; _01 = currLayer[i-step]; _02 = currLayer[i-step+1];
+                _10 = currLayer[i-1]; _12 = currLayer[i+1];
+                _20 = currLayer[i+step-1]; _21 = currLayer[i+step]; _22 = currLayer[i+step+1];
+                float vmin = fmin(fmin(fmin(_00,_01),fmin(_02,_10)),fmin(fmin(_12,_20),fmin(_21,_22)));
+                if (val <= vmin) {
+                    _00 = prevLayer[i-step-1]; _01 = prevLayer[i-step]; _02 = prevLayer[i-step+1];
+                    _10 = prevLayer[i-1]; _12 = prevLayer[i+1];
+                    _20 = prevLayer[i+step-1]; _21 = prevLayer[i+step]; _22 = prevLayer[i+step+1];
+                    vmin = fmin(fmin(fmin(_00,_01),fmin(_02,_10)),fmin(fmin(_12,_20),fmin(_21,_22)));
+                    if (val <= vmin) {
+                        _00 = nextLayer[i-step-1]; _01 = nextLayer[i-step]; _02 = nextLayer[i-step+1];
+                        _10 = nextLayer[i-1]; _12 = nextLayer[i+1];
+                        _20 = nextLayer[i+step-1]; _21 = nextLayer[i+step]; _22 = nextLayer[i+step+1];
+                        vmin = fmin(fmin(fmin(_00,_01),fmin(_02,_10)),fmin(fmin(_12,_20),fmin(_21,_22)));
+                        if (val <= vmin) {
+                            vmin = fmin(prevLayer[i], nextLayer[i]);
+                            if (val <= vmin) {
+                                isExtremum = true;
+                            }
+                        }
+                    }
+                }
             }
         }
     }
 
-    if (!isExtremum) return;
-
-    // Compare with 9 neighbors in previous layer
-    for (int dy = -1; dy <= 1 && isExtremum; dy++) {
-        for (int dx = -1; dx <= 1 && isExtremum; dx++) {
-            float neighbor = prevLayer[(y + dy) * params.rowStride + (x + dx)];
-
-            if (isMaxima) {
-                if (val < neighbor) isExtremum = false;
-            } else {
-                if (val > neighbor) isExtremum = false;
-            }
-        }
-    }
-
-    if (!isExtremum) return;
-
-    // Compare with 9 neighbors in next layer
-    for (int dy = -1; dy <= 1 && isExtremum; dy++) {
-        for (int dx = -1; dx <= 1 && isExtremum; dx++) {
-            float neighbor = nextLayer[(y + dy) * params.rowStride + (x + dx)];
-
-            if (isMaxima) {
-                if (val < neighbor) isExtremum = false;
-            } else {
-                if (val > neighbor) isExtremum = false;
-            }
-        }
-    }
-
-    // If we survived all comparisons, this is a local extremum
+    // Only write if this is actually an extremum
     if (isExtremum) {
-        // Atomically increment candidate count and get index
-        uint index = atomic_fetch_add_explicit(candidateCount, 1, memory_order_relaxed);
+        // Hash threadgroup to shard (128 shards total)
+        const uint NUM_SHARDS = 128;
+        uint threadgroupID = tgid.y * ((params.width + 15) / 16) + tgid.x;  // Linear threadgroup index
+        uint shardIndex = threadgroupID % NUM_SHARDS;  // Hash: simple modulo
 
-        // Bounds check to prevent buffer overflow
-        if (index < maxCandidates) {
-            candidates[index].x = x;
-            candidates[index].y = y;
-            candidates[index].octave = params.octave;
-            candidates[index].layer = params.layer;
-            candidates[index].value = val;
+        // Get shard-specific counter and increment atomically
+        uint localIndex = atomic_fetch_add_explicit(&candidateCounts[shardIndex], 1, memory_order_relaxed);
+
+        // Check if this shard has capacity
+        if (localIndex < shardCapacity) {
+            // Calculate global index: shard_base + local_offset
+            uint globalIndex = shardIndex * shardCapacity + localIndex;
+
+            // Write to shard-specific region
+            candidates[globalIndex].x = x;
+            candidates[globalIndex].y = y;
+            candidates[globalIndex].octave = params.octave;
+            candidates[globalIndex].layer = params.layer;
+            candidates[globalIndex].value = val;
         }
     }
+    
 }
 
 // ============================================================================
@@ -149,6 +158,7 @@ kernel void detectScaleSpaceExtrema(
 // Note: These produce ~3-6e-05 max error vs MPS but match OpenCV's approach
 
 // Horizontal Gaussian blur pass
+#pragma METAL fp math_mode(safe)
 kernel void gaussianBlurHorizontal(
     const device float* source [[buffer(0)]],
     device float* destination [[buffer(1)]],
@@ -190,6 +200,7 @@ kernel void gaussianBlurHorizontal(
 }
 
 // Vertical Gaussian blur pass
+#pragma METAL fp math_mode(safe)
 kernel void gaussianBlurVertical(
     const device float* source [[buffer(0)]],
     device float* destination [[buffer(1)]],
@@ -240,6 +251,7 @@ kernel void gaussianBlurVertical(
 // Performance benefit: Eliminates global memory write+read between passes
 // Complexity cost: Requires threadgroup coordination and halo loading
 
+#pragma METAL fp math_mode(safe)
 kernel void gaussianBlurFused(
     const device float* source [[buffer(0)]],
     device float* destination [[buffer(1)]],
