@@ -10,6 +10,7 @@
 // Compile with: LAR_USE_METAL_SIFT_FUSED
 
 #include <metal_stdlib>
+#include "sift_constants.metal"
 using namespace metal;
 
 
@@ -37,7 +38,7 @@ struct FusedExtremaParams {
     int height;             // Image height
     int rowStride;          // Row stride in floats (aligned)
     float threshold;        // Absolute threshold for extrema
-    int border;             // Border size (SIFT_IMG_BORDER = 5)
+    int border;             // Border size (uses SIFT_IMG_BORDER constant)
     int octave;             // Current octave index
     int layer;              // DoG layer being processed (1 to nOctaveLayers)
     int kernelSize;         // Gaussian kernel size for nextGauss
@@ -53,6 +54,7 @@ struct FusedExtremaParams {
 // Performance benefit: Eliminates global memory write+read between passes
 // Complexity cost: Requires threadgroup coordination and halo loading
 
+#pragma METAL fp math_mode(safe)
 kernel void gaussianBlurFused(
     const device float* source [[buffer(0)]],
     device float* destination [[buffer(1)]],
@@ -158,6 +160,7 @@ kernel void gaussianBlurFused(
 // Processes 16x16 tiles with halo for Gaussian convolution
 // Note: Extrema detection requires precise floating-point comparisons
 // Compiled with -fno-fast-math to ensure IEEE-754 compliant comparisons
+#pragma METAL fp math_mode(safe)
 kernel void detectScaleSpaceExtremaFused(
     const device float* prevDoG [[buffer(0)]],             // DoG[layer-1] (pre-computed)
     const device float* currDoG [[buffer(1)]],             // DoG[layer] (detect extrema here)

@@ -59,9 +59,9 @@ set(TRACKING_SOURCES
 # Add Metal implementation on Apple platforms if enabled
 if(LAR_USE_METAL_SIFT AND APPLE)
   list(APPEND TRACKING_SOURCES sift_metal.mm)
-  # if(LAR_USE_METAL_SIFT_FUSED)
-  #   list(APPEND TRACKING_SOURCES sift_metal_fused.mm)
-  # endif()
+  if(LAR_USE_METAL_SIFT_FUSED)
+    list(APPEND TRACKING_SOURCES sift_metal_fused.mm)
+  endif()
   message(STATUS "Metal-accelerated SIFT enabled")
 endif()
 
@@ -123,6 +123,7 @@ if(LAR_USE_METAL_SIFT AND APPLE)
 
     # Compile Metal shader library
     set(METAL_SHADER_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/sift.metal")
+    set(METAL_CONSTANTS_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/sift_constants.metal")
     set(METAL_AIR_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/sift.air")
     set(METAL_LIB_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/sift.metallib")
 
@@ -131,10 +132,11 @@ if(LAR_USE_METAL_SIFT AND APPLE)
     #   -O2: High optimization without aggressive transforms
     #   -fno-fast-math: Disable unsafe optimizations (reassociation, reciprocals, etc.)
     #   -ffp-contract=off: Disable FMA to match CPU computation exactly
+    #   -I: Include directory for sift_constants.metal header
     add_custom_command(
       OUTPUT ${METAL_AIR_OUTPUT}
-      COMMAND xcrun -sdk macosx metal -c -O2 -fno-fast-math -ffp-contract=off ${METAL_SHADER_SOURCE} -o ${METAL_AIR_OUTPUT}
-      DEPENDS ${METAL_SHADER_SOURCE}
+      COMMAND xcrun -sdk macosx metal -c -I${CMAKE_CURRENT_SOURCE_DIR} ${METAL_SHADER_SOURCE} -o ${METAL_AIR_OUTPUT}
+      DEPENDS ${METAL_SHADER_SOURCE} ${METAL_CONSTANTS_HEADER}
       COMMENT "Compiling Metal shader: sift.metal → sift.air (precision mode)"
     )
 
@@ -189,10 +191,11 @@ if(LAR_USE_METAL_SIFT_FUSED AND LAR_USE_METAL_SIFT AND APPLE)
 
     # Step 1: Compile .metal to .air (Apple Intermediate Representation)
     # Match precision flags with main sift.metal shader
+    # -I: Include directory for sift_constants.metal header
     add_custom_command(
       OUTPUT ${METAL_FUSED_AIR_OUTPUT}
-      COMMAND xcrun -sdk macosx metal -c -O2 -fno-fast-math -ffp-contract=off ${METAL_FUSED_SHADER_SOURCE} -o ${METAL_FUSED_AIR_OUTPUT}
-      DEPENDS ${METAL_FUSED_SHADER_SOURCE}
+      COMMAND xcrun -sdk macosx metal -c -I${CMAKE_CURRENT_SOURCE_DIR} ${METAL_FUSED_SHADER_SOURCE} -o ${METAL_FUSED_AIR_OUTPUT}
+      DEPENDS ${METAL_FUSED_SHADER_SOURCE} ${METAL_CONSTANTS_HEADER}
       COMMENT "Compiling fused Metal shader: sift_fused.metal → sift_fused.air (precision mode)"
     )
 

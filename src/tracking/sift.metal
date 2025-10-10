@@ -1,6 +1,7 @@
 // Metal compute shader for SIFT scale-space extrema detection
 // Performs 3D local extrema detection across DoG pyramid layers
 #include <metal_stdlib>
+#include "sift_constants.metal"
 using namespace metal;
 
 // Candidate keypoint structure
@@ -18,7 +19,7 @@ struct ExtremaParams {
     int height;             // Image height for this layer
     int rowStride;          // Row stride in floats (for aligned buffers)
     float threshold;        // Absolute threshold for extrema detection
-    int border;             // Border size (SIFT_IMG_BORDER = 5)
+    int border;             // Border size (uses SIFT_IMG_BORDER constant)
     int octave;             // Current octave index
     int layer;              // Current layer index (1 to nOctaveLayers)
 };
