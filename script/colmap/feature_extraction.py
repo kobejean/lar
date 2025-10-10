@@ -179,7 +179,7 @@ def extract_opencv_sift_features(work_dir, output_features=True, max_num_feature
             
             # Filter by scale to keep the largest-scale (most prominent) features
             # First, filter out keypoints that are too small (size < 3.0)
-            min_scale = 3.0
+            min_scale = 3.5
             scale_filtered_keypoints = []
             scale_filtered_descriptors = []
 
@@ -192,7 +192,7 @@ def extract_opencv_sift_features(work_dir, output_features=True, max_num_feature
                 print(f"  No features found")
                 continue
 
-            print(f"  Found {len(scale_filtered_keypoints)} raw features")
+            print(f"  Found {len(scale_filtered_keypoints)}/{len(keypoints)} filtered features")
 
             scale_filtered_descriptors = np.array(scale_filtered_descriptors)
             # Now apply max_num_features limit to the scale-filtered results
