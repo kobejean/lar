@@ -23,7 +23,8 @@ namespace lar {
                                     int nOctaves, int nOctaveLayers, float threshold,
                                     double contrastThreshold, double edgeThreshold, double sigma);
 #ifdef LAR_USE_METAL_SIFT_FUSED
-    void findScaleSpaceExtremaMetalFused(const std::vector<cv::Mat>& gauss_pyr,
+    void findScaleSpaceExtremaMetalFused(const cv::Mat& base,
+                                         std::vector<cv::Mat>& gauss_pyr,
                                          std::vector<cv::KeyPoint>& keypoints,
                                          int nOctaves, int nOctaveLayers, float threshold,
                                          double contrastThreshold, double edgeThreshold, double sigma);
@@ -960,14 +961,14 @@ void SIFT::detectAndCompute(cv::InputArray _image, cv::InputArray _mask,
     std::vector<cv::Mat> gpyr;
     int nOctaves = cvRound(std::log((double)std::min(base.cols, base.rows)) / std::log(2.) - 2) - firstOctave;
 
-    buildGaussianPyramid(base, gpyr, nOctaves);
-
+    
 #if defined(LAR_USE_METAL_SIFT) && defined(LAR_USE_METAL_SIFT_FUSED)
-    // Use fused Metal kernel for GPU-accelerated DoG + extrema detection
+    // Use fused Metal kernel for GPU-accelerated GaussianPyramid + DoG + extrema detection
     const int threshold = cvFloor(0.5 * contrastThreshold_ / nOctaveLayers_ * 255 * SIFT_FIXPT_SCALE);
-    findScaleSpaceExtremaMetalFused(gpyr, keypoints, nOctaves, nOctaveLayers_,
-                                    (float)threshold, contrastThreshold_, edgeThreshold_, sigma_);
+    findScaleSpaceExtremaMetalFused(base, gpyr, keypoints, nOctaves, nOctaveLayers_,
+        (float)threshold, contrastThreshold_, edgeThreshold_, sigma_);
 #else
+    buildGaussianPyramid(base, gpyr, nOctaves);
     // Standard path: separate DoG pyramid and extrema detection
     std::vector<cv::Mat> dogpyr;
     buildDoGPyramid(gpyr, dogpyr);

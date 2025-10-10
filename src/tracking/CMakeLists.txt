@@ -59,6 +59,9 @@ set(TRACKING_SOURCES
 # Add Metal implementation on Apple platforms if enabled
 if(LAR_USE_METAL_SIFT AND APPLE)
   list(APPEND TRACKING_SOURCES sift_metal.mm)
+  # if(LAR_USE_METAL_SIFT_FUSED)
+  #   list(APPEND TRACKING_SOURCES sift_metal_fused.mm)
+  # endif()
   message(STATUS "Metal-accelerated SIFT enabled")
 endif()
 
@@ -71,10 +74,10 @@ add_library(lar_tracking
 # These flags balance performance with IEEE 754 compliance for reproducible results
 target_compile_options(lar_tracking PRIVATE
   $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:
-    -O3                      # High optimization
+    -O2                      # High optimization
     -march=native            # Use best available SIMD for current CPU
     # -mfpmath=sse             # Use SSE for FP math (consistent 32/64-bit precision)
-    # -fno-fast-math
+    -fno-fast-math
     -ffp-contract=fast       # Allow FMA (fused multiply-add) - MORE accurate than separate ops
     # DO NOT USE -ffast-math # This breaks IEEE 754 compliance!
     # -fno-unsafe-math-optimizations  # Uncomment for strictest compliance

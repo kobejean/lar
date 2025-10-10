@@ -12,6 +12,16 @@
 #include <metal_stdlib>
 using namespace metal;
 
+
+// Gaussian blur parameters (for custom Metal kernels)
+struct GaussianBlurParams {
+    int width;
+    int height;
+    int rowStride;
+    int kernelSize;
+};
+
+
 // Candidate keypoint structure
 struct KeypointCandidate {
     int x;
@@ -33,6 +43,117 @@ struct FusedExtremaParams {
     int kernelSize;         // Gaussian kernel size for nextGauss
 };
 
+// ============================================================================
+// Fused Gaussian Blur Kernel (Educational: Horizontal + Vertical in one pass)
+// ============================================================================
+// This kernel performs both horizontal and vertical blur passes using shared
+// threadgroup memory to avoid global memory round-trips. It processes 16×16
+// tiles with halo regions for the convolution.
+//
+// Performance benefit: Eliminates global memory write+read between passes
+// Complexity cost: Requires threadgroup coordination and halo loading
+
+kernel void gaussianBlurFused(
+    const device float* source [[buffer(0)]],
+    device float* destination [[buffer(1)]],
+    constant GaussianBlurParams& params [[buffer(2)]],
+    constant float* gaussKernel [[buffer(3)]],
+    uint2 gid [[thread_position_in_grid]],
+    uint2 tid [[thread_position_in_threadgroup]],
+    uint2 tgSize [[threads_per_threadgroup]])
+{
+    // Tile configuration: 16×16 processing + vertical halo only
+    const int TILE_SIZE = 16;
+    int radius = params.kernelSize / 2;
+    int paddedHeight = TILE_SIZE + 2 * radius;  // Only need vertical halo
+
+    // Shared memory for horizontal blur results (with vertical halo)
+    // Each column stores TILE_SIZE rows + 2*radius halo rows
+    // Max kernel size ~27 (sigma ~3.0), so max radius ~13, max paddedHeight = 16 + 26 = 42
+    threadgroup float sharedHoriz[48][16];  // [paddedHeight][TILE_SIZE]
+
+    int globalX = gid.x;
+    int globalY = gid.y;
+    int localX = tid.x;
+    int localY = tid.y;
+
+    // Calculate tile origin in Y dimension (X doesn't need tiling)
+    int tileY = (gid.y / TILE_SIZE) * TILE_SIZE - radius;
+
+    // === Step 1: Horizontal blur (global → shared) ===
+    // Each thread processes multiple rows to fill the padded height
+    for (int py = localY; py < paddedHeight; py += tgSize.y) {
+        int srcY = tileY + py;
+
+        // Clamp to image bounds (border replication)
+        srcY = clamp(srcY, 0, params.height - 1);
+
+        // Skip if X is out of bounds
+        if (globalX >= params.width) {
+            continue;
+        }
+
+        // Perform horizontal blur exactly like gaussianBlurHorizontal
+        float centerPixel = source[srcY * params.rowStride + globalX];
+        float sum = gaussKernel[radius] * centerPixel;
+
+        // Symmetric pairs: m[j]*left + m[j]*right
+        for (int j = 0; j < radius; j++) {
+            int leftX = globalX - radius + j;
+            int rightX = globalX + radius - j;
+
+            // Border replication via clamp
+            leftX = clamp(leftX, 0, params.width - 1);
+            rightX = clamp(rightX, 0, params.width - 1);
+
+            float leftPixel = source[srcY * params.rowStride + leftX];
+            float rightPixel = source[srcY * params.rowStride + rightX];
+            float weight = gaussKernel[j];
+
+            sum = sum + (weight * leftPixel + weight * rightPixel);
+        }
+
+        // Store in shared memory
+        sharedHoriz[py][localX] = sum;
+    }
+
+    // Wait for all threads to finish horizontal blur
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+
+    // === Step 2: Vertical blur (shared → global) ===
+    // Only process valid output pixels
+    if (globalX >= params.width || globalY >= params.height) {
+        return;
+    }
+
+    // Calculate position in shared memory (accounting for halo offset)
+    int sharedY = localY + radius;
+
+    // Perform vertical blur exactly like gaussianBlurVertical
+    float centerPixel = sharedHoriz[sharedY][localX];
+    float sum = gaussKernel[radius] * centerPixel;
+
+    // Symmetric pairs: m[j]*top + m[j]*bottom
+    for (int j = 0; j < radius; j++) {
+        int topY = sharedY - radius + j;
+        int bottomY = sharedY + radius - j;
+
+        // Clamp to shared memory bounds (sharedHoriz is [48][16])
+        topY = clamp(topY, 0, 47);
+        bottomY = clamp(bottomY, 0, 47);
+
+        float topPixel = sharedHoriz[topY][localX];
+        float bottomPixel = sharedHoriz[bottomY][localX];
+        float weight = gaussKernel[j];
+
+        sum = sum + (weight * topPixel + weight * bottomPixel);
+    }
+
+    // Write final result to global memory
+    destination[globalY * params.rowStride + globalX] = sum;
+}
+
+
 // Fused kernel: Blur → DoG → Extrema in single pass
 // Processes 16x16 tiles with halo for Gaussian convolution
 // Note: Extrema detection requires precise floating-point comparisons
@@ -48,7 +169,6 @@ kernel void detectScaleSpaceExtremaFused(
     constant FusedExtremaParams& params [[buffer(7)]],
     constant uint& maxCandidates [[buffer(8)]],
     constant float* gaussKernel [[buffer(9)]],             // 1D Gaussian kernel
-    device float* nextDoGComputed [[buffer(10)]],          // Debug: kernel-computed DoG[layer+1]
     uint2 gid [[thread_position_in_grid]],
     uint2 tid [[thread_position_in_threadgroup]],
     uint2 tgSize [[threads_per_threadgroup]])
@@ -281,6 +401,6 @@ kernel void detectScaleSpaceExtremaFused(
         int sharedY = localY + 1;
 
         // Write to debug buffer for validation
-        nextDoGComputed[globalY * params.rowStride + globalX] = sharedNextDoG[sharedY][sharedX];
+        nextDoG[globalY * params.rowStride + globalX] = sharedNextDoG[sharedY][sharedX];
     }
 }
