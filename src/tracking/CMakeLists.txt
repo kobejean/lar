@@ -74,6 +74,7 @@ target_compile_options(lar_tracking PRIVATE
     -O3                      # High optimization
     -march=native            # Use best available SIMD for current CPU
     # -mfpmath=sse             # Use SSE for FP math (consistent 32/64-bit precision)
+    # -fno-fast-math
     -ffp-contract=fast       # Allow FMA (fused multiply-add) - MORE accurate than separate ops
     # DO NOT USE -ffast-math # This breaks IEEE 754 compliance!
     # -fno-unsafe-math-optimizations  # Uncomment for strictest compliance

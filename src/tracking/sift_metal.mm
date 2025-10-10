@@ -1100,6 +1100,10 @@ void findScaleSpaceExtremaMetalFused(
                                                                 options:MTLResourceStorageModeShared];
             id<MTLBuffer> nextDogBuffer = [device newBufferWithLength:bufferSize
                                                               options:MTLResourceStorageModeShared];
+
+            // Allocate debug buffer for validating fused DoG computation
+            id<MTLBuffer> nextDoGComputedBuffer = [device newBufferWithLength:bufferSize
+                                                                      options:MTLResourceStorageModeShared];
             // Process layers 1 to nOctaveLayers (where we detect extrema)
             for (int i = 1; i <= nOctaveLayers; i++) {
                 // Reset counter to zero
@@ -1140,16 +1144,17 @@ void findScaleSpaceExtremaMetalFused(
                 id<MTLComputeCommandEncoder> encoder = [commandBuffer computeCommandEncoder];
 
                 [encoder setComputePipelineState:pipeline];
-                [encoder setBuffer:dogBuffers[i-1] offset:0 atIndex:0];      // prevDoG (pre-computed)
-                [encoder setBuffer:dogBuffers[i] offset:0 atIndex:1];        // currDoG (pre-computed)
-                [encoder setBuffer:gaussBuffers[i] offset:0 atIndex:2];      // currGauss (unused now)
-                [encoder setBuffer:nextGaussBuffer offset:0 atIndex:3];      // nextGauss (unused now)
-                [encoder setBuffer:dogBuffers[i+1] offset:0 atIndex:4];      // nextDoG (pre-computed, read-only)
-                [encoder setBuffer:counterBuffer offset:0 atIndex:5];        // candidateCount
-                [encoder setBuffer:candidateBuffer offset:0 atIndex:6];      // candidates
-                [encoder setBuffer:paramsBuffer offset:0 atIndex:7];         // params
-                [encoder setBuffer:maxCandidatesBuffer offset:0 atIndex:8];  // maxCandidates
-                [encoder setBuffer:kernelBuffer offset:0 atIndex:9];         // gaussKernel (unused now)
+                [encoder setBuffer:dogBuffers[i-1] offset:0 atIndex:0];      // prevDoG (pre-computed, read-only)
+                [encoder setBuffer:dogBuffers[i] offset:0 atIndex:1];        // currDoG (pre-computed, read-only)
+                [encoder setBuffer:gaussBuffers[i] offset:0 atIndex:2];      // currGauss (kernel reads for blur computation)
+                [encoder setBuffer:nextGaussBuffer offset:0 atIndex:3];      // nextGauss (kernel writes blurred output)
+                [encoder setBuffer:dogBuffers[i+1] offset:0 atIndex:4];      // nextDoG (ground truth for validation)
+                [encoder setBuffer:counterBuffer offset:0 atIndex:5];        // candidateCount (atomic counter)
+                [encoder setBuffer:candidateBuffer offset:0 atIndex:6];      // candidates (extrema output)
+                [encoder setBuffer:paramsBuffer offset:0 atIndex:7];         // params (FusedExtremaParams)
+                [encoder setBuffer:maxCandidatesBuffer offset:0 atIndex:8];  // maxCandidates (buffer size limit)
+                [encoder setBuffer:kernelBuffer offset:0 atIndex:9];         // gaussKernel (1D Gaussian weights)
+                [encoder setBuffer:nextDoGComputedBuffer offset:0 atIndex:10]; // Debug: kernel-computed DoG for validation
 
                 // Dispatch with 16×16 threadgroups (matching kernel's TILE_SIZE)
                 MTLSize gridSize = MTLSizeMake(octaveWidth, octaveHeight, 1);
@@ -1165,8 +1170,55 @@ void findScaleSpaceExtremaMetalFused(
                 RELEASE_IF_MANUAL(kernelBuffer);
                 RELEASE_IF_MANUAL(maxCandidatesBuffer);
 
-                // No need to copy anything - we're using pre-computed DoG buffers
+                // === Debug: Validate fused DoG computation ===
+                // Compare our computed DoG against pre-computed ground truth
+                // Track errors separately for interior vs boundary pixels
+                float* groundTruth = (float*)dogBuffers[i+1].contents;
+                float* computed = (float*)nextDoGComputedBuffer.contents;
 
+                float maxErrorAll = 0.0f, sumErrorAll = 0.0f;
+                float maxErrorInterior = 0.0f, sumErrorInterior = 0.0f;
+                float maxErrorBoundary = 0.0f, sumErrorBoundary = 0.0f;
+                int numPixelsAll = octaveHeight * octaveWidth;
+                int numPixelsInterior = 0, numPixelsBoundary = 0;
+
+                const int TILE_SIZE = 16;
+                for (int y = 0; y < octaveHeight; y++) {
+                    for (int x = 0; x < octaveWidth; x++) {
+                        int idx = y * rowStride + x;
+                        float error = std::fabs(groundTruth[idx] - computed[idx]);
+
+                        maxErrorAll = std::max(maxErrorAll, error);
+                        sumErrorAll += error;
+
+                        // Check if this pixel is on a tile boundary
+                        bool isTileBoundary = ((x % TILE_SIZE) == 0 || (x % TILE_SIZE) == TILE_SIZE - 1 ||
+                                               (y % TILE_SIZE) == 0 || (y % TILE_SIZE) == TILE_SIZE - 1);
+
+                        if (isTileBoundary) {
+                            maxErrorBoundary = std::max(maxErrorBoundary, error);
+                            sumErrorBoundary += error;
+                            numPixelsBoundary++;
+                        } else {
+                            maxErrorInterior = std::max(maxErrorInterior, error);
+                            sumErrorInterior += error;
+                            numPixelsInterior++;
+                        }
+                    }
+                }
+
+                float avgErrorAll = sumErrorAll / numPixelsAll;
+                float avgErrorInterior = numPixelsInterior > 0 ? sumErrorInterior / numPixelsInterior : 0.0f;
+                float avgErrorBoundary = numPixelsBoundary > 0 ? sumErrorBoundary / numPixelsBoundary : 0.0f;
+
+                std::cout << "[DoG Validation] Octave " << o << " Layer " << i << ":\n"
+                          << "  All:      MaxErr=" << maxErrorAll << " AvgErr=" << avgErrorAll << "\n"
+                          << "  Interior: MaxErr=" << maxErrorInterior << " AvgErr=" << avgErrorInterior
+                          << " (n=" << numPixelsInterior << ")\n"
+                          << "  Boundary: MaxErr=" << maxErrorBoundary << " AvgErr=" << avgErrorBoundary
+                          << " (n=" << numPixelsBoundary << ")" << std::endl;
+
+                // No need to copy anything - we're using pre-computed DoG buffers
                 // memcpy(dogBuffers[i+1].contents, nextDogBuffer.contents, bufferSize);
                 // memcpy(gaussBuffers[i+1].contents, nextGaussBuffer.contents, bufferSize);
 
@@ -1244,6 +1296,7 @@ void findScaleSpaceExtremaMetalFused(
 
             RELEASE_IF_MANUAL(nextGaussBuffer);
             RELEASE_IF_MANUAL(nextDogBuffer);
+            RELEASE_IF_MANUAL(nextDoGComputedBuffer);
         }
 
 #ifdef LAR_PROFILE_METAL_SIFT
