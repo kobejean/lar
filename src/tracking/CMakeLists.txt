@@ -30,7 +30,7 @@ set(HEADER_LIST
 
 # Optional Metal-accelerated SIFT (macOS/iOS only)
 option(LAR_USE_METAL_SIFT "Enable Metal-accelerated Gaussian pyramid for SIFT" ON)
-option(LAR_USE_METAL_SIFT_FUSED "Enable experimental fused Metal SIFT kernel" OFF)
+option(LAR_USE_METAL_SIFT_FUSED "Enable experimental fused Metal SIFT kernel" ON)
 
 # Collect source files
 set(TRACKING_SOURCES

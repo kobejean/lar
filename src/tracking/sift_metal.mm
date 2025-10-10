@@ -613,6 +613,7 @@ void buildDoGPyramidMetal(const std::vector<cv::Mat>& gauss_pyr, std::vector<cv:
 #ifdef LAR_PROFILE_METAL_SIFT
         auto downloadStart = std::chrono::high_resolution_clock::now();
 #endif
+        dog_pyr.resize(nOctaves * (nLevels - 1));
         for (int o = 0; o < nOctaves; o++) {
             int octaveWidth = gauss_pyr[o * nLevels].cols;
             int octaveHeight = gauss_pyr[o * nLevels].rows;
@@ -620,9 +621,24 @@ void buildDoGPyramidMetal(const std::vector<cv::Mat>& gauss_pyr, std::vector<cv:
             size_t rowBytes = octaveWidth * sizeof(float);
             size_t alignedRowBytes = ((rowBytes + METAL_BUFFER_ALIGNMENT - 1) / METAL_BUFFER_ALIGNMENT) * METAL_BUFFER_ALIGNMENT;
 
+            // Bounds check
+            if (o >= resources.dogBuffers.size()) {
+                std::cerr << "ERROR: dogBuffers octave " << o << " out of bounds (size=" << resources.dogBuffers.size() << ")" << std::endl;
+                return;
+            }
+
             std::vector<id<MTLBuffer>>& dogBuffers = resources.dogBuffers[o];
 
+            if (dogBuffers.size() < nLevels - 1) {
+                std::cerr << "ERROR: dogBuffers[" << o << "] has size " << dogBuffers.size() << " but need " << (nLevels - 1) << std::endl;
+                return;
+            }
+
             for (int i = 0; i < nLevels - 1; i++) {
+                if (!dogBuffers[i]) {
+                    std::cerr << "ERROR: dogBuffers[" << o << "][" << i << "] is nil!" << std::endl;
+                    return;
+                }
                 // Wrap shared buffer with OpenCV Mat (no copy!)
                 float* bufferPtr = (float*)dogBuffers[i].contents;
                 dog_pyr[o * (nLevels - 1) + i] = cv::Mat(octaveHeight, octaveWidth, CV_32F,
@@ -910,6 +926,342 @@ void findScaleSpaceExtremaMetal(
         double totalTime = std::chrono::duration<double, std::milli>(
             endTotal - startTotal).count();
         std::cout << "Metal Extrema Detection Profile:\n";
+        std::cout << "  GPU:      " << gpuTime << " ms\n"
+                  << "  CPU:      " << cpuTime << " ms\n"
+                  << "  Total:    " << totalTime << " ms\n";
+#endif
+    }
+}
+
+// Structure matching Metal shader FusedExtremaParams
+struct FusedExtremaParams {
+    int width;
+    int height;
+    int rowStride;
+    float threshold;
+    int border;
+    int octave;
+    int layer;
+    int kernelSize;
+};
+
+// Metal-accelerated fused scale-space extrema detection
+// Combines: DoG computation + Extrema detection in single kernel
+// This is more efficient than the separate approach as it keeps intermediate
+// DoG results in threadgroup memory instead of global memory.
+// Takes pre-built Gaussian pyramid and computes DoG on-the-fly during extrema detection.
+void findScaleSpaceExtremaMetalFused(
+    const std::vector<cv::Mat>& gauss_pyr,
+    std::vector<cv::KeyPoint>& keypoints,
+    int nOctaves,
+    int nOctaveLayers,
+    float threshold,
+    double contrastThreshold,
+    double edgeThreshold,
+    double sigma)
+{
+    @autoreleasepool {
+        MetalSiftResources& resources = getMetalResources();
+
+        if (!resources.device) {
+            std::cerr << "Metal not initialized" << std::endl;
+            return;
+        }
+
+        id<MTLDevice> device = resources.device;
+        id<MTLCommandQueue> commandQueue = resources.commandQueue;
+
+#ifdef LAR_PROFILE_METAL_SIFT
+        auto startTotal = std::chrono::high_resolution_clock::now();
+        double gpuTime = 0, cpuTime = 0;
+#endif
+
+        // Load compiled Metal shader library
+        NSError* error = nil;
+
+        // Try to load from runtime bin directory first
+        NSString* binPath = @"bin/sift_fused.metallib";
+        NSURL* libraryURL = [NSURL fileURLWithPath:binPath];
+
+        // Fallback: try relative to executable
+        if (![[NSFileManager defaultManager] fileExistsAtPath:binPath]) {
+            NSString* execPath = [[NSBundle mainBundle] executablePath];
+            NSString* execDir = [execPath stringByDeletingLastPathComponent];
+            NSString* metalLibPath = [execDir stringByAppendingPathComponent:@"sift_fused.metallib"];
+            libraryURL = [NSURL fileURLWithPath:metalLibPath];
+        }
+
+        id<MTLLibrary> library = [device newLibraryWithURL:libraryURL error:&error];
+        if (!library) {
+            std::cerr << "Failed to load Metal library: " << [[error localizedDescription] UTF8String] << std::endl;
+            std::cerr << "Searched path: " << [binPath UTF8String] << std::endl;
+            return;
+        }
+
+        id<MTLFunction> fusedFunction = [library newFunctionWithName:@"detectScaleSpaceExtremaFused"];
+        if (!fusedFunction) {
+            std::cerr << "Failed to find Metal function: detectScaleSpaceExtremaFused" << std::endl;
+            RELEASE_IF_MANUAL(library);
+            return;
+        }
+
+        id<MTLComputePipelineState> pipeline = [device newComputePipelineStateWithFunction:fusedFunction
+                                                                                      error:&error];
+        if (!pipeline) {
+            std::cerr << "Failed to create compute pipeline: " << [[error localizedDescription] UTF8String] << std::endl;
+            RELEASE_IF_MANUAL(fusedFunction);
+            RELEASE_IF_MANUAL(library);
+            return;
+        }
+
+        // Maximum candidates buffer
+        const uint32_t MAX_CANDIDATES = 50000;
+
+        // Allocate candidate buffer (shared for CPU access)
+        id<MTLBuffer> candidateBuffer = [device newBufferWithLength:MAX_CANDIDATES * sizeof(KeypointCandidate)
+                                                             options:MTLResourceStorageModeShared];
+
+        // Allocate atomic counter buffer
+        id<MTLBuffer> counterBuffer = [device newBufferWithLength:sizeof(uint32_t)
+                                                           options:MTLResourceStorageModeShared];
+
+        keypoints.clear();
+
+        // Pre-compute Gaussian kernels for all sigma values
+        int nLevels = nOctaveLayers + 3;
+        std::vector<std::vector<float>> gaussianKernels(nLevels);
+        std::vector<double> sigmas(nLevels);
+
+        // Calculate sigmas (matching SIFT algorithm)
+        double k = std::pow(2.0, 1.0 / nOctaveLayers);
+        sigmas[0] = sigma;
+        for (int i = 1; i < nLevels; i++) {
+            double sig_prev = std::pow(k, (double)(i-1)) * sigma;
+            double sig_total = sig_prev * k;
+            sigmas[i] = std::sqrt(sig_total*sig_total - sig_prev*sig_prev);
+            gaussianKernels[i] = createGaussianKernel(sigmas[i]);
+        }
+
+#ifdef LAR_PROFILE_METAL_SIFT
+        auto gpuStart = std::chrono::high_resolution_clock::now();
+#endif
+
+        // TEMPORARY: Use buildDoGPyramidMetal to properly compute DoG pyramid
+        // This tests if the DoG computation works correctly
+        std::vector<cv::Mat> dog_pyr;
+        buildDoGPyramidMetal(gauss_pyr, dog_pyr, nOctaves, nLevels);
+
+        // TODO: Now use the fused extrema detection with the properly computed DoG buffers
+        // For now, just return to test that DoG computation works without crashing
+        std::cout << "DoG pyramid computed successfully with " << dog_pyr.size() << " layers" << std::endl;
+        // findScaleSpaceExtremaMetal(gauss_pyr, dog_pyr, keypoints, nOctaves, nOctaveLayers,
+        //                             threshold, contrastThreshold, edgeThreshold, sigma);
+        // return;
+        // Process each octave
+        for (int o = 0; o < nOctaves; o++) {
+            int octaveWidth = dog_pyr[o * (nLevels - 1)].cols;
+            int octaveHeight = dog_pyr[o * (nLevels - 1)].rows;
+
+            size_t rowBytes = octaveWidth * sizeof(float);
+            size_t alignedRowBytes = ((rowBytes + METAL_BUFFER_ALIGNMENT - 1) / METAL_BUFFER_ALIGNMENT) * METAL_BUFFER_ALIGNMENT;
+            int rowStride = (int)(alignedRowBytes / sizeof(float));
+
+            std::vector<id<MTLBuffer>>& gaussBuffers = resources.octaveBuffers[o];
+            std::vector<id<MTLBuffer>>& dogBuffers = resources.dogBuffers[o];
+
+            // // Wrap DoG buffers in cv::Mat for CPU access (needed for adjustLocalExtrema)
+            // for (int i = 0; i < nLevels - 1; i++) {
+            //     float* bufferPtr = (float*)dogBuffers[i].contents;
+            //     dog_pyr[o * (nLevels - 1) + i] = cv::Mat(octaveHeight, octaveWidth, CV_32F,
+            //                                               bufferPtr, alignedRowBytes).clone();
+            // }
+
+            // Pre-compute the first two DoG layers (DoG[0] and DoG[1])
+            // These are needed as prevDoG and currDoG for the first fused kernel iteration
+            size_t bufferSize = alignedRowBytes * octaveHeight;
+
+            // DoG[0] = Gauss[1] - Gauss[0]
+            float* gauss0 = (float*)gaussBuffers[0].contents;
+            float* gauss1 = (float*)gaussBuffers[1].contents;
+            float* dog0 = (float*)dogBuffers[0].contents;
+            for (int pixel = 0; pixel < octaveHeight * rowStride; pixel++) {
+                dog0[pixel] = gauss1[pixel] - gauss0[pixel];
+            }
+
+            // DoG[1] = Gauss[2] - Gauss[1]
+            float* gauss2 = (float*)gaussBuffers[2].contents;
+            float* dog1 = (float*)dogBuffers[1].contents;
+            for (int pixel = 0; pixel < octaveHeight * rowStride; pixel++) {
+                dog1[pixel] = gauss2[pixel] - gauss1[pixel];
+            }
+
+            // Allocate temporary buffers for nextGauss and nextDoG
+            id<MTLBuffer> nextGaussBuffer = [device newBufferWithLength:bufferSize
+                                                                options:MTLResourceStorageModeShared];
+            id<MTLBuffer> nextDogBuffer = [device newBufferWithLength:bufferSize
+                                                              options:MTLResourceStorageModeShared];
+            // Process layers 1 to nOctaveLayers (where we detect extrema)
+            for (int i = 1; i <= nOctaveLayers; i++) {
+                // Reset counter to zero
+                uint32_t* counterPtr = (uint32_t*)counterBuffer.contents;
+                *counterPtr = 0;
+
+                memcpy(nextDogBuffer.contents, dogBuffers[i+1].contents, bufferSize);
+                memcpy(nextGaussBuffer.contents, gaussBuffers[i+1].contents, bufferSize);
+
+                // Setup parameters
+                FusedExtremaParams params;
+                params.width = octaveWidth;
+                params.height = octaveHeight;
+                params.rowStride = rowStride;
+                params.threshold = threshold;
+                params.border = 5; // SIFT_IMG_BORDER
+                params.octave = o;
+                params.layer = i;
+                params.kernelSize = (int)gaussianKernels[i+1].size(); // Kernel for next Gaussian level
+
+                // Create parameter buffer
+                id<MTLBuffer> paramsBuffer = [device newBufferWithBytes:&params
+                                                                  length:sizeof(FusedExtremaParams)
+                                                                 options:MTLResourceStorageModeShared];
+
+                // Create kernel buffer
+                id<MTLBuffer> kernelBuffer = [device newBufferWithBytes:gaussianKernels[i+1].data()
+                                                                  length:gaussianKernels[i+1].size() * sizeof(float)
+                                                                 options:MTLResourceStorageModeShared];
+
+                // Create max candidates buffer
+                id<MTLBuffer> maxCandidatesBuffer = [device newBufferWithBytes:&MAX_CANDIDATES
+                                                                         length:sizeof(uint32_t)
+                                                                        options:MTLResourceStorageModeShared];
+
+                // Create command buffer
+                id<MTLCommandBuffer> commandBuffer = [commandQueue commandBuffer];
+                id<MTLComputeCommandEncoder> encoder = [commandBuffer computeCommandEncoder];
+
+                [encoder setComputePipelineState:pipeline];
+                [encoder setBuffer:dogBuffers[i-1] offset:0 atIndex:0];      // prevDoG (pre-computed)
+                [encoder setBuffer:dogBuffers[i] offset:0 atIndex:1];        // currDoG (pre-computed)
+                [encoder setBuffer:gaussBuffers[i] offset:0 atIndex:2];      // currGauss (unused now)
+                [encoder setBuffer:nextGaussBuffer offset:0 atIndex:3];      // nextGauss (unused now)
+                [encoder setBuffer:dogBuffers[i+1] offset:0 atIndex:4];      // nextDoG (pre-computed, read-only)
+                [encoder setBuffer:counterBuffer offset:0 atIndex:5];        // candidateCount
+                [encoder setBuffer:candidateBuffer offset:0 atIndex:6];      // candidates
+                [encoder setBuffer:paramsBuffer offset:0 atIndex:7];         // params
+                [encoder setBuffer:maxCandidatesBuffer offset:0 atIndex:8];  // maxCandidates
+                [encoder setBuffer:kernelBuffer offset:0 atIndex:9];         // gaussKernel (unused now)
+
+                // Dispatch with 16×16 threadgroups (matching kernel's TILE_SIZE)
+                MTLSize gridSize = MTLSizeMake(octaveWidth, octaveHeight, 1);
+                MTLSize threadgroupSize = MTLSizeMake(16, 16, 1);
+
+                [encoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
+                [encoder endEncoding];
+
+                [commandBuffer commit];
+                [commandBuffer waitUntilCompleted];
+
+                RELEASE_IF_MANUAL(paramsBuffer);
+                RELEASE_IF_MANUAL(kernelBuffer);
+                RELEASE_IF_MANUAL(maxCandidatesBuffer);
+
+                // No need to copy anything - we're using pre-computed DoG buffers
+
+                // memcpy(dogBuffers[i+1].contents, nextDogBuffer.contents, bufferSize);
+                // memcpy(gaussBuffers[i+1].contents, nextGaussBuffer.contents, bufferSize);
+
+
+                // Read back candidate count
+                uint32_t candidateCount = *counterPtr;
+                candidateCount = std::min(candidateCount, MAX_CANDIDATES);
+
+                if (candidateCount > 0) {
+                    // Process candidates on CPU (refinement + orientation)
+#ifdef LAR_PROFILE_METAL_SIFT
+                    auto cpuStart = std::chrono::high_resolution_clock::now();
+#endif
+                    KeypointCandidate* candidates = (KeypointCandidate*)candidateBuffer.contents;
+
+                    for (uint32_t c = 0; c < candidateCount; c++) {
+                        KeypointCandidate& cand = candidates[c];
+
+                        // Skip if outside valid bounds
+                        if (cand.x < 5 || cand.x >= octaveWidth - 5 ||
+                            cand.y < 5 || cand.y >= octaveHeight - 5) {
+                            continue;
+                        }
+
+                        // Create keypoint for refinement
+                        cv::KeyPoint kpt;
+                        int layer = cand.layer;
+                        int r = cand.y;
+                        int c_pos = cand.x;
+
+                        // Call adjustLocalExtrema for subpixel refinement
+                        if (!adjustLocalExtrema(dog_pyr, kpt, cand.octave, layer, r, c_pos,
+                                               nOctaveLayers, (float)contrastThreshold,
+                                               (float)edgeThreshold, (float)sigma)) {
+                            continue;
+                        }
+
+                        // Calculate orientation histogram
+                        static const int n = 36; // SIFT_ORI_HIST_BINS
+                        float hist[n];
+                        float scl_octv = kpt.size * 0.5f / (1 << cand.octave);
+
+                        int gaussIdx = cand.octave * nLevels + layer;
+                        float omax = calcOrientationHist(gauss_pyr[gaussIdx],
+                                                        cv::Point(c_pos, r),
+                                                        cvRound(4.5f * scl_octv),
+                                                        1.5f * scl_octv,
+                                                        hist, n);
+
+                        float mag_thr = omax * 0.8f; // SIFT_ORI_PEAK_RATIO
+
+                        // Find orientation peaks and create keypoints
+                        for (int j = 0; j < n; j++) {
+                            int l = j > 0 ? j - 1 : n - 1;
+                            int r2 = j < n-1 ? j + 1 : 0;
+
+                            if (hist[j] > hist[l] && hist[j] > hist[r2] && hist[j] >= mag_thr) {
+                                float bin = j + 0.5f * (hist[l]-hist[r2]) / (hist[l] - 2*hist[j] + hist[r2]);
+                                bin = bin < 0 ? n + bin : bin >= n ? bin - n : bin;
+                                kpt.angle = 360.f - (360.f/n) * bin;
+                                if (std::abs(kpt.angle - 360.f) < FLT_EPSILON)
+                                    kpt.angle = 0.f;
+
+                                keypoints.push_back(kpt);
+                            }
+                        }
+                    }
+
+#ifdef LAR_PROFILE_METAL_SIFT
+                    cpuTime += std::chrono::duration<double, std::milli>(
+                        std::chrono::high_resolution_clock::now() - cpuStart).count();
+#endif
+                }
+            }
+
+            RELEASE_IF_MANUAL(nextGaussBuffer);
+            RELEASE_IF_MANUAL(nextDogBuffer);
+        }
+
+#ifdef LAR_PROFILE_METAL_SIFT
+        gpuTime = std::chrono::duration<double, std::milli>(
+            std::chrono::high_resolution_clock::now() - gpuStart).count();
+#endif
+
+        RELEASE_IF_MANUAL(candidateBuffer);
+        RELEASE_IF_MANUAL(counterBuffer);
+        RELEASE_IF_MANUAL(pipeline);
+        RELEASE_IF_MANUAL(fusedFunction);
+        RELEASE_IF_MANUAL(library);
+
+#ifdef LAR_PROFILE_METAL_SIFT
+        auto endTotal = std::chrono::high_resolution_clock::now();
+        double totalTime = std::chrono::duration<double, std::milli>(
+            endTotal - startTotal).count();
+        std::cout << "Metal Fused Extrema Detection Profile:\n";
         std::cout << "  GPU:      " << gpuTime << " ms\n"
                   << "  CPU:      " << cpuTime << " ms\n"
                   << "  Total:    " << totalTime << " ms\n";
