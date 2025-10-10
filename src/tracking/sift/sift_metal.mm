@@ -1,6 +1,7 @@
 // Metal-accelerated Gaussian pyramid for SIFT
 // Usage: Build with -DLAR_USE_METAL_SIFT=ON
 #import <Metal/Metal.h>
+#include <cstdint>
 #import <MetalPerformanceShaders/MetalPerformanceShaders.h>
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
@@ -645,7 +646,7 @@ void findScaleSpaceExtremaMetal(
         const uint32_t TOTAL_CANDIDATES = NUM_SHARDS * SHARD_CAPACITY;
 
         // Allocate sharded candidate buffer (shared for CPU access)
-        id<MTLBuffer> candidateBuffer = [device newBufferWithLength:TOTAL_CANDIDATES * sizeof(KeypointCandidate)
+        id<MTLBuffer> candidateBuffer = [device newBufferWithLength:TOTAL_CANDIDATES * sizeof(uint32_t)
                                                              options:MTLResourceStorageModeShared];
 
         // Allocate sharded atomic counter buffer (128 counters)
@@ -726,7 +727,7 @@ void findScaleSpaceExtremaMetal(
 #ifdef LAR_PROFILE_METAL_SIFT
                 auto cpuStart = std::chrono::high_resolution_clock::now();
 #endif
-                KeypointCandidate* candidates = (KeypointCandidate*)candidateBuffer.contents;
+                uint32_t* candidates = (uint32_t*)candidateBuffer.contents;
 
                 // Iterate through all shards and process their candidates
                 for (uint32_t shard = 0; shard < NUM_SHARDS; shard++) {
@@ -735,7 +736,11 @@ void findScaleSpaceExtremaMetal(
 
                     for (uint32_t i = 0; i < shardCount; i++) {
                         uint32_t globalIdx = shard * SHARD_CAPACITY + i;
-                        KeypointCandidate& cand = candidates[globalIdx];
+                        KeypointCandidate cand;
+                        cand.x = candidates[globalIdx] & 0xFFFF;
+                        cand.y = candidates[globalIdx] >> 16;
+                        cand.octave = params.octave;
+                        cand.layer = params.layer;
 
                         // Create keypoint for refinement
                         cv::KeyPoint kpt;

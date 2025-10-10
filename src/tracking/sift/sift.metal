@@ -4,15 +4,6 @@
 #include "sift_constants.metal"
 using namespace metal;
 
-// Candidate keypoint structure
-struct KeypointCandidate {
-    int x;          // Column position
-    int y;          // Row position
-    int octave;     // Octave index
-    int layer;      // Layer within octave (1 to nOctaveLayers)
-    float value;    // DoG value at this location
-};
-
 // Kernel parameters
 struct ExtremaParams {
     int width;              // Image width for this layer
@@ -45,7 +36,7 @@ kernel void detectScaleSpaceExtrema(
     const device float* currLayer [[buffer(1)]],   // DoG layer i (center)
     const device float* nextLayer [[buffer(2)]],   // DoG layer i+1
     device atomic_uint* candidateCounts [[buffer(3)]], // Array of 128 atomic counters (one per shard)
-    device KeypointCandidate* candidates [[buffer(4)]], // Output candidate array (128 shards × 1024 capacity)
+    device uint* candidates [[buffer(4)]], // Output candidate array (128 shards × 1024 capacity)
     constant ExtremaParams& params [[buffer(5)]],
     constant uint& shardCapacity [[buffer(6)]],    // Capacity per shard (typically 1024)
     uint2 gid [[thread_position_in_grid]],
@@ -137,11 +128,7 @@ kernel void detectScaleSpaceExtrema(
             uint globalIndex = shardIndex * shardCapacity + localIndex;
 
             // Write to shard-specific region
-            candidates[globalIndex].x = x;
-            candidates[globalIndex].y = y;
-            candidates[globalIndex].octave = params.octave;
-            candidates[globalIndex].layer = params.layer;
-            candidates[globalIndex].value = val;
+            candidates[globalIndex] = y << 16 | x;
         }
     }
     
