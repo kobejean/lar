@@ -38,17 +38,17 @@ struct FusedExtremaParams {
 // Note: Extrema detection requires precise floating-point comparisons
 // Compiled with -fno-fast-math to ensure IEEE-754 compliant comparisons
 kernel void detectScaleSpaceExtremaFused(
-    const device float* prevDoG [[buffer(0)]],             // DoG[layer-1]
+    const device float* prevDoG [[buffer(0)]],             // DoG[layer-1] (pre-computed)
     const device float* currDoG [[buffer(1)]],             // DoG[layer] (detect extrema here)
-    const device float* currGauss [[buffer(2)]],           // Gauss[layer+1]
+    const device float* currGauss [[buffer(2)]],           // Gauss[layer+1] (blur to get Gauss[layer+2])
     device float* nextGauss [[buffer(3)]],                 // Output: Gauss[layer+2]
-    device float* nextDoG [[buffer(4)]],                   // Pre-computed DoG[layer+1] (ground truth)
+    device float* nextDoG [[buffer(4)]],                   // Ground truth: DoG[layer+1] for validation
     device atomic_uint* candidateCount [[buffer(5)]],      // Atomic counter
     device KeypointCandidate* candidates [[buffer(6)]],    // Output candidates
     constant FusedExtremaParams& params [[buffer(7)]],
     constant uint& maxCandidates [[buffer(8)]],
     constant float* gaussKernel [[buffer(9)]],             // 1D Gaussian kernel
-    device float* nextDoGComputed [[buffer(10)]],          // Debug: Our computed DoG[layer+1]
+    device float* nextDoGComputed [[buffer(10)]],          // Debug: kernel-computed DoG[layer+1]
     uint2 gid [[thread_position_in_grid]],
     uint2 tid [[thread_position_in_threadgroup]],
     uint2 tgSize [[threads_per_threadgroup]])
@@ -109,45 +109,46 @@ kernel void detectScaleSpaceExtremaFused(
 
     // Wait for horizontal blur to complete
     threadgroup_barrier(mem_flags::mem_threadgroup);
-    
+
     // === Step 2: Vertical blur + DoG computation (interior 16x16 only) ===
-    // Each thread processes its own pixel - NO halo filling
-
-    // Only process valid pixels (skip out-of-bounds threads)
-    if (globalX < params.width && globalY < params.height) {
-        // Calculate position in shared memory (accounting for halo offset)
-        int sharedY = localY + radius;
-
-        // Perform vertical blur exactly like gaussianBlurFused
-        float centerPixel = sharedHoriz[sharedY][localX];
-        float sum = gaussKernel[radius] * centerPixel;
-
-        // Symmetric pairs: m[j]*top + m[j]*bottom
-        for (int j = 0; j < radius; j++) {
-            int topY = sharedY - radius + j;
-            int bottomY = sharedY + radius - j;
-
-            // Clamp to shared memory bounds
-            topY = clamp(topY, 0, paddedHeight - 1);
-            bottomY = clamp(bottomY, 0, paddedHeight - 1);
-
-            float topPixel = sharedHoriz[topY][localX];
-            float bottomPixel = sharedHoriz[bottomY][localX];
-            float weight = gaussKernel[j];
-
-            sum = sum + (weight * topPixel + weight * bottomPixel);
-        }
-
-        // Compute DoG = nextGauss - currGauss
-        float currG = currGauss[globalY * params.rowStride + globalX];
-        float dogVal = sum - currG;
-
-        // Store in sharedNextDoG at interior position (+1 offset for halo border)
-        sharedNextDoG[localY + 1][localX + 1] = dogVal;
-
-        // Write nextGauss to global memory
-        nextGauss[globalY * params.rowStride + globalX] = sum;
+    // Early return for out-of-bounds threads (match reference implementation)
+    // This prevents out-of-bounds threads from corrupting halo calculations
+    if (globalX >= params.width || globalY >= params.height) {
+        return;
     }
+
+    // Calculate position in shared memory (accounting for halo offset)
+    int sharedY = localY + radius;
+
+    // Perform vertical blur exactly like gaussianBlurFused
+    float centerPixel = sharedHoriz[sharedY][localX];
+    float sum = gaussKernel[radius] * centerPixel;
+
+    // Symmetric pairs: m[j]*top + m[j]*bottom
+    for (int j = 0; j < radius; j++) {
+        int topY = sharedY - radius + j;
+        int bottomY = sharedY + radius - j;
+
+        // Clamp to shared memory bounds
+        topY = clamp(topY, 0, paddedHeight - 1);
+        bottomY = clamp(bottomY, 0, paddedHeight - 1);
+
+        float topPixel = sharedHoriz[topY][localX];
+        float bottomPixel = sharedHoriz[bottomY][localX];
+        float weight = gaussKernel[j];
+
+        sum = sum + (weight * topPixel + weight * bottomPixel);
+    }
+
+    // Compute DoG = nextGauss - currGauss
+    float currG = currGauss[globalY * params.rowStride + globalX];
+    float dogVal = sum - currG;
+
+    // Store in sharedNextDoG at interior position (+1 offset for halo border)
+    sharedNextDoG[localY + 1][localX + 1] = dogVal;
+
+    // Write nextGauss to global memory
+    nextGauss[globalY * params.rowStride + globalX] = sum;
 
     // Now fill the 1-pixel halo border by reading from pre-computed nextDoG
     // Each thread may fill multiple halo pixels

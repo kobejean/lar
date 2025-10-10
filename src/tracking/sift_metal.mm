@@ -1122,16 +1122,16 @@ void findScaleSpaceExtremaMetalFused(
                 params.border = 5; // SIFT_IMG_BORDER
                 params.octave = o;
                 params.layer = i;
-                params.kernelSize = (int)gaussianKernels[i+1].size(); // Kernel for next Gaussian level
+                params.kernelSize = (int)gaussianKernels[i+2].size(); // Kernel to blur Gauss[i+1] → Gauss[i+2]
 
                 // Create parameter buffer
                 id<MTLBuffer> paramsBuffer = [device newBufferWithBytes:&params
                                                                   length:sizeof(FusedExtremaParams)
                                                                  options:MTLResourceStorageModeShared];
 
-                // Create kernel buffer
-                id<MTLBuffer> kernelBuffer = [device newBufferWithBytes:gaussianKernels[i+1].data()
-                                                                  length:gaussianKernels[i+1].size() * sizeof(float)
+                // Create kernel buffer (use i+2 to match ground truth blur kernel)
+                id<MTLBuffer> kernelBuffer = [device newBufferWithBytes:gaussianKernels[i+2].data()
+                                                                  length:gaussianKernels[i+2].size() * sizeof(float)
                                                                  options:MTLResourceStorageModeShared];
 
                 // Create max candidates buffer
@@ -1146,8 +1146,8 @@ void findScaleSpaceExtremaMetalFused(
                 [encoder setComputePipelineState:pipeline];
                 [encoder setBuffer:dogBuffers[i-1] offset:0 atIndex:0];      // prevDoG (pre-computed, read-only)
                 [encoder setBuffer:dogBuffers[i] offset:0 atIndex:1];        // currDoG (pre-computed, read-only)
-                [encoder setBuffer:gaussBuffers[i] offset:0 atIndex:2];      // currGauss (kernel reads for blur computation)
-                [encoder setBuffer:nextGaussBuffer offset:0 atIndex:3];      // nextGauss (kernel writes blurred output)
+                [encoder setBuffer:gaussBuffers[i+1] offset:0 atIndex:2];    // currGauss (Gauss[i+1], blur to get Gauss[i+2])
+                [encoder setBuffer:nextGaussBuffer offset:0 atIndex:3];      // nextGauss (kernel writes Gauss[i+2])
                 [encoder setBuffer:dogBuffers[i+1] offset:0 atIndex:4];      // nextDoG (ground truth for validation)
                 [encoder setBuffer:counterBuffer offset:0 atIndex:5];        // candidateCount (atomic counter)
                 [encoder setBuffer:candidateBuffer offset:0 atIndex:6];      // candidates (extrema output)
