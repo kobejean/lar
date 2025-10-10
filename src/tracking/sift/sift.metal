@@ -28,15 +28,16 @@ struct GaussianBlurParams {
 // Note: Extrema detection requires precise floating-point comparisons
 // Compiled with -fno-fast-math to ensure IEEE-754 compliant comparisons
 //
-// Performance optimization: Uses sharded atomic counters (128 shards) to reduce
-// contention. Each threadgroup hashes to a shard, dramatically reducing atomic conflicts.
+// Performance optimization: Uses sharded atomic counters (256 shards) with primitive
+// root probing to reduce contention. Spatial locality preserved on first probe, then
+// pseudo-random probing using primitive root 127 of prime 257 for overflow handling.
 #pragma METAL fp math_mode(safe)
 kernel void detectScaleSpaceExtrema(
     const device float* prevLayer [[buffer(0)]],   // DoG layer i-1
     const device float* currLayer [[buffer(1)]],   // DoG layer i (center)
     const device float* nextLayer [[buffer(2)]],   // DoG layer i+1
-    device atomic_uint* candidateCounts [[buffer(3)]], // Array of 128 atomic counters (one per shard)
-    device uint* candidates [[buffer(4)]], // Output candidate array (128 shards × 1024 capacity)
+    device atomic_uint* candidateCounts [[buffer(3)]], // Array of 256 atomic counters (one per shard)
+    device uint* candidates [[buffer(4)]], // Output candidate array (256 shards × 1024 capacity)
     constant ExtremaParams& params [[buffer(5)]],
     constant uint& shardCapacity [[buffer(6)]],    // Capacity per shard (typically 1024)
     uint2 gid [[thread_position_in_grid]],
@@ -114,21 +115,28 @@ kernel void detectScaleSpaceExtrema(
 
     // Only write if this is actually an extremum
     if (isExtremum) {
-        // Hash threadgroup to shard (128 shards total)
-        const uint NUM_SHARDS = 128;
-        uint threadgroupID = tgid.y * ((params.width + 15) / 16) + tgid.x;  // Linear threadgroup index
-        uint shardIndex = threadgroupID % NUM_SHARDS;  // Hash: simple modulo
+        // Sharded atomic with primitive root probing (256 shards)
+        const uint NUM_SHARDS = 256;
+        const uint PRIME = 257;
+        const uint PRIMITIVE_ROOT = 127;
+        const uint PROBES = 4;
 
-        // Get shard-specific counter and increment atomically
-        uint localIndex = atomic_fetch_add_explicit(&candidateCounts[shardIndex], 1, memory_order_relaxed);
+        uint threadgroupID = tgid.y * ((params.width + 15) / 16) + tgid.x;
+        uint shardIndex = threadgroupID % NUM_SHARDS;  // Initial: spatial locality
 
-        // Check if this shard has capacity
-        if (localIndex < shardCapacity) {
-            // Calculate global index: shard_base + local_offset
-            uint globalIndex = shardIndex * shardCapacity + localIndex;
-
-            // Write to shard-specific region
-            candidates[globalIndex] = y << 16 | x;
+        for (uint probe = 0; probe < PROBES; probe++) {
+            uint localIndex = atomic_fetch_add_explicit(&candidateCounts[shardIndex], 1, memory_order_relaxed);
+            
+            // Check if this shard has capacity
+            if (localIndex < shardCapacity) {
+                // Write candidate
+                candidates[shardIndex * shardCapacity + localIndex] = y << 16 | x;
+                return;
+            } else {
+                // Probe next shard using primitive root: (k + 1) * 127 % 257 - 1
+                // This generates a pseudo-random permutation of 0..255
+                shardIndex = ((shardIndex + 1) * PRIMITIVE_ROOT) % PRIME - 1;
+            }
         }
     }
     

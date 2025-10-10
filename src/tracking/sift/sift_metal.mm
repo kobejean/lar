@@ -640,9 +640,8 @@ void findScaleSpaceExtremaMetal(
             return;
         }
 
-        // Sharded atomic configuration: 128 shards × 1024 capacity = 131,072 total candidates
-        const uint32_t NUM_SHARDS = 128;
-        const uint32_t SHARD_CAPACITY = 1024;
+        const uint32_t NUM_SHARDS = 256;
+        const uint32_t SHARD_CAPACITY = 2048;
         const uint32_t TOTAL_CANDIDATES = NUM_SHARDS * SHARD_CAPACITY;
 
         // Allocate sharded candidate buffer (shared for CPU access)
