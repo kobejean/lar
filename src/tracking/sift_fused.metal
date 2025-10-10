@@ -163,7 +163,7 @@ kernel void detectScaleSpaceExtremaFused(
     const device float* currDoG [[buffer(1)]],             // DoG[layer] (detect extrema here)
     const device float* currGauss [[buffer(2)]],           // Gauss[layer+1] (blur to get Gauss[layer+2])
     device float* nextGauss [[buffer(3)]],                 // Output: Gauss[layer+2]
-    device float* nextDoG [[buffer(4)]],                   // Ground truth: DoG[layer+1] for validation
+    device float* nextDoG [[buffer(4)]],                   // Output: DoG[layer+1]
     device atomic_uint* candidateCount [[buffer(5)]],      // Atomic counter
     device KeypointCandidate* candidates [[buffer(6)]],    // Output candidates
     constant FusedExtremaParams& params [[buffer(7)]],
@@ -363,7 +363,6 @@ kernel void detectScaleSpaceExtremaFused(
             for (int dy = -1; dy <= 1 && isExtremum; dy++) {
                 for (int dx = -1; dx <= 1 && isExtremum; dx++) {
                     float neighbor = sharedNextDoG[sharedCenterY + dy][sharedCenterX + dx];
-                    // float neighbor = nextDoG[(globalY + dy) * params.rowStride + (globalX + dx)];
 
                     if (isMaxima) {
                         if (val < neighbor) isExtremum = false;
@@ -390,17 +389,16 @@ kernel void detectScaleSpaceExtremaFused(
         }
     }
 
-    // === Step 4: Write computed DoG to debug buffer for comparison ===
+    // === Step 4: Write computed DoG to output buffer ===
     // Wait for all extrema detection to complete before writing
     threadgroup_barrier(mem_flags::mem_threadgroup);
 
-    // Write our computed DoG to separate buffer (doesn't corrupt ground truth)
+    // Write the computed DoG from shared memory to global memory
     if (globalX < params.width && globalY < params.height) {
         // sharedNextDoG indices: +1 offset for halo border
         int sharedX = localX + 1;
         int sharedY = localY + 1;
 
-        // Write to debug buffer for validation
         nextDoG[globalY * params.rowStride + globalX] = sharedNextDoG[sharedY][sharedX];
     }
 }
