@@ -59,7 +59,8 @@ kernel void detectScaleSpaceExtremaFused(
     int paddedHeight = TILE_SIZE + 2 * radius;  // Vertical halo for blur
 
     // Shared memory for tile processing
-    threadgroup float sharedHoriz[32][16];      // Horizontal blur result with vertical halo
+    // Max kernel size ~27 (sigma ~3.0), so max radius ~13, max paddedHeight = 16 + 26 = 42
+    threadgroup float sharedHoriz[48][16];      // Horizontal blur result with vertical halo
     threadgroup float sharedNextDoG[18][18];    // DoG with 1-pixel halo for extrema detection
 
     int globalX = gid.x;
@@ -70,7 +71,7 @@ kernel void detectScaleSpaceExtremaFused(
     // Calculate tile origin in Y dimension (X doesn't need tiling for horizontal blur)
     int tileY = (gid.y / TILE_SIZE) * TILE_SIZE - radius;
 
-    // === Step 1: Horizontal blur currGauss (global → shared with vertical halo) ===
+    // === Step 1: Horizontal blur (global → shared) ===
     // Each thread processes multiple rows to fill the padded height
     for (int py = localY; py < paddedHeight; py += tgSize.y) {
         int srcY = tileY + py;
@@ -83,7 +84,7 @@ kernel void detectScaleSpaceExtremaFused(
             continue;
         }
 
-        // Perform horizontal blur matching gaussianBlurHorizontal
+        // Perform horizontal blur exactly like gaussianBlurHorizontal
         float centerPixel = currGauss[srcY * params.rowStride + globalX];
         float sum = gaussKernel[radius] * centerPixel;
 
@@ -107,12 +108,11 @@ kernel void detectScaleSpaceExtremaFused(
         sharedHoriz[py][localX] = sum;
     }
 
-    // Wait for horizontal blur to complete
+    // Wait for all threads to finish horizontal blur
     threadgroup_barrier(mem_flags::mem_threadgroup);
 
-    // === Step 2: Vertical blur + DoG computation (interior 16x16 only) ===
-    // Early return for out-of-bounds threads (match reference implementation)
-    // This prevents out-of-bounds threads from corrupting halo calculations
+    // === Step 2: Vertical blur (shared → global) ===
+    // Only process valid output pixels
     if (globalX >= params.width || globalY >= params.height) {
         return;
     }
@@ -120,7 +120,7 @@ kernel void detectScaleSpaceExtremaFused(
     // Calculate position in shared memory (accounting for halo offset)
     int sharedY = localY + radius;
 
-    // Perform vertical blur exactly like gaussianBlurFused
+    // Perform vertical blur exactly like gaussianBlurVertical
     float centerPixel = sharedHoriz[sharedY][localX];
     float sum = gaussKernel[radius] * centerPixel;
 
@@ -129,9 +129,9 @@ kernel void detectScaleSpaceExtremaFused(
         int topY = sharedY - radius + j;
         int bottomY = sharedY + radius - j;
 
-        // Clamp to shared memory bounds
-        topY = clamp(topY, 0, paddedHeight - 1);
-        bottomY = clamp(bottomY, 0, paddedHeight - 1);
+        // Clamp to shared memory bounds (sharedHoriz is [48][16])
+        topY = clamp(topY, 0, 47);
+        bottomY = clamp(bottomY, 0, 47);
 
         float topPixel = sharedHoriz[topY][localX];
         float bottomPixel = sharedHoriz[bottomY][localX];

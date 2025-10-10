@@ -255,7 +255,8 @@ kernel void gaussianBlurFused(
 
     // Shared memory for horizontal blur results (with vertical halo)
     // Each column stores TILE_SIZE rows + 2*radius halo rows
-    threadgroup float sharedHoriz[32][16];  // [paddedHeight][TILE_SIZE]
+    // Max kernel size ~27 (sigma ~3.0), so max radius ~13, max paddedHeight = 16 + 26 = 42
+    threadgroup float sharedHoriz[48][16];  // [paddedHeight][TILE_SIZE]
 
     int globalX = gid.x;
     int globalY = gid.y;
@@ -323,9 +324,9 @@ kernel void gaussianBlurFused(
         int topY = sharedY - radius + j;
         int bottomY = sharedY + radius - j;
 
-        // Clamp to shared memory bounds
-        topY = clamp(topY, 0, paddedHeight - 1);
-        bottomY = clamp(bottomY, 0, paddedHeight - 1);
+        // Clamp to shared memory bounds (sharedHoriz is [48][16])
+        topY = clamp(topY, 0, 47);
+        bottomY = clamp(bottomY, 0, 47);
 
         float topPixel = sharedHoriz[topY][localX];
         float bottomPixel = sharedHoriz[bottomY][localX];

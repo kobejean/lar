@@ -1051,12 +1051,40 @@ void findScaleSpaceExtremaMetalFused(
         std::vector<cv::Mat> dog_pyr;
         buildDoGPyramidMetal(gauss_pyr, dog_pyr, nOctaves, nLevels);
 
-        // TODO: Now use the fused extrema detection with the properly computed DoG buffers
-        // For now, just return to test that DoG computation works without crashing
+        // Load Metal library for gaussianBlurFused kernel
+        static id<MTLLibrary> blurLibrary = nil;
+        static id<MTLComputePipelineState> fusedBlurPipeline = nil;
+
+        if (!blurLibrary) {
+            NSString* binPath = @"bin/sift.metallib";
+            NSURL* libraryURL = [NSURL fileURLWithPath:binPath];
+
+            if (![[NSFileManager defaultManager] fileExistsAtPath:binPath]) {
+                NSString* execPath = [[NSBundle mainBundle] executablePath];
+                NSString* execDir = [execPath stringByDeletingLastPathComponent];
+                libraryURL = [NSURL fileURLWithPath:[execDir stringByAppendingPathComponent:@"sift.metallib"]];
+            }
+
+            blurLibrary = [device newLibraryWithURL:libraryURL error:&error];
+            if (!blurLibrary) {
+                std::cerr << "Failed to load blur Metal library: " << [[error localizedDescription] UTF8String] << std::endl;
+                return;
+            }
+
+            // Create pipeline for fused blur
+            id<MTLFunction> fusedFunc = [blurLibrary newFunctionWithName:@"gaussianBlurFused"];
+            if (fusedFunc) {
+                fusedBlurPipeline = [device newComputePipelineStateWithFunction:fusedFunc error:&error];
+                RELEASE_IF_MANUAL(fusedFunc);
+            }
+
+            if (!fusedBlurPipeline) {
+                std::cerr << "Failed to create fused blur pipeline" << std::endl;
+                return;
+            }
+        }
+
         std::cout << "DoG pyramid computed successfully with " << dog_pyr.size() << " layers" << std::endl;
-        // findScaleSpaceExtremaMetal(gauss_pyr, dog_pyr, keypoints, nOctaves, nOctaveLayers,
-        //                             threshold, contrastThreshold, edgeThreshold, sigma);
-        // return;
         // Process each octave
         for (int o = 0; o < nOctaves; o++) {
             int octaveWidth = dog_pyr[o * (nLevels - 1)].cols;
@@ -1068,18 +1096,79 @@ void findScaleSpaceExtremaMetalFused(
 
             std::vector<id<MTLBuffer>>& gaussBuffers = resources.octaveBuffers[o];
             std::vector<id<MTLBuffer>>& dogBuffers = resources.dogBuffers[o];
+            size_t bufferSize = alignedRowBytes * octaveHeight;
 
-            // // Wrap DoG buffers in cv::Mat for CPU access (needed for adjustLocalExtrema)
-            // for (int i = 0; i < nLevels - 1; i++) {
-            //     float* bufferPtr = (float*)dogBuffers[i].contents;
-            //     dog_pyr[o * (nLevels - 1) + i] = cv::Mat(octaveHeight, octaveWidth, CV_32F,
-            //                                               bufferPtr, alignedRowBytes).clone();
-            // }
+            // Compute Gauss[1] and Gauss[2] using gaussianBlurFused kernel
+            // Gauss[0] is already populated from buildGaussianPyramidMetal
+            //
+            // Save pre-computed ground truth for validation
+            std::vector<cv::Mat> groundTruthGauss(3);
+            for (int i = 0; i <= 2; i++) {
+                int gaussIdx = o * nLevels + i;
+                // Clone to avoid pointing to buffer we'll overwrite
+                groundTruthGauss[i] = gauss_pyr[gaussIdx].clone();
+            }
+
+            for (int i = 1; i <= 2; i++) {
+                // Setup Gaussian blur parameters
+                GaussianBlurParams blurParams;
+                blurParams.width = octaveWidth;
+                blurParams.height = octaveHeight;
+                blurParams.rowStride = rowStride;
+                blurParams.kernelSize = (int)gaussianKernels[i].size();
+
+                id<MTLBuffer> blurParamsBuffer = [device newBufferWithBytes:&blurParams
+                                                                      length:sizeof(GaussianBlurParams)
+                                                                     options:MTLResourceStorageModeShared];
+
+                id<MTLBuffer> blurKernelBuffer = [device newBufferWithBytes:gaussianKernels[i].data()
+                                                                      length:gaussianKernels[i].size() * sizeof(float)
+                                                                     options:MTLResourceStorageModeShared];
+
+                // Dispatch gaussianBlurFused: Gauss[i-1] → Gauss[i]
+                id<MTLCommandBuffer> blurCommandBuffer = [commandQueue commandBuffer];
+                id<MTLComputeCommandEncoder> blurEncoder = [blurCommandBuffer computeCommandEncoder];
+
+                [blurEncoder setComputePipelineState:fusedBlurPipeline];
+                [blurEncoder setBuffer:gaussBuffers[i-1] offset:0 atIndex:0];  // source
+                [blurEncoder setBuffer:gaussBuffers[i] offset:0 atIndex:1];    // destination
+                [blurEncoder setBuffer:blurParamsBuffer offset:0 atIndex:2];
+                [blurEncoder setBuffer:blurKernelBuffer offset:0 atIndex:3];
+
+                MTLSize gridSize = MTLSizeMake(octaveWidth, octaveHeight, 1);
+                MTLSize threadgroupSize = MTLSizeMake(16, 16, 1);
+
+                [blurEncoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
+                [blurEncoder endEncoding];
+
+                [blurCommandBuffer commit];
+                [blurCommandBuffer waitUntilCompleted];
+
+                RELEASE_IF_MANUAL(blurParamsBuffer);
+                RELEASE_IF_MANUAL(blurKernelBuffer);
+
+                // === Validate computed Gauss[i] against ground truth ===
+                float* computed = (float*)gaussBuffers[i].contents;
+                float maxError = 0.0f, sumError = 0.0f;
+                int numPixels = octaveHeight * octaveWidth;
+
+                for (int y = 0; y < octaveHeight; y++) {
+                    for (int x = 0; x < octaveWidth; x++) {
+                        int idx = y * rowStride + x;
+                        float gtVal = groundTruthGauss[i].at<float>(y, x);
+                        float error = std::fabs(gtVal - computed[idx]);
+                        maxError = std::max(maxError, error);
+                        sumError += error;
+                    }
+                }
+
+                float avgError = sumError / numPixels;
+                std::cout << "[Gauss Validation] Octave " << o << " Layer " << i
+                          << ": MaxErr=" << maxError << " AvgErr=" << avgError << std::endl;
+            }
 
             // Pre-compute the first two DoG layers (DoG[0] and DoG[1])
             // These are needed as prevDoG and currDoG for the first fused kernel iteration
-            size_t bufferSize = alignedRowBytes * octaveHeight;
-
             // DoG[0] = Gauss[1] - Gauss[0]
             float* gauss0 = (float*)gaussBuffers[0].contents;
             float* gauss1 = (float*)gaussBuffers[1].contents;
@@ -1109,9 +1198,6 @@ void findScaleSpaceExtremaMetalFused(
                 // Reset counter to zero
                 uint32_t* counterPtr = (uint32_t*)counterBuffer.contents;
                 *counterPtr = 0;
-
-                memcpy(nextDogBuffer.contents, dogBuffers[i+1].contents, bufferSize);
-                memcpy(nextGaussBuffer.contents, gaussBuffers[i+1].contents, bufferSize);
 
                 // Setup parameters
                 FusedExtremaParams params;
@@ -1218,9 +1304,10 @@ void findScaleSpaceExtremaMetalFused(
                           << "  Boundary: MaxErr=" << maxErrorBoundary << " AvgErr=" << avgErrorBoundary
                           << " (n=" << numPixelsBoundary << ")" << std::endl;
 
-                // No need to copy anything - we're using pre-computed DoG buffers
-                // memcpy(dogBuffers[i+1].contents, nextDogBuffer.contents, bufferSize);
-                // memcpy(gaussBuffers[i+1].contents, nextGaussBuffer.contents, bufferSize);
+                // Update pyramid with fused kernel's computed results
+                // This makes the fused kernel self-sustaining (no longer needs pre-computed buffers)
+                memcpy(gaussBuffers[i+2].contents, nextGaussBuffer.contents, bufferSize);
+                memcpy(dogBuffers[i+1].contents, nextDoGComputedBuffer.contents, bufferSize);
 
 
                 // Read back candidate count
