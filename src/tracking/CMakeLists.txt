@@ -123,11 +123,13 @@ if(LAR_USE_METAL_SIFT AND APPLE)
     set(METAL_LIB_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/sift.metallib")
 
     # Step 1: Compile .metal to .air (Apple Intermediate Representation)
-    # Flags optimize for precision matching with MPS:
-    #   -fno-fast-math: Disable aggressive optimizations that hurt precision
+    # Flags optimize for precision and reproducibility:
+    #   -O2: High optimization without aggressive transforms
+    #   -fno-fast-math: Disable unsafe optimizations (reassociation, reciprocals, etc.)
+    #   -ffp-contract=off: Disable FMA to match CPU computation exactly
     add_custom_command(
       OUTPUT ${METAL_AIR_OUTPUT}
-      COMMAND xcrun -sdk macosx metal -c -O3 -fno-fast-math ${METAL_SHADER_SOURCE} -o ${METAL_AIR_OUTPUT}
+      COMMAND xcrun -sdk macosx metal -c -O2 -fno-fast-math -ffp-contract=off ${METAL_SHADER_SOURCE} -o ${METAL_AIR_OUTPUT}
       DEPENDS ${METAL_SHADER_SOURCE}
       COMMENT "Compiling Metal shader: sift.metal → sift.air (precision mode)"
     )
@@ -182,11 +184,12 @@ if(LAR_USE_METAL_SIFT_FUSED AND LAR_USE_METAL_SIFT AND APPLE)
     set(METAL_FUSED_LIB_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/sift_fused.metallib")
 
     # Step 1: Compile .metal to .air (Apple Intermediate Representation)
+    # Match precision flags with main sift.metal shader
     add_custom_command(
       OUTPUT ${METAL_FUSED_AIR_OUTPUT}
-      COMMAND xcrun -sdk macosx metal -c ${METAL_FUSED_SHADER_SOURCE} -o ${METAL_FUSED_AIR_OUTPUT}
+      COMMAND xcrun -sdk macosx metal -c -O2 -fno-fast-math -ffp-contract=off ${METAL_FUSED_SHADER_SOURCE} -o ${METAL_FUSED_AIR_OUTPUT}
       DEPENDS ${METAL_FUSED_SHADER_SOURCE}
-      COMMENT "Compiling fused Metal shader: sift_fused.metal → sift_fused.air"
+      COMMENT "Compiling fused Metal shader: sift_fused.metal → sift_fused.air (precision mode)"
     )
 
     # Step 2: Link .air to .metallib

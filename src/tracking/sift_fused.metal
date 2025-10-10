@@ -35,6 +35,8 @@ struct FusedExtremaParams {
 
 // Fused kernel: Blur → DoG → Extrema in single pass
 // Processes 16x16 tiles with halo for Gaussian convolution
+// Note: Extrema detection requires precise floating-point comparisons
+// Compiled with -fno-fast-math to ensure IEEE-754 compliant comparisons
 kernel void detectScaleSpaceExtremaFused(
     const device float* prevDoG [[buffer(0)]],             // DoG[layer-1]
     const device float* currDoG [[buffer(1)]],             // DoG[layer] (detect extrema here)
@@ -68,7 +70,6 @@ kernel void detectScaleSpaceExtremaFused(
     // Currently using pre-computed DoG pyramids from buildDoGPyramidMetal()
     // This section will be re-enabled once extrema detection is verified to work correctly
 
-    /*
     // Calculate tile origin in Y dimension (X doesn't need tiling for horizontal blur)
     int tileY = (gid.y / TILE_SIZE) * TILE_SIZE - radius;
 
@@ -111,7 +112,7 @@ kernel void detectScaleSpaceExtremaFused(
 
     // Wait for horizontal blur to complete
     threadgroup_barrier(mem_flags::mem_threadgroup);
-
+    
     // === Step 2: Vertical blur + DoG computation with halo loading ===
     // Calculate tile origin in both dimensions for halo loading
     int tileX = (gid.x / TILE_SIZE) * TILE_SIZE;
@@ -171,7 +172,7 @@ kernel void detectScaleSpaceExtremaFused(
     }
 
     threadgroup_barrier(mem_flags::mem_threadgroup);
-    */
+    
 
     // === Step 3: Detect extrema in currDoG using [prevDoG, currDoG, nextDoG] ===
     // Check if this is a border pixel or non-extremum (but don't return early!)
@@ -226,8 +227,8 @@ kernel void detectScaleSpaceExtremaFused(
 
             for (int dy = -1; dy <= 1 && isExtremum; dy++) {
                 for (int dx = -1; dx <= 1 && isExtremum; dx++) {
-                    // float neighbor = sharedNextDoG[sharedCenterY + dy][sharedCenterX + dx];
-                    float neighbor = nextDoG[(globalY + dy) * params.rowStride + (globalX + dx)];
+                    float neighbor = sharedNextDoG[sharedCenterY + dy][sharedCenterX + dx];
+                    // float neighbor = nextDoG[(globalY + dy) * params.rowStride + (globalX + dx)];
 
                     if (isMaxima) {
                         if (val < neighbor) isExtremum = false;
@@ -263,6 +264,6 @@ kernel void detectScaleSpaceExtremaFused(
         // sharedNextDoG indices: +1 offset for halo border
         int sharedX = localX + 1;
         int sharedY = localY + 1;
-        nextDoG[globalY * params.rowStride + globalX] = sharedNextDoG[sharedY][sharedX];
+        // nextDoG[globalY * params.rowStride + globalX] = sharedNextDoG[sharedY][sharedX];
     }
 }

@@ -41,6 +41,8 @@ inline float sampleDoG(const device float* img, int x, int y, int width, int hei
 
 // Kernel: Detect local extrema in 3D scale space (26-neighbor comparison)
 // Each thread processes one pixel in the middle layer
+// Note: Extrema detection requires precise floating-point comparisons
+// Compiled with -fno-fast-math to ensure IEEE-754 compliant comparisons
 kernel void detectScaleSpaceExtrema(
     const device float* prevLayer [[buffer(0)]],   // DoG layer i-1
     const device float* currLayer [[buffer(1)]],   // DoG layer i (center)
