@@ -4,8 +4,8 @@
 #import <MetalPerformanceShaders/MetalPerformanceShaders.h>
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
-#include "lar/tracking/sift.h"
-#include "lar/tracking/sift_constants.h"
+#include "lar/tracking/sift/sift.h"
+#include "lar/tracking/sift/sift_constants.h"
 #include "sift_metal_common.h"
 #include <iostream>
 #include <chrono>
@@ -408,16 +408,16 @@ void findScaleSpaceExtremaMetalFused(
                 id<MTLComputeCommandEncoder> encoder = [commandBuffer computeCommandEncoder];
 
                 [encoder setComputePipelineState:pipeline];
-                [encoder setBuffer:dogBuffers[i-1] offset:0 atIndex:0];      // prevDoG (pre-computed, read-only)
-                [encoder setBuffer:dogBuffers[i] offset:0 atIndex:1];        // currDoG (pre-computed, read-only)
+                [encoder setBuffer:dogBuffers[i-1] offset:0 atIndex:0];      // prevDoG (read-only, computed in previous iteration)
+                [encoder setBuffer:dogBuffers[i] offset:0 atIndex:1];        // currDoG (read-only, computed in previous iteration)
                 [encoder setBuffer:gaussBuffers[i+1] offset:0 atIndex:2];    // currGauss (Gauss[i+1], blur to get Gauss[i+2])
                 [encoder setBuffer:nextGaussBuffer offset:0 atIndex:3];      // nextGauss (kernel writes Gauss[i+2])
-                [encoder setBuffer:dogBuffers[i+1] offset:0 atIndex:4];      // nextDoG (ground truth for validation)
+                [encoder setBuffer:dogBuffers[i+1] offset:0 atIndex:4];      // nextDoG (kernel writes DoG[i+1], used for halo in next iteration)
                 [encoder setBuffer:counterBuffer offset:0 atIndex:5];        // candidateCount (atomic counter)
                 [encoder setBuffer:candidateBuffer offset:0 atIndex:6];      // candidates (extrema output)
                 [encoder setBuffer:paramsBuffer offset:0 atIndex:7];         // params (FusedExtremaParams)
                 [encoder setBuffer:maxCandidatesBuffer offset:0 atIndex:8];  // maxCandidates (buffer size limit)
-                [encoder setBuffer:kernelBuffer offset:0 atIndex:9];         // gaussKernel (1D Gaussian weights)validation
+                [encoder setBuffer:kernelBuffer offset:0 atIndex:9];         // gaussKernel (1D Gaussian weights)
 
                 // Dispatch with 16×16 threadgroups (matching kernel's TILE_SIZE)
                 MTLSize gridSize = MTLSizeMake(octaveWidth, octaveHeight, 1);

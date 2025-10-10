@@ -358,7 +358,7 @@ kernel void detectScaleSpaceExtremaFused(
                 }
             }
 
-            // Compare with 9 neighbors in nextDoG (use SHARED memory with halo)
+            // Compare with 9 neighbors in sharedNextDoG (use SHARED memory with halo)
             // Calculate shared memory indices (with +1 offset for halo border)
             int sharedCenterX = localX + 1;
             int sharedCenterY = localY + 1;

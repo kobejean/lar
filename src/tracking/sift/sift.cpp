@@ -1,4 +1,4 @@
-#include "lar/tracking/sift.h"
+#include "lar/tracking/sift/sift.h"
 #include <opencv2/imgproc.hpp>
 #include <opencv2/core/hal/hal.hpp>
 #include <opencv2/core/hal/intrin.hpp>
@@ -7,10 +7,10 @@
 #include <iostream>
 
 // Define LAR_USE_METAL_SIFT to enable Metal-accelerated Gaussian pyramid
-#define LAR_USE_METAL_SIFT 1
-#define LAR_USE_METAL_SIFT_FUSED 1
+#define LAR_USE_METAL_SIFTO 1
+#define LAR_USE_METAL_SIFTO_FUSED 1
 
-#ifdef LAR_USE_METAL_SIFT
+#ifdef LAR_USE_METAL_SIFTO
 // Forward declarations of Metal implementations (defined in sift_metal.mm)
 namespace lar {
     void buildGaussianPyramidMetal(const cv::Mat& base, std::vector<cv::Mat>& pyr,
@@ -22,7 +22,7 @@ namespace lar {
                                     std::vector<cv::KeyPoint>& keypoints,
                                     int nOctaves, int nOctaveLayers, float threshold,
                                     double contrastThreshold, double edgeThreshold, double sigma);
-#ifdef LAR_USE_METAL_SIFT_FUSED
+#ifdef LAR_USE_METAL_SIFTO_FUSED
     void findScaleSpaceExtremaMetalFused(const cv::Mat& base,
                                          std::vector<cv::Mat>& gauss_pyr,
                                          std::vector<cv::KeyPoint>& keypoints,
@@ -32,55 +32,51 @@ namespace lar {
 }
 #endif
 
-//// SIMD Helper macros for cleaner code
-//#if (CV_SIMD || CV_SIMD_SCALABLE)
-//    #define SIMD_ENABLED 1
-//    using cv::v_float32;
-//    using cv::v_int32;
-//    using cv::v_uint16;
-//    using cv::v_uint8;
-//    using cv::VTraits;
-//    
-//    // Bring SIMD functions into scope
-//    using cv::vx_load;
-//    using cv::vx_load_aligned;
-//    using cv::vx_store;
-//    using cv::v_store;
-//    using cv::v_store_aligned;
-//    using cv::vx_setall_f32;
-//    using cv::vx_setall_s32;
-//    using cv::vx_setzero_s32;
-//    using cv::vx_setzero_f32;
-//    using cv::v_mul;
-//    using cv::v_add;
-//    using cv::v_sub;
-//    using cv::v_fma;
-//    using cv::v_round;
-//    using cv::v_floor;
-//    using cv::v_cvt_f32;
-//    using cv::v_select;
-//    using cv::v_ge;
-//    using cv::v_lt;
-//    using cv::v_gt;
-//    using cv::v_le;
-//    using cv::v_and;
-//    using cv::v_or;
-//    using cv::v_abs;
-//    using cv::v_max;
-//    using cv::v_min;
-//    using cv::v_check_any;
-//    using cv::v_signmask;
-//    using cv::v_reduce_sum;
-//    using cv::v_muladd;
-//    using cv::v_pack_u;
-//    using cv::v_pack_store;
-//#else
-//    #define SIMD_ENABLED 0
-//#endif
-#define SIMD_ENABLED 0
-#define CV_SIMD 0
-#define CV_SIMD_SCALABLE 0
-// #define LAR_USE_METAL_SIFT 0
+// SIMD Helper macros for cleaner code
+#if (CV_SIMD || CV_SIMD_SCALABLE)
+   #define SIMD_ENABLED 1
+   using cv::v_float32;
+   using cv::v_int32;
+   using cv::v_uint16;
+   using cv::v_uint8;
+   using cv::VTraits;
+   
+   // Bring SIMD functions into scope
+   using cv::vx_load;
+   using cv::vx_load_aligned;
+   using cv::vx_store;
+   using cv::v_store;
+   using cv::v_store_aligned;
+   using cv::vx_setall_f32;
+   using cv::vx_setall_s32;
+   using cv::vx_setzero_s32;
+   using cv::vx_setzero_f32;
+   using cv::v_mul;
+   using cv::v_add;
+   using cv::v_sub;
+   using cv::v_fma;
+   using cv::v_round;
+   using cv::v_floor;
+   using cv::v_cvt_f32;
+   using cv::v_select;
+   using cv::v_ge;
+   using cv::v_lt;
+   using cv::v_gt;
+   using cv::v_le;
+   using cv::v_and;
+   using cv::v_or;
+   using cv::v_abs;
+   using cv::v_max;
+   using cv::v_min;
+   using cv::v_check_any;
+   using cv::v_signmask;
+   using cv::v_reduce_sum;
+   using cv::v_muladd;
+   using cv::v_pack_u;
+   using cv::v_pack_store;
+#else
+   #define SIMD_ENABLED 0
+#endif
 
 namespace lar {
 
@@ -871,7 +867,7 @@ void SIFT::buildGaussianPyramid(const cv::Mat& base, std::vector<cv::Mat>& pyr, 
         sig[i] = std::sqrt(sig_total*sig_total - sig_prev*sig_prev);
     }
 
-#ifdef LAR_USE_METAL_SIFT
+#ifdef LAR_USE_METAL_SIFTO
     // Use Metal Performance Shaders for GPU-accelerated Gaussian pyramid
     buildGaussianPyramidMetal(base, pyr, nOctaves, sig);
 #else
@@ -897,10 +893,10 @@ void SIFT::buildDoGPyramid(const std::vector<cv::Mat>& gpyr, std::vector<cv::Mat
     int nOctaves = (int)gpyr.size()/(nOctaveLayers_ + 3);
     dogpyr.resize(nOctaves*(nOctaveLayers_ + 2));
 
-#ifdef LAR_USE_METAL_SIFT
-    // Use Metal Performance Shaders for GPU-accelerated DoG pyramid
-    buildDoGPyramidMetal(gpyr, dogpyr, nOctaves, nOctaveLayers_ + 3);
-#else
+// #ifdef LAR_USE_METAL_SIFTO
+//     // Use Metal Performance Shaders for GPU-accelerated DoG pyramid
+//     buildDoGPyramidMetal(gpyr, dogpyr, nOctaves, nOctaveLayers_ + 3);
+// #else
     for (int o = 0; o < nOctaves; o++) {
         for (int i = 0; i < nOctaveLayers_ + 2; i++) {
             const cv::Mat& src1 = gpyr[o*(nOctaveLayers_ + 3) + i];
@@ -909,7 +905,7 @@ void SIFT::buildDoGPyramid(const std::vector<cv::Mat>& gpyr, std::vector<cv::Mat
             cv::subtract(src2, src1, dst, cv::noArray(), CV_32F);
         }
     }
-#endif
+// #endif
 }
 
 void SIFT::findScaleSpaceExtrema(const std::vector<cv::Mat>& gauss_pyr,
@@ -920,11 +916,11 @@ void SIFT::findScaleSpaceExtrema(const std::vector<cv::Mat>& gauss_pyr,
 
     keypoints.clear();
 
-#ifdef LAR_USE_METAL_SIFT
-    // Use Metal compute shader for GPU-accelerated extrema detection
-    findScaleSpaceExtremaMetal(gauss_pyr, dog_pyr, keypoints, nOctaves, nOctaveLayers_,
-                               (float)threshold, contrastThreshold_, edgeThreshold_, sigma_);
-#else
+// #ifdef LAR_USE_METAL_SIFTO
+//     // Use Metal compute shader for GPU-accelerated extrema detection
+//     findScaleSpaceExtremaMetal(gauss_pyr, dog_pyr, keypoints, nOctaves, nOctaveLayers_,
+//                                (float)threshold, contrastThreshold_, edgeThreshold_, sigma_);
+// #else
     // CPU+SIMD path (per-layer processing with OpenCV intrinsics)
     for (int o = 0; o < nOctaves; o++) {
         for (int i = 1; i <= nOctaveLayers_; i++) {
@@ -940,7 +936,7 @@ void SIFT::findScaleSpaceExtrema(const std::vector<cv::Mat>& gauss_pyr,
                                         cv::Range(SIFT_IMG_BORDER, rows-SIFT_IMG_BORDER));
         }
     }
-#endif
+// #endif
 }
 
 void SIFT::detectAndCompute(cv::InputArray _image, cv::InputArray _mask,
@@ -962,7 +958,7 @@ void SIFT::detectAndCompute(cv::InputArray _image, cv::InputArray _mask,
     int nOctaves = cvRound(std::log((double)std::min(base.cols, base.rows)) / std::log(2.) - 2) - firstOctave;
 
     
-#if defined(LAR_USE_METAL_SIFT) && defined(LAR_USE_METAL_SIFT_FUSED)
+#if defined(LAR_USE_METAL_SIFTO) && defined(LAR_USE_METAL_SIFTO_FUSED)
     // Use fused Metal kernel for GPU-accelerated GaussianPyramid + DoG + extrema detection
     const int threshold = cvFloor(0.5 * contrastThreshold_ / nOctaveLayers_ * 255 * SIFT_FIXPT_SCALE);
     findScaleSpaceExtremaMetalFused(base, gpyr, keypoints, nOctaves, nOctaveLayers_,

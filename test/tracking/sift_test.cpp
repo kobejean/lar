@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 #include <opencv2/opencv.hpp>
-#include "lar/tracking/sift.h"
+#include "lar/tracking/sift/sift.h"
 
 class SIFTTest : public ::testing::Test {
 protected:

@@ -1,7 +1,7 @@
 #ifndef LAR_TRACKING_VISION_H
 #define LAR_TRACKING_VISION_H
 
-#include "sift.h"
+#include "sift/sift.h"
 #include <opencv2/features2d.hpp>
 
 namespace lar {

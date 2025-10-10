@@ -4,7 +4,7 @@
 #import <MetalPerformanceShaders/MetalPerformanceShaders.h>
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
-#include "lar/tracking/sift.h"
+#include "lar/tracking/sift/sift.h"
 #include "sift_metal_common.h"
 #include <iostream>
 #include <chrono>
@@ -38,7 +38,7 @@ std::vector<float> createGaussianKernel(double sigma) {
 // Single-threaded Metal implementation with resource reuse
 void buildGaussianPyramidMetal(const cv::Mat& base, std::vector<cv::Mat>& pyr,
                                 int nOctaves, const std::vector<double>& sigmas) {
-    GaussianKernelMode kernelMode = GaussianKernelMode::CustomFused;
+    GaussianKernelMode kernelMode = GaussianKernelMode::CustomSeparable;
     @autoreleasepool {
         MetalSiftResources& resources = getMetalResources();
         int nLevels = (int)sigmas.size();
