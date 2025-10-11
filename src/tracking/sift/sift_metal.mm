@@ -640,17 +640,15 @@ void findScaleSpaceExtremaMetal(
             return;
         }
 
-        const uint32_t NUM_SHARDS = 256;
-        const uint32_t SHARD_CAPACITY = 2048;
-        const uint32_t TOTAL_CANDIDATES = NUM_SHARDS * SHARD_CAPACITY;
+        // Calculate maximum bitarray size needed (for largest octave)
+        int maxWidth = dog_pyr[0].cols;
+        int maxHeight = dog_pyr[0].rows;
+        uint32_t maxPixels = maxWidth * maxHeight;
+        uint32_t bitarraySize = (maxPixels + 31) / 32;  // Number of uint32 chunks
 
-        // Allocate sharded candidate buffer (shared for CPU access)
-        id<MTLBuffer> candidateBuffer = [device newBufferWithLength:TOTAL_CANDIDATES * sizeof(uint32_t)
-                                                             options:MTLResourceStorageModeShared];
-
-        // Allocate sharded atomic counter buffer (128 counters)
-        id<MTLBuffer> counterBuffer = [device newBufferWithLength:NUM_SHARDS * sizeof(uint32_t)
-                                                           options:MTLResourceStorageModeShared];
+        // Allocate bitarray buffer (1 bit per pixel, packed as uint32)
+        id<MTLBuffer> bitarrayBuffer = [device newBufferWithLength:bitarraySize * sizeof(uint32_t)
+                                                            options:MTLResourceStorageModeShared];
 
         keypoints.clear();
 
@@ -671,9 +669,10 @@ void findScaleSpaceExtremaMetal(
 
             // Process layers 1 to nOctaveLayers (middle layers only)
             for (int i = 1; i <= nOctaveLayers; i++) {
-                // Reset ALL shard counters to zero
-                uint32_t* counterPtr = (uint32_t*)counterBuffer.contents;
-                memset(counterPtr, 0, NUM_SHARDS * sizeof(uint32_t));
+                // Clear bitarray to zero
+                uint32_t octavePixels = octaveWidth * octaveHeight;
+                uint32_t octaveBitarraySize = (octavePixels + 31) / 32;
+                memset(bitarrayBuffer.contents, 0, octaveBitarraySize * sizeof(uint32_t));
 
                 // Setup parameters
                 ExtremaParams params;
@@ -690,11 +689,6 @@ void findScaleSpaceExtremaMetal(
                                                                   length:sizeof(ExtremaParams)
                                                                  options:MTLResourceStorageModeShared];
 
-                // Create shard capacity buffer
-                id<MTLBuffer> shardCapacityBuffer = [device newBufferWithBytes:&SHARD_CAPACITY
-                                                                         length:sizeof(uint32_t)
-                                                                        options:MTLResourceStorageModeShared];
-
                 // Create command buffer
                 id<MTLCommandBuffer> commandBuffer = [commandQueue commandBuffer];
                 id<MTLComputeCommandEncoder> encoder = [commandBuffer computeCommandEncoder];
@@ -703,10 +697,8 @@ void findScaleSpaceExtremaMetal(
                 [encoder setBuffer:dogBuffers[i-1] offset:0 atIndex:0]; // prevLayer
                 [encoder setBuffer:dogBuffers[i]   offset:0 atIndex:1]; // currLayer
                 [encoder setBuffer:dogBuffers[i+1] offset:0 atIndex:2]; // nextLayer
-                [encoder setBuffer:counterBuffer offset:0 atIndex:3];   // sharded counters (128)
-                [encoder setBuffer:candidateBuffer offset:0 atIndex:4]; // sharded candidates
+                [encoder setBuffer:bitarrayBuffer offset:0 atIndex:3];  // bitarray output
                 [encoder setBuffer:paramsBuffer offset:0 atIndex:5];
-                [encoder setBuffer:shardCapacityBuffer offset:0 atIndex:6]; // capacity per shard
 
                 // Dispatch threads (one per pixel, excluding border)
                 // Use 16×16 threadgroups for better cache locality in 2D image processing
@@ -720,64 +712,65 @@ void findScaleSpaceExtremaMetal(
                 [commandBuffer waitUntilCompleted];
 
                 RELEASE_IF_MANUAL(paramsBuffer);
-                RELEASE_IF_MANUAL(shardCapacityBuffer);
 
-                // Merge candidates from all shards
+                // Scan bitarray for set bits (extrema candidates)
 #ifdef LAR_PROFILE_METAL_SIFT
                 auto cpuStart = std::chrono::high_resolution_clock::now();
 #endif
-                uint32_t* candidates = (uint32_t*)candidateBuffer.contents;
+                uint32_t* bitarray = (uint32_t*)bitarrayBuffer.contents;
 
-                // Iterate through all shards and process their candidates
-                for (uint32_t shard = 0; shard < NUM_SHARDS; shard++) {
-                    uint32_t shardCount = counterPtr[shard];
-                    shardCount = std::min(shardCount, SHARD_CAPACITY);  // Clamp to capacity
+                // Scan the bitarray for set bits
+                for (uint32_t chunkIdx = 0; chunkIdx < octaveBitarraySize; chunkIdx++) {
+                    uint32_t chunk = bitarray[chunkIdx];
+                    if (chunk == 0) continue;  // Skip empty chunks
 
-                    for (uint32_t i = 0; i < shardCount; i++) {
-                        uint32_t globalIdx = shard * SHARD_CAPACITY + i;
-                        KeypointCandidate cand;
-                        cand.x = candidates[globalIdx] & 0xFFFF;
-                        cand.y = candidates[globalIdx] >> 16;
-                        cand.octave = params.octave;
-                        cand.layer = params.layer;
+                    // Scan individual bits in this chunk
+                    for (int bitOffset = 0; bitOffset < 32; bitOffset++) {
+                        if (chunk & (1u << bitOffset)) {
+                            // Calculate pixel coordinates from bit index
+                            uint32_t bitIndex = chunkIdx * 32 + bitOffset;
+                            int y = bitIndex / octaveWidth;
+                            int x = bitIndex % octaveWidth;
 
-                        // Create keypoint for refinement
-                        cv::KeyPoint kpt;
+                            // Create keypoint for refinement
+                            cv::KeyPoint kpt;
+                            int layer = params.layer;
 
-                        // Call adjustLocalExtrema (from sift.cpp) for subpixel refinement
-                        if (!adjustLocalExtrema(dog_pyr, kpt, cand.octave, cand.layer, cand.y, cand.x,
-                                               nOctaveLayers, (float)contrastThreshold,
-                                               (float)edgeThreshold, (float)sigma)) {
-                            continue;
-                        }
+                            // Call adjustLocalExtrema (from sift.cpp) for subpixel refinement
+                            if (!adjustLocalExtrema(dog_pyr, kpt, params.octave, layer, y, x,
+                                                   nOctaveLayers, (float)contrastThreshold,
+                                                   (float)edgeThreshold, (float)sigma)) {
+                                continue;
+                            }
 
-                        // Calculate orientation histogram (from sift.cpp)
-                        static const int n = SIFT_ORI_HIST_BINS;
-                        float hist[n];
-                        float scl_octv = kpt.size * 0.5f / (1 << cand.octave);
+                            // Calculate orientation histogram (from sift.cpp)
+                            static const int n = SIFT_ORI_HIST_BINS;
+                            float hist[n];
+                            float scl_octv = kpt.size * 0.5f / (1 << params.octave);
 
-                        int gaussIdx = cand.octave * (nOctaveLayers + 3) + cand.layer;
-                        float omax = calcOrientationHist(gauss_pyr[gaussIdx],
-                                                        cv::Point(cand.x, cand.y),
-                                                        cvRound(SIFT_ORI_RADIUS * scl_octv), // SIFT_ORI_RADIUS
-                                                        1.5f * scl_octv,           // SIFT_ORI_SIG_FCTR
-                                                        hist, n);
+                            int gaussIdx = params.octave * (nOctaveLayers + 3) + layer;
+                            float omax = calcOrientationHist(gauss_pyr[gaussIdx],
+                                                            cv::Point(x, y),
+                                                            cvRound(SIFT_ORI_RADIUS * scl_octv), 
+                                                            SIFT_ORI_SIG_FCTR * scl_octv, 
+                                                            hist, n);
 
-                        float mag_thr = omax * SIFT_ORI_PEAK_RATIO;
+                            float mag_thr = omax * SIFT_ORI_PEAK_RATIO;
 
-                        // Find orientation peaks and create keypoints
-                        for (int j = 0; j < n; j++) {
-                            int l = j > 0 ? j - 1 : n - 1;
-                            int r2 = j < n-1 ? j + 1 : 0;
+                            // Find orientation peaks and create keypoints
+                            for (int j = 0; j < n; j++) {
+                                int l = j > 0 ? j - 1 : n - 1;
+                                int r2 = j < n-1 ? j + 1 : 0;
 
-                            if (hist[j] > hist[l] && hist[j] > hist[r2] && hist[j] >= mag_thr) {
-                                float bin = j + 0.5f * (hist[l]-hist[r2]) / (hist[l] - 2*hist[j] + hist[r2]);
-                                bin = bin < 0 ? n + bin : bin >= n ? bin - n : bin;
-                                kpt.angle = 360.f - (360.f/n) * bin;
-                                if (std::abs(kpt.angle - 360.f) < FLT_EPSILON)
-                                    kpt.angle = 0.f;
+                                if (hist[j] > hist[l] && hist[j] > hist[r2] && hist[j] >= mag_thr) {
+                                    float bin = j + 0.5f * (hist[l]-hist[r2]) / (hist[l] - 2*hist[j] + hist[r2]);
+                                    bin = bin < 0 ? n + bin : bin >= n ? bin - n : bin;
+                                    kpt.angle = 360.f - (360.f/n) * bin;
+                                    if (std::abs(kpt.angle - 360.f) < FLT_EPSILON)
+                                        kpt.angle = 0.f;
 
-                                keypoints.push_back(kpt);
+                                    keypoints.push_back(kpt);
+                                }
                             }
                         }
                     }
@@ -795,8 +788,7 @@ void findScaleSpaceExtremaMetal(
             std::chrono::high_resolution_clock::now() - gpuStart).count();
 #endif
 
-        RELEASE_IF_MANUAL(candidateBuffer);
-        RELEASE_IF_MANUAL(counterBuffer);
+        RELEASE_IF_MANUAL(bitarrayBuffer);
         RELEASE_IF_MANUAL(pipeline);
         RELEASE_IF_MANUAL(extremaFunction);
         RELEASE_IF_MANUAL(library);

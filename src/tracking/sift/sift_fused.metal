@@ -177,9 +177,10 @@ kernel void gaussianBlurFused(
 // Note: Extrema detection requires precise floating-point comparisons
 // Compiled with -fno-fast-math to ensure IEEE-754 compliant comparisons
 //
-// Performance optimization: Uses sharded atomic counters (256 shards) with primitive
-// root probing to reduce contention. Spatial locality preserved on first probe, then
-// pseudo-random probing using primitive root 127 of prime 257 for overflow handling.
+// Output: Bitarray encoding extrema positions (1 bit per pixel)
+// - Deterministic output (no race conditions)
+// - Memory efficient (1 bit per pixel vs 4 bytes per candidate)
+// - Host scans bitarray using SIMD for fast candidate extraction
 #pragma METAL fp math_mode(safe)
 kernel void detectScaleSpaceExtremaFused(
     const device float* prevDoG [[buffer(0)]],             // DoG[layer-1] (pre-computed)
@@ -187,14 +188,11 @@ kernel void detectScaleSpaceExtremaFused(
     const device float* currGauss [[buffer(2)]],           // Gauss[layer+1] (blur to get Gauss[layer+2])
     device float* nextGauss [[buffer(3)]],                 // Output: Gauss[layer+2]
     device float* nextDoG [[buffer(4)]],                   // Output: DoG[layer+1]
-    device atomic_uint* candidateCounts [[buffer(5)]],     // Array of 256 atomic counters (one per shard)
-    device uint* candidates [[buffer(6)]],                 // Output candidate array (256 shards × 2048 capacity)
+    device atomic_uint* extremaBitarray [[buffer(5)]],     // Bitarray output (1 bit per pixel, packed as uint32)
     constant FusedExtremaParams& params [[buffer(7)]],
-    constant uint& shardCapacity [[buffer(8)]],            // Capacity per shard (typically 2048)
     constant float* gaussKernel [[buffer(9)]],             // 1D Gaussian kernel
     uint2 gid [[thread_position_in_grid]],
     uint2 tid [[thread_position_in_threadgroup]],
-    uint2 tgid [[threadgroup_position_in_grid]],
     uint2 tgSize [[threads_per_threadgroup]])
 {
     // Tile configuration: 16x16 processing + vertical halo for Gaussian blur
@@ -403,19 +401,19 @@ kernel void detectScaleSpaceExtremaFused(
                 }
             }
 
-            // If survived all comparisons, this is a local extremum - write with sharding
+            // If survived all comparisons, this is a local extremum - write to bitarray
             if (isExtremum) {
-                // Sharded atomic with primitive root probing (256 shards)
-                const uint NUM_SHARDS = 256;
-                uint threadgroupID = tgid.y * ((params.width + 15) / 16) + tgid.x;
-                uint shardIndex = threadgroupID % NUM_SHARDS;  // Initial: spatial locality
-                uint localIndex = atomic_fetch_add_explicit(&candidateCounts[shardIndex], 1, memory_order_relaxed);
+                // Calculate linear bit index: row-major order
+                uint bitIndex = globalY * params.width + globalX;
 
-                // Check if this shard has capacity
-                if (localIndex < shardCapacity) {
-                    // Write packed candidate coordinate
-                    candidates[shardIndex * shardCapacity + localIndex] = globalY << 16 | globalX;
-                }
+                // Calculate chunk index and bit offset
+                // Each uint32 stores 32 bits (pixels)
+                uint chunkIndex = bitIndex >> 5;      // Divide by 32
+                uint bitOffset = bitIndex & 31;       // Modulo 32
+
+                // Set the bit using atomic OR
+                // This is safe because each pixel maps to exactly one bit
+                atomic_fetch_or_explicit(&extremaBitarray[chunkIndex], (1u << bitOffset), memory_order_relaxed);
             }
         }
     }

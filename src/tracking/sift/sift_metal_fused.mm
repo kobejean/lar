@@ -199,20 +199,15 @@ void findScaleSpaceExtremaMetalFused(
             resources.cachedNLevels = nLevels;
         }
 
-        // Sharded atomic configuration with primitive root probing
-        // 256 shards × 2048 capacity = 524,288 total candidates
-        // Uses primitive root 127 of prime 257 for pseudo-random overflow probing
-        const uint32_t NUM_SHARDS = 512;
-        const uint32_t SHARD_CAPACITY = 1024;
-        const uint32_t TOTAL_CANDIDATES = NUM_SHARDS * SHARD_CAPACITY;
+        // Calculate maximum bitarray size needed (for largest octave)
+        int maxWidth = base.cols;
+        int maxHeight = base.rows;
+        uint32_t maxPixels = maxWidth * maxHeight;
+        uint32_t bitarraySize = (maxPixels + 31) / 32;  // Number of uint32 chunks
 
-        // Allocate sharded candidate buffer (shared for CPU access)
-        id<MTLBuffer> candidateBuffer = [device newBufferWithLength:TOTAL_CANDIDATES * sizeof(uint32_t)
-                                                             options:MTLResourceStorageModeShared];
-
-        // Allocate sharded atomic counter buffer (256 counters)
-        id<MTLBuffer> counterBuffer = [device newBufferWithLength:NUM_SHARDS * sizeof(uint32_t)
-                                                           options:MTLResourceStorageModeShared];
+        // Allocate bitarray buffer (1 bit per pixel, packed as uint32)
+        id<MTLBuffer> bitarrayBuffer = [device newBufferWithLength:bitarraySize * sizeof(uint32_t)
+                                                            options:MTLResourceStorageModeShared];
 
         keypoints.clear();
 
@@ -377,9 +372,10 @@ void findScaleSpaceExtremaMetalFused(
 
             // Process layers 1 to nOctaveLayers (where we detect extrema)
             for (int i = 1; i <= nOctaveLayers; i++) {
-                // Reset ALL shard counters to zero
-                uint32_t* counterPtr = (uint32_t*)counterBuffer.contents;
-                memset(counterPtr, 0, NUM_SHARDS * sizeof(uint32_t));
+                // Clear bitarray to zero
+                uint32_t octavePixels = octaveWidth * octaveHeight;
+                uint32_t octaveBitarraySize = (octavePixels + 31) / 32;
+                memset(bitarrayBuffer.contents, 0, octaveBitarraySize * sizeof(uint32_t));
 
                 // Setup parameters
                 FusedExtremaParams params;
@@ -402,11 +398,6 @@ void findScaleSpaceExtremaMetalFused(
                                                                   length:gaussianKernels[i+2].size() * sizeof(float)
                                                                  options:MTLResourceStorageModeShared];
 
-                // Create shard capacity buffer
-                id<MTLBuffer> shardCapacityBuffer = [device newBufferWithBytes:&SHARD_CAPACITY
-                                                                         length:sizeof(uint32_t)
-                                                                        options:MTLResourceStorageModeShared];
-
                 // Create command buffer
                 id<MTLCommandBuffer> commandBuffer = [commandQueue commandBuffer];
                 id<MTLComputeCommandEncoder> encoder = [commandBuffer computeCommandEncoder];
@@ -417,10 +408,8 @@ void findScaleSpaceExtremaMetalFused(
                 [encoder setBuffer:gaussBuffers[i+1] offset:0 atIndex:2];    // currGauss (Gauss[i+1], blur to get Gauss[i+2])
                 [encoder setBuffer:nextGaussBuffer offset:0 atIndex:3];      // nextGauss (kernel writes Gauss[i+2])
                 [encoder setBuffer:dogBuffers[i+1] offset:0 atIndex:4];      // nextDoG (kernel writes DoG[i+1], used for halo in next iteration)
-                [encoder setBuffer:counterBuffer offset:0 atIndex:5];        // candidateCounts (sharded atomic counters)
-                [encoder setBuffer:candidateBuffer offset:0 atIndex:6];      // candidates (sharded uint array)
+                [encoder setBuffer:bitarrayBuffer offset:0 atIndex:5];       // extremaBitarray (1 bit per pixel)
                 [encoder setBuffer:paramsBuffer offset:0 atIndex:7];         // params (FusedExtremaParams)
-                [encoder setBuffer:shardCapacityBuffer offset:0 atIndex:8];  // shardCapacity (capacity per shard)
                 [encoder setBuffer:kernelBuffer offset:0 atIndex:9];         // gaussKernel (1D Gaussian weights)
 
                 // Dispatch with 16×16 threadgroups (matching kernel's TILE_SIZE)
@@ -435,7 +424,6 @@ void findScaleSpaceExtremaMetalFused(
 
                 RELEASE_IF_MANUAL(paramsBuffer);
                 RELEASE_IF_MANUAL(kernelBuffer);
-                RELEASE_IF_MANUAL(shardCapacityBuffer);
 
                 // Update pyramid with fused kernel's computed results
                 // This makes the fused kernel self-sustaining (no longer needs pre-computed buffers)
@@ -450,81 +438,83 @@ void findScaleSpaceExtremaMetalFused(
                 float* dogPtr = (float*)dogBuffers[i+1].contents;
                 dog_pyr[o * (nOctaveLayers + 2) + i + 1] = cv::Mat(octaveHeight, octaveWidth, CV_32F, dogPtr, alignedRowBytes).clone();
 
-                // Merge candidates from all shards
+                // Scan bitarray for set bits (extrema candidates)
 #ifdef LAR_PROFILE_METAL_SIFT
                 auto cpuStart = std::chrono::high_resolution_clock::now();
 #endif
-                uint32_t* candidates = (uint32_t*)candidateBuffer.contents;
+                uint32_t* bitarray = (uint32_t*)bitarrayBuffer.contents;
 
-                // Iterate through all shards and process their candidates
-                for (uint32_t shard = 0; shard < NUM_SHARDS; shard++) {
-                    uint32_t shardCount = counterPtr[shard];
-                    shardCount = std::min(shardCount, SHARD_CAPACITY);  // Clamp to capacity
+                // Scan the bitarray for set bits
+                for (uint32_t chunkIdx = 0; chunkIdx < octaveBitarraySize; chunkIdx++) {
+                    uint32_t chunk = bitarray[chunkIdx];
+                    if (chunk == 0) continue;  // Skip empty chunks
 
-                    for (uint32_t idx = 0; idx < shardCount; idx++) {
-                        uint32_t globalIdx = shard * SHARD_CAPACITY + idx;
+                    // Scan individual bits in this chunk
+                    for (int bitOffset = 0; bitOffset < 32; bitOffset++) {
+                        if (chunk & (1u << bitOffset)) {
+                            // Calculate pixel coordinates from bit index
+                            uint32_t bitIndex = chunkIdx * 32 + bitOffset;
+                            int r = bitIndex / octaveWidth;
+                            int c_pos = bitIndex % octaveWidth;
 
-                        // Unpack candidate coordinates
-                        int c_pos = candidates[globalIdx] & 0xFFFF;
-                        int r = candidates[globalIdx] >> 16;
+                            // Skip if outside valid bounds
+                            if (c_pos < 5 || c_pos >= octaveWidth - 5 ||
+                                r < 5 || r >= octaveHeight - 5) {
+                                continue;
+                            }
 
-                        // Skip if outside valid bounds
-                        if (c_pos < 5 || c_pos >= octaveWidth - 5 ||
-                            r < 5 || r >= octaveHeight - 5) {
-                            continue;
-                        }
+                            // Create keypoint for refinement
+                            cv::KeyPoint kpt;
+                            int layer = params.layer;
 
-                        // Create keypoint for refinement
-                        cv::KeyPoint kpt;
-                        int layer = params.layer;
+                            // Call adjustLocalExtrema for subpixel refinement
+                            if (!adjustLocalExtrema(dog_pyr, kpt, params.octave, layer, r, c_pos,
+                                                   nOctaveLayers, (float)contrastThreshold,
+                                                   (float)edgeThreshold, (float)sigma)) {
+                                continue;
+                            }
 
-                        // Call adjustLocalExtrema for subpixel refinement
-                        if (!adjustLocalExtrema(dog_pyr, kpt, params.octave, layer, r, c_pos,
-                                               nOctaveLayers, (float)contrastThreshold,
-                                               (float)edgeThreshold, (float)sigma)) {
-                            continue;
-                        }
+                            // Calculate orientation histogram
+                            static const int n = SIFT_ORI_HIST_BINS;
+                            float hist[n];
+                            float scl_octv = kpt.size * 0.5f / (1 << params.octave);
 
-                        // Calculate orientation histogram
-                        static const int n = SIFT_ORI_HIST_BINS;
-                        float hist[n];
-                        float scl_octv = kpt.size * 0.5f / (1 << params.octave);
+                            // Read from our self-computed gaussBuffers instead of precomputed gauss_pyr
+                            // Wrap the buffer in cv::Mat for calcOrientationHist
+                            float* gaussPtr = (float*)gaussBuffers[layer].contents;
+                            cv::Mat gaussLayer(octaveHeight, octaveWidth, CV_32F, gaussPtr, alignedRowBytes);
 
-                        // Read from our self-computed gaussBuffers instead of precomputed gauss_pyr
-                        // Wrap the buffer in cv::Mat for calcOrientationHist
-                        float* gaussPtr = (float*)gaussBuffers[layer].contents;
-                        cv::Mat gaussLayer(octaveHeight, octaveWidth, CV_32F, gaussPtr, alignedRowBytes);
+                            float omax = calcOrientationHist(gaussLayer,
+                                                            cv::Point(c_pos, r),
+                                                            cvRound(SIFT_ORI_RADIUS * scl_octv),
+                                                            SIFT_ORI_SIG_FCTR * scl_octv,
+                                                            hist, n);
 
-                        float omax = calcOrientationHist(gaussLayer,
-                                                        cv::Point(c_pos, r),
-                                                        cvRound(SIFT_ORI_RADIUS * scl_octv),
-                                                        SIFT_ORI_SIG_FCTR * scl_octv,
-                                                        hist, n);
+                            float mag_thr = omax * SIFT_ORI_PEAK_RATIO;
 
-                        float mag_thr = omax * SIFT_ORI_PEAK_RATIO;
+                            // Find orientation peaks and create keypoints
+                            for (int j = 0; j < n; j++) {
+                                int l = j > 0 ? j - 1 : n - 1;
+                                int r2 = j < n-1 ? j + 1 : 0;
 
-                        // Find orientation peaks and create keypoints
-                        for (int j = 0; j < n; j++) {
-                            int l = j > 0 ? j - 1 : n - 1;
-                            int r2 = j < n-1 ? j + 1 : 0;
+                                if (hist[j] > hist[l] && hist[j] > hist[r2] && hist[j] >= mag_thr) {
+                                    float bin = j + 0.5f * (hist[l]-hist[r2]) / (hist[l] - 2*hist[j] + hist[r2]);
+                                    bin = bin < 0 ? n + bin : bin >= n ? bin - n : bin;
+                                    kpt.angle = 360.f - (360.f/n) * bin;
+                                    if (std::abs(kpt.angle - 360.f) < FLT_EPSILON)
+                                        kpt.angle = 0.f;
 
-                            if (hist[j] > hist[l] && hist[j] > hist[r2] && hist[j] >= mag_thr) {
-                                float bin = j + 0.5f * (hist[l]-hist[r2]) / (hist[l] - 2*hist[j] + hist[r2]);
-                                bin = bin < 0 ? n + bin : bin >= n ? bin - n : bin;
-                                kpt.angle = 360.f - (360.f/n) * bin;
-                                if (std::abs(kpt.angle - 360.f) < FLT_EPSILON)
-                                    kpt.angle = 0.f;
-
-                                keypoints.push_back(kpt);
+                                    keypoints.push_back(kpt);
+                                }
                             }
                         }
                     }
+                }
 
 #ifdef LAR_PROFILE_METAL_SIFT
-                    cpuTime += std::chrono::duration<double, std::milli>(
-                        std::chrono::high_resolution_clock::now() - cpuStart).count();
+                cpuTime += std::chrono::duration<double, std::milli>(
+                    std::chrono::high_resolution_clock::now() - cpuStart).count();
 #endif
-                }
             }
 
             RELEASE_IF_MANUAL(nextGaussBuffer);
@@ -536,8 +526,7 @@ void findScaleSpaceExtremaMetalFused(
             std::chrono::high_resolution_clock::now() - gpuStart).count();
 #endif
 
-        RELEASE_IF_MANUAL(candidateBuffer);
-        RELEASE_IF_MANUAL(counterBuffer);
+        RELEASE_IF_MANUAL(bitarrayBuffer);
         // Note: pipeline, blurPipeline, and library are cached as static and should not be released
 
 #ifdef LAR_PROFILE_METAL_SIFT

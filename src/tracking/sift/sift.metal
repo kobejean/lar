@@ -28,20 +28,18 @@ struct GaussianBlurParams {
 // Note: Extrema detection requires precise floating-point comparisons
 // Compiled with -fno-fast-math to ensure IEEE-754 compliant comparisons
 //
-// Performance optimization: Uses sharded atomic counters (256 shards) with primitive
-// root probing to reduce contention. Spatial locality preserved on first probe, then
-// pseudo-random probing using primitive root 127 of prime 257 for overflow handling.
+// Output: Bitarray encoding extrema positions (1 bit per pixel)
+// - Deterministic output (no race conditions)
+// - Memory efficient (1 bit per pixel vs 4 bytes per candidate)
+// - Host scans bitarray using SIMD for fast candidate extraction
 #pragma METAL fp math_mode(safe)
 kernel void detectScaleSpaceExtrema(
     const device float* prevLayer [[buffer(0)]],   // DoG layer i-1
     const device float* currLayer [[buffer(1)]],   // DoG layer i (center)
     const device float* nextLayer [[buffer(2)]],   // DoG layer i+1
-    device atomic_uint* candidateCounts [[buffer(3)]], // Array of 256 atomic counters (one per shard)
-    device uint* candidates [[buffer(4)]], // Output candidate array (256 shards × 1024 capacity)
+    device atomic_uint* extremaBitarray [[buffer(3)]], // Bitarray output (1 bit per pixel, packed as uint32)
     constant ExtremaParams& params [[buffer(5)]],
-    constant uint& shardCapacity [[buffer(6)]],    // Capacity per shard (typically 1024)
-    uint2 gid [[thread_position_in_grid]],
-    uint2 tgid [[threadgroup_position_in_grid]])
+    uint2 gid [[thread_position_in_grid]])
 {
     int x = gid.x;
     int y = gid.y;
@@ -113,33 +111,20 @@ kernel void detectScaleSpaceExtrema(
         }
     }
 
-    // Only write if this is actually an extremum
+    // Write extremum flag to bitarray
     if (isExtremum) {
-        // Sharded atomic with primitive root probing (256 shards)
-        const uint NUM_SHARDS = 256;
-        const uint PRIME = 257;
-        const uint PRIMITIVE_ROOT = 127;
-        const uint PROBES = 4;
+        // Calculate linear bit index: row-major order
+        uint bitIndex = y * params.width + x;
 
-        uint threadgroupID = tgid.y * ((params.width + 15) / 16) + tgid.x;
-        uint shardIndex = threadgroupID % NUM_SHARDS;  // Initial: spatial locality
+        // Calculate chunk index and bit offset
+        // Each uint32 stores 32 bits (pixels)
+        uint chunkIndex = bitIndex >> 5;      // Divide by 32
+        uint bitOffset = bitIndex & 31;       // Modulo 32
 
-        for (uint probe = 0; probe < PROBES; probe++) {
-            uint localIndex = atomic_fetch_add_explicit(&candidateCounts[shardIndex], 1, memory_order_relaxed);
-            
-            // Check if this shard has capacity
-            if (localIndex < shardCapacity) {
-                // Write candidate
-                candidates[shardIndex * shardCapacity + localIndex] = y << 16 | x;
-                return;
-            } else {
-                // Probe next shard using primitive root: (k + 1) * 127 % 257 - 1
-                // This generates a pseudo-random permutation of 0..255
-                shardIndex = ((shardIndex + 1) * PRIMITIVE_ROOT) % PRIME - 1;
-            }
-        }
+        // Set the bit using atomic OR
+        // This is safe because each pixel maps to exactly one bit
+        atomic_fetch_or_explicit(&extremaBitarray[chunkIndex], (1u << bitOffset), memory_order_relaxed);
     }
-    
 }
 
 // ============================================================================
