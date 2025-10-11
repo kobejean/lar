@@ -23,6 +23,7 @@ namespace lar {
                                     int nOctaves, int nOctaveLayers, float threshold,
                                     double contrastThreshold, double edgeThreshold, double sigma);
 #ifdef LAR_USE_METAL_SIFTO_FUSED
+    // Main fused SIFT function
     void findScaleSpaceExtremaMetalFused(const cv::Mat& base,
                                          std::vector<cv::Mat>& gauss_pyr,
                                          std::vector<cv::KeyPoint>& keypoints,

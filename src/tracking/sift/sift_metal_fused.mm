@@ -20,7 +20,7 @@ namespace lar {
 // ============================================================================
 
 // Initialize Metal pipelines (cached across calls)
-static bool initializeMetalPipelines(
+bool initializeMetalPipelines(
     id<MTLDevice> device,
     id<MTLComputePipelineState>& blurPipeline,
     id<MTLComputePipelineState>& extremaPipeline)
@@ -86,7 +86,7 @@ static bool initializeMetalPipelines(
 }
 
 // Compute Gaussian kernels for all pyramid levels
-static void computeGaussianKernels(
+void computeGaussianKernels(
     int nLevels,
     int nOctaveLayers,
     double sigma,
@@ -108,7 +108,7 @@ static void computeGaussianKernels(
 }
 
 // Allocate Metal buffers and textures for an octave
-static void allocateOctaveResources(
+void allocateOctaveResources(
     id<MTLDevice> device,
     MetalSiftResources& resources,
     int octave,
@@ -173,7 +173,7 @@ static void allocateOctaveResources(
 }
 
 // Upload octave base image to GPU
-static void uploadOctaveBase(
+void uploadOctaveBase(
     const cv::Mat& base,
     MetalSiftResources& resources,
     int octave,
@@ -213,7 +213,7 @@ static void uploadOctaveBase(
 }
 
 // Apply Gaussian blur using Metal compute shader
-static void applyGaussianBlur(
+void applyGaussianBlur(
     id<MTLDevice> device,
     id<MTLCommandQueue> commandQueue,
     id<MTLComputePipelineState> blurPipeline,
@@ -261,7 +261,7 @@ static void applyGaussianBlur(
 }
 
 // Compute initial Gaussian layers and DoG for an octave
-static void computeInitialGaussianAndDoG(
+void computeInitialGaussianAndDoG(
     id<MTLDevice> device,
     id<MTLCommandQueue> commandQueue,
     id<MTLComputePipelineState> blurPipeline,
@@ -299,7 +299,7 @@ static void computeInitialGaussianAndDoG(
 }
 
 // Detect extrema in a single layer and extract keypoints
-static void detectExtremaInLayer(
+void detectExtremaInLayer(
     id<MTLDevice> device,
     id<MTLCommandQueue> commandQueue,
     id<MTLComputePipelineState> extremaPipeline,
@@ -320,7 +320,9 @@ static void detectExtremaInLayer(
     double contrastThreshold,
     double edgeThreshold,
     double sigma,
-    double& cpuTime)
+    double& cpuTime,
+    double& gpuKernelTime,
+    double& bufferAllocTime)
 {
     std::vector<id<MTLBuffer>>& gaussBuffers = resources.octaveBuffers[octave];
     std::vector<id<MTLBuffer>>& dogBuffers = resources.dogBuffers[octave];
@@ -331,6 +333,10 @@ static void detectExtremaInLayer(
     memset(bitarrayBuffer.contents, 0, octaveBitarraySize * sizeof(uint32_t));
 
     // Setup parameters
+#ifdef LAR_PROFILE_METAL_SIFT
+    auto bufferAllocStart = std::chrono::high_resolution_clock::now();
+#endif
+
     FusedExtremaParams params;
     params.width = octaveWidth;
     params.height = octaveHeight;
@@ -349,7 +355,16 @@ static void detectExtremaInLayer(
                                                       length:gaussianKernels[layer+2].size() * sizeof(float)
                                                      options:MTLResourceStorageModeShared];
 
+#ifdef LAR_PROFILE_METAL_SIFT
+    bufferAllocTime += std::chrono::duration<double, std::milli>(
+        std::chrono::high_resolution_clock::now() - bufferAllocStart).count();
+#endif
+
     // Dispatch extrema detection kernel
+#ifdef LAR_PROFILE_METAL_SIFT
+    auto gpuKernelStart = std::chrono::high_resolution_clock::now();
+#endif
+
     id<MTLCommandBuffer> commandBuffer = [commandQueue commandBuffer];
     id<MTLComputeCommandEncoder> encoder = [commandBuffer computeCommandEncoder];
 
@@ -371,6 +386,11 @@ static void detectExtremaInLayer(
 
     [commandBuffer commit];
     [commandBuffer waitUntilCompleted];
+
+#ifdef LAR_PROFILE_METAL_SIFT
+    gpuKernelTime += std::chrono::duration<double, std::milli>(
+        std::chrono::high_resolution_clock::now() - gpuKernelStart).count();
+#endif
 
     RELEASE_IF_MANUAL(paramsBuffer);
     RELEASE_IF_MANUAL(kernelBuffer);
@@ -441,7 +461,7 @@ static void detectExtremaInLayer(
 }
 
 // Process a single octave: compute Gaussian pyramid, DoG, and detect extrema
-static void processOctave(
+void processOctave(
     id<MTLDevice> device,
     id<MTLCommandQueue> commandQueue,
     id<MTLComputePipelineState> blurPipeline,
@@ -461,7 +481,11 @@ static void processOctave(
     double contrastThreshold,
     double edgeThreshold,
     double sigma,
-    double& cpuTime)
+    double& cpuTime,
+    double& gpuKernelTime,
+    double& bufferAllocTime,
+    double& blurTime,
+    double& dogTime)
 {
     int octaveWidth = base.cols >> octave;
     int octaveHeight = base.rows >> octave;
@@ -474,8 +498,17 @@ static void processOctave(
     uploadOctaveBase(base, resources, octave, nLevels, octaveWidth, octaveHeight, alignedRowBytes);
 
     // Compute initial Gaussian layers and DoG
+#ifdef LAR_PROFILE_METAL_SIFT
+    auto blurStart = std::chrono::high_resolution_clock::now();
+#endif
+
     computeInitialGaussianAndDoG(device, commandQueue, blurPipeline, resources,
                                  gaussianKernels, octave, octaveWidth, octaveHeight, rowStride);
+
+#ifdef LAR_PROFILE_METAL_SIFT
+    blurTime += std::chrono::duration<double, std::milli>(
+        std::chrono::high_resolution_clock::now() - blurStart).count();
+#endif
 
     // Populate gauss_pyr and dog_pyr with cv::Mat wrappers
     int gaussIdx = octave * nLevels;
@@ -491,14 +524,24 @@ static void processOctave(
         dog_pyr[dogIdx + i] = cv::Mat(octaveHeight, octaveWidth, CV_32F, dogBuffers[i].contents, alignedRowBytes);
     }
 
+#ifdef LAR_PROFILE_METAL_SIFT
+    auto dogStart = std::chrono::high_resolution_clock::now();
+#endif
+
     // Process each layer for extrema detection
     for (int layer = 1; layer <= nOctaveLayers; layer++) {
         detectExtremaInLayer(device, commandQueue, extremaPipeline, resources,
                            gaussianKernels, bitarrayBuffer, gauss_pyr, dog_pyr, keypoints,
                            octave, layer, nOctaveLayers, nLevels,
                            octaveWidth, octaveHeight, rowStride,
-                           threshold, contrastThreshold, edgeThreshold, sigma, cpuTime);
+                           threshold, contrastThreshold, edgeThreshold, sigma, cpuTime,
+                           gpuKernelTime, bufferAllocTime);
     }
+
+#ifdef LAR_PROFILE_METAL_SIFT
+    dogTime += std::chrono::duration<double, std::milli>(
+        std::chrono::high_resolution_clock::now() - dogStart).count();
+#endif
 }
 
 // ============================================================================
@@ -541,7 +584,11 @@ void findScaleSpaceExtremaMetalFused(
 
 #ifdef LAR_PROFILE_METAL_SIFT
         auto startTotal = std::chrono::high_resolution_clock::now();
-        double gpuTime = 0, cpuTime = 0;
+        double cpuTime = 0;
+        double gpuKernelTime = 0;
+        double bufferAllocTime = 0;
+        double blurTime = 0;
+        double dogTime = 0;
 #endif
 
         // Initialize Metal pipelines
@@ -591,10 +638,6 @@ void findScaleSpaceExtremaMetalFused(
         std::vector<double> sigmas;
         computeGaussianKernels(nLevels, nOctaveLayers, sigma, gaussianKernels, sigmas);
 
-#ifdef LAR_PROFILE_METAL_SIFT
-        auto gpuStart = std::chrono::high_resolution_clock::now();
-#endif
-
         // Pre-allocate pyramid storage
         std::vector<cv::Mat> dog_pyr(nOctaves * (nOctaveLayers + 2));
         gauss_pyr.resize(nOctaves * nLevels);
@@ -605,13 +648,9 @@ void findScaleSpaceExtremaMetalFused(
                          base, resources, gaussianKernels, bitarrayBuffer,
                          gauss_pyr, dog_pyr, keypoints,
                          o, nOctaves, nOctaveLayers, nLevels,
-                         threshold, contrastThreshold, edgeThreshold, sigma, cpuTime);
+                         threshold, contrastThreshold, edgeThreshold, sigma, cpuTime,
+                         gpuKernelTime, bufferAllocTime, blurTime, dogTime);
         }
-
-#ifdef LAR_PROFILE_METAL_SIFT
-        gpuTime = std::chrono::duration<double, std::milli>(
-            std::chrono::high_resolution_clock::now() - gpuStart).count();
-#endif
 
         RELEASE_IF_MANUAL(bitarrayBuffer);
         // Note: pipeline, blurPipeline, and library are cached as static and should not be released
@@ -620,10 +659,17 @@ void findScaleSpaceExtremaMetalFused(
         auto endTotal = std::chrono::high_resolution_clock::now();
         double totalTime = std::chrono::duration<double, std::milli>(
             endTotal - startTotal).count();
-        std::cout << "Metal Fused Extrema Detection Profile:\n";
-        std::cout << "  GPU:      " << gpuTime << " ms\n"
-                  << "  CPU:      " << cpuTime << " ms\n"
-                  << "  Total:    " << totalTime << " ms\n";
+
+        std::cout << "\n=== Metal Fused SIFT Profile ===\n";
+        std::cout << "GPU Operations:\n";
+        std::cout << "  Blur kernels:        " << blurTime << " ms\n";
+        std::cout << "  Extrema kernels:     " << gpuKernelTime << " ms\n";
+        std::cout << "  Buffer allocation:   " << bufferAllocTime << " ms\n";
+        std::cout << "CPU Operations:\n";
+        std::cout << "  Keypoint extraction: " << cpuTime << " ms\n";
+        std::cout << "Total:\n";
+        std::cout << "  Wall-clock time:     " << totalTime << " ms\n";
+        std::cout << "================================\n\n";
 #endif
     }
 }
