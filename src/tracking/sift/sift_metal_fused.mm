@@ -250,7 +250,6 @@ void findScaleSpaceExtremaMetalFused(
 
             std::vector<id<MTLBuffer>>& gaussBuffers = resources.octaveBuffers[o];
             std::vector<id<MTLBuffer>>& dogBuffers = resources.dogBuffers[o];
-            size_t bufferSize = alignedRowBytes * octaveHeight;
 
             // === Compute Octave Base (Gauss[0]) ===
             // Determine source for this octave
@@ -342,33 +341,16 @@ void findScaleSpaceExtremaMetalFused(
                 dog1[pixel] = gauss2[pixel] - gauss1[pixel];
             }
 
-            // Populate gauss_pyr with initial Gaussian layers (Gauss[0], Gauss[1], Gauss[2])
+            // Populate gauss_pyr with initial Gaussian layers
             int gaussIdx = o * nLevels;
-            gauss_pyr[gaussIdx + 0] = cv::Mat(octaveHeight, octaveWidth, CV_32F, gauss0, alignedRowBytes).clone();
-            gauss_pyr[gaussIdx + 1] = cv::Mat(octaveHeight, octaveWidth, CV_32F, gauss1, alignedRowBytes).clone();
-            gauss_pyr[gaussIdx + 2] = cv::Mat(octaveHeight, octaveWidth, CV_32F, gauss2, alignedRowBytes).clone();
-
-            // Wrap DoG buffers in cv::Mat for use by adjustLocalExtrema
-            // Initialize ALL DoG layers for this octave to prevent accessing uninitialized cv::Mat
-            int dogIdx = o * (nOctaveLayers + 2);
-
-            // Initialize DoG[0] and DoG[1] which we just computed
-            float* dog0Ptr = (float*)dogBuffers[0].contents;
-            float* dog1Ptr = (float*)dogBuffers[1].contents;
-            dog_pyr[dogIdx + 0] = cv::Mat(octaveHeight, octaveWidth, CV_32F, dog0Ptr, alignedRowBytes).clone();
-            dog_pyr[dogIdx + 1] = cv::Mat(octaveHeight, octaveWidth, CV_32F, dog1Ptr, alignedRowBytes).clone();
-
-            // Pre-initialize remaining DoG slots with empty Mat objects to ensure they're valid
-            // They will be populated in the loop below
-            for (int i = 2; i < nOctaveLayers + 2; i++) {
-                dog_pyr[dogIdx + i] = cv::Mat(octaveHeight, octaveWidth, CV_32F, cv::Scalar(0));
+            for (int i = 0; i < nLevels; i++) {
+                gauss_pyr[gaussIdx + i] = cv::Mat(octaveHeight, octaveWidth, CV_32F, gaussBuffers[i].contents, alignedRowBytes);
             }
 
-            // Allocate temporary buffers for nextGauss and nextDoG
-            id<MTLBuffer> nextGaussBuffer = [device newBufferWithLength:bufferSize
-                                                                options:MTLResourceStorageModeShared];
-            id<MTLBuffer> nextDogBuffer = [device newBufferWithLength:bufferSize
-                                                              options:MTLResourceStorageModeShared];
+            int dogIdx = o * (nLevels - 1);
+            for (int i = 0; i < nLevels - 1; i++) {
+                dog_pyr[dogIdx + i] = cv::Mat(octaveHeight, octaveWidth, CV_32F, dogBuffers[i].contents, alignedRowBytes);
+            }
 
             // Process layers 1 to nOctaveLayers (where we detect extrema)
             for (int i = 1; i <= nOctaveLayers; i++) {
@@ -406,7 +388,7 @@ void findScaleSpaceExtremaMetalFused(
                 [encoder setBuffer:dogBuffers[i-1] offset:0 atIndex:0];      // prevDoG (read-only, computed in previous iteration)
                 [encoder setBuffer:dogBuffers[i] offset:0 atIndex:1];        // currDoG (read-only, computed in previous iteration)
                 [encoder setBuffer:gaussBuffers[i+1] offset:0 atIndex:2];    // currGauss (Gauss[i+1], blur to get Gauss[i+2])
-                [encoder setBuffer:nextGaussBuffer offset:0 atIndex:3];      // nextGauss (kernel writes Gauss[i+2])
+                [encoder setBuffer:gaussBuffers[i+2] offset:0 atIndex:3];      // nextGauss (kernel writes Gauss[i+2])
                 [encoder setBuffer:dogBuffers[i+1] offset:0 atIndex:4];      // nextDoG (kernel writes DoG[i+1], used for halo in next iteration)
                 [encoder setBuffer:bitarrayBuffer offset:0 atIndex:5];       // extremaBitarray (1 bit per pixel)
                 [encoder setBuffer:paramsBuffer offset:0 atIndex:7];         // params (FusedExtremaParams)
@@ -425,18 +407,6 @@ void findScaleSpaceExtremaMetalFused(
                 RELEASE_IF_MANUAL(paramsBuffer);
                 RELEASE_IF_MANUAL(kernelBuffer);
 
-                // Update pyramid with fused kernel's computed results
-                // This makes the fused kernel self-sustaining (no longer needs pre-computed buffers)
-                memcpy(gaussBuffers[i+2].contents, nextGaussBuffer.contents, bufferSize);
-
-                // Populate gauss_pyr with the newly computed Gaussian layer (Gauss[i+2])
-                float* gaussNextPtr = (float*)gaussBuffers[i+2].contents;
-                gauss_pyr[o * nLevels + (i + 2)] = cv::Mat(octaveHeight, octaveWidth, CV_32F, gaussNextPtr, alignedRowBytes).clone();
-
-                // Wrap the updated DoG buffer in cv::Mat for use by adjustLocalExtrema
-                // MUST clone because dogBuffers[i+1] will be overwritten in next iteration
-                float* dogPtr = (float*)dogBuffers[i+1].contents;
-                dog_pyr[o * (nOctaveLayers + 2) + i + 1] = cv::Mat(octaveHeight, octaveWidth, CV_32F, dogPtr, alignedRowBytes).clone();
 
                 // Scan bitarray for set bits (extrema candidates)
 #ifdef LAR_PROFILE_METAL_SIFT
@@ -457,12 +427,6 @@ void findScaleSpaceExtremaMetalFused(
                             int r = bitIndex / octaveWidth;
                             int c_pos = bitIndex % octaveWidth;
 
-                            // Skip if outside valid bounds
-                            if (c_pos < 5 || c_pos >= octaveWidth - 5 ||
-                                r < 5 || r >= octaveHeight - 5) {
-                                continue;
-                            }
-
                             // Create keypoint for refinement
                             cv::KeyPoint kpt;
                             int layer = params.layer;
@@ -479,12 +443,7 @@ void findScaleSpaceExtremaMetalFused(
                             float hist[n];
                             float scl_octv = kpt.size * 0.5f / (1 << params.octave);
 
-                            // Read from our self-computed gaussBuffers instead of precomputed gauss_pyr
-                            // Wrap the buffer in cv::Mat for calcOrientationHist
-                            float* gaussPtr = (float*)gaussBuffers[layer].contents;
-                            cv::Mat gaussLayer(octaveHeight, octaveWidth, CV_32F, gaussPtr, alignedRowBytes);
-
-                            float omax = calcOrientationHist(gaussLayer,
+                            float omax = calcOrientationHist(gauss_pyr[gaussIdx + layer],
                                                             cv::Point(c_pos, r),
                                                             cvRound(SIFT_ORI_RADIUS * scl_octv),
                                                             SIFT_ORI_SIG_FCTR * scl_octv,
@@ -517,8 +476,6 @@ void findScaleSpaceExtremaMetalFused(
 #endif
             }
 
-            RELEASE_IF_MANUAL(nextGaussBuffer);
-            RELEASE_IF_MANUAL(nextDogBuffer);
         }
 
 #ifdef LAR_PROFILE_METAL_SIFT
