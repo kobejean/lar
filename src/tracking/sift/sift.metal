@@ -34,97 +34,80 @@ struct GaussianBlurParams {
 // - Host scans bitarray using SIMD for fast candidate extraction
 #pragma METAL fp math_mode(safe)
 kernel void detectScaleSpaceExtrema(
-    const device float* prevLayer [[buffer(0)]],   // DoG layer i-1
-    const device float* currLayer [[buffer(1)]],   // DoG layer i (center)
-    const device float* nextLayer [[buffer(2)]],   // DoG layer i+1
+    const device float* prevDoG [[buffer(0)]],   // DoG layer i-1
+    const device float* currDoG [[buffer(1)]],   // DoG layer i (center)
+    const device float* nextDoG [[buffer(2)]],   // DoG layer i+1
     device atomic_uint* extremaBitarray [[buffer(3)]], // Bitarray output (1 bit per pixel, packed as uint32)
     constant ExtremaParams& params [[buffer(5)]],
     uint2 gid [[thread_position_in_grid]])
 {
     int x = gid.x;
     int y = gid.y;
-    bool isExtremum = false;
-    float val;
 
     // Check if this thread should process (not border, not out of bounds)
-    bool shouldProcess = (x >= params.border && x < params.width - params.border &&
-                          y >= params.border && y < params.height - params.border);
-    if (shouldProcess) {
-        // Read center pixel value
-        int step = params.rowStride;
-        int i = y * step + x;
-        val = currLayer[i];
+    if (x < params.border || x >= params.width - params.border ||
+        y < params.border || y >= params.height - params.border) return;
 
-        // Quick threshold rejection
-        if (fabs(val) > params.threshold) {
-            float _00,_01,_02;
-            float _10,    _12;
-            float _20,_21,_22;
+    // Read center pixel value
+    int step = params.rowStride;
+    int i = y * step + x;
+    float val = currDoG[i];
 
-            if (val > 0) {
-                _00 = currLayer[i-step-1]; _01 = currLayer[i-step]; _02 = currLayer[i-step+1];
-                _10 = currLayer[i-1]; _12 = currLayer[i+1];
-                _20 = currLayer[i+step-1]; _21 = currLayer[i+step]; _22 = currLayer[i+step+1];
-                float vmax = fmax(fmax(fmax(_00,_01),fmax(_02,_10)),fmax(fmax(_12,_20),fmax(_21,_22)));
-                if (val >= vmax) {
-                    _00 = prevLayer[i-step-1]; _01 = prevLayer[i-step]; _02 = prevLayer[i-step+1];
-                    _10 = prevLayer[i-1]; _12 = prevLayer[i+1];
-                    _20 = prevLayer[i+step-1]; _21 = prevLayer[i+step]; _22 = prevLayer[i+step+1];
-                    vmax = fmax(fmax(fmax(_00,_01),fmax(_02,_10)),fmax(fmax(_12,_20),fmax(_21,_22)));
-                    if (val >= vmax) {
-                        _00 = nextLayer[i-step-1]; _01 = nextLayer[i-step]; _02 = nextLayer[i-step+1];
-                        _10 = nextLayer[i-1]; _12 = nextLayer[i+1];
-                        _20 = nextLayer[i+step-1]; _21 = nextLayer[i+step]; _22 = nextLayer[i+step+1];
-                        vmax = fmax(fmax(fmax(_00,_01),fmax(_02,_10)),fmax(fmax(_12,_20),fmax(_21,_22)));
-                        if (val >= vmax) {
-                            vmax = fmax(prevLayer[i], nextLayer[i]);
-                            if (val >= vmax) {
-                                isExtremum = true;
-                            }
-                        }
-                    }
-                }
-            } else {
-                _00 = currLayer[i-step-1]; _01 = currLayer[i-step]; _02 = currLayer[i-step+1];
-                _10 = currLayer[i-1]; _12 = currLayer[i+1];
-                _20 = currLayer[i+step-1]; _21 = currLayer[i+step]; _22 = currLayer[i+step+1];
-                float vmin = fmin(fmin(fmin(_00,_01),fmin(_02,_10)),fmin(fmin(_12,_20),fmin(_21,_22)));
-                if (val <= vmin) {
-                    _00 = prevLayer[i-step-1]; _01 = prevLayer[i-step]; _02 = prevLayer[i-step+1];
-                    _10 = prevLayer[i-1]; _12 = prevLayer[i+1];
-                    _20 = prevLayer[i+step-1]; _21 = prevLayer[i+step]; _22 = prevLayer[i+step+1];
-                    vmin = fmin(fmin(fmin(_00,_01),fmin(_02,_10)),fmin(fmin(_12,_20),fmin(_21,_22)));
-                    if (val <= vmin) {
-                        _00 = nextLayer[i-step-1]; _01 = nextLayer[i-step]; _02 = nextLayer[i-step+1];
-                        _10 = nextLayer[i-1]; _12 = nextLayer[i+1];
-                        _20 = nextLayer[i+step-1]; _21 = nextLayer[i+step]; _22 = nextLayer[i+step+1];
-                        vmin = fmin(fmin(fmin(_00,_01),fmin(_02,_10)),fmin(fmin(_12,_20),fmin(_21,_22)));
-                        if (val <= vmin) {
-                            vmin = fmin(prevLayer[i], nextLayer[i]);
-                            if (val <= vmin) {
-                                isExtremum = true;
-                            }
-                        }
-                    }
-                }
-            }
-        }
+    // Quick threshold rejection
+    if (fabs(val) <= params.threshold) return;
+    float _00,_01,_02;
+    float _10,    _12;
+    float _20,_21,_22;
+
+    if (val > 0) {
+        _00 = currDoG[i-step-1]; _01 = currDoG[i-step]; _02 = currDoG[i-step+1];
+        _10 = currDoG[i-1]; _12 = currDoG[i+1];
+        _20 = currDoG[i+step-1]; _21 = currDoG[i+step]; _22 = currDoG[i+step+1];
+        float vmax = fmax(fmax(fmax(_00,_01),fmax(_02,_10)),fmax(fmax(_12,_20),fmax(_21,_22)));
+        if (val < vmax) return;
+        _00 = prevDoG[i-step-1]; _01 = prevDoG[i-step]; _02 = prevDoG[i-step+1];
+        _10 = prevDoG[i-1]; _12 = prevDoG[i+1];
+        _20 = prevDoG[i+step-1]; _21 = prevDoG[i+step]; _22 = prevDoG[i+step+1];
+        vmax = fmax(fmax(fmax(_00,_01),fmax(_02,_10)),fmax(fmax(_12,_20),fmax(_21,_22)));
+        if (val < vmax) return;
+        _00 = nextDoG[i-step-1]; _01 = nextDoG[i-step]; _02 = nextDoG[i-step+1];
+        _10 = nextDoG[i-1]; _12 = nextDoG[i+1];
+        _20 = nextDoG[i+step-1]; _21 = nextDoG[i+step]; _22 = nextDoG[i+step+1];
+        vmax = fmax(fmax(fmax(_00,_01),fmax(_02,_10)),fmax(fmax(_12,_20),fmax(_21,_22)));
+        if (val < vmax) return;
+        vmax = fmax(prevDoG[i], nextDoG[i]);
+        if (val < vmax) return;
+    } else {
+        _00 = currDoG[i-step-1]; _01 = currDoG[i-step]; _02 = currDoG[i-step+1];
+        _10 = currDoG[i-1]; _12 = currDoG[i+1];
+        _20 = currDoG[i+step-1]; _21 = currDoG[i+step]; _22 = currDoG[i+step+1];
+        float vmin = fmin(fmin(fmin(_00,_01),fmin(_02,_10)),fmin(fmin(_12,_20),fmin(_21,_22)));
+        if (val > vmin) return;
+        _00 = prevDoG[i-step-1]; _01 = prevDoG[i-step]; _02 = prevDoG[i-step+1];
+        _10 = prevDoG[i-1]; _12 = prevDoG[i+1];
+        _20 = prevDoG[i+step-1]; _21 = prevDoG[i+step]; _22 = prevDoG[i+step+1];
+        vmin = fmin(fmin(fmin(_00,_01),fmin(_02,_10)),fmin(fmin(_12,_20),fmin(_21,_22)));
+        if (val > vmin) return;
+        _00 = nextDoG[i-step-1]; _01 = nextDoG[i-step]; _02 = nextDoG[i-step+1];
+        _10 = nextDoG[i-1]; _12 = nextDoG[i+1];
+        _20 = nextDoG[i+step-1]; _21 = nextDoG[i+step]; _22 = nextDoG[i+step+1];
+        vmin = fmin(fmin(fmin(_00,_01),fmin(_02,_10)),fmin(fmin(_12,_20),fmin(_21,_22)));
+        if (val > vmin) return;
+        vmin = fmin(prevDoG[i], nextDoG[i]);
+        if (val > vmin) return;
     }
 
-    // Write extremum flag to bitarray
-    if (isExtremum) {
-        // Calculate linear bit index: row-major order
-        uint bitIndex = y * params.width + x;
+    // Calculate linear bit index: row-major order
+    uint bitIndex = y * params.width + x;
 
-        // Calculate chunk index and bit offset
-        // Each uint32 stores 32 bits (pixels)
-        uint chunkIndex = bitIndex >> 5;      // Divide by 32
-        uint bitOffset = bitIndex & 31;       // Modulo 32
+    // Calculate chunk index and bit offset
+    // Each uint32 stores 32 bits (pixels)
+    uint chunkIndex = bitIndex >> 5;      // Divide by 32
+    uint bitOffset = bitIndex & 31;       // Modulo 32
 
-        // Set the bit using atomic OR
-        // This is safe because each pixel maps to exactly one bit
-        atomic_fetch_or_explicit(&extremaBitarray[chunkIndex], (1u << bitOffset), memory_order_relaxed);
-    }
+    // Set the bit using atomic OR
+    // This is safe because each pixel maps to exactly one bit
+    atomic_fetch_or_explicit(&extremaBitarray[chunkIndex], (1u << bitOffset), memory_order_relaxed);
 }
 
 // ============================================================================
@@ -222,7 +205,7 @@ kernel void gaussianBlurVertical(
 }
 
 // ============================================================================
-// Fused Gaussian Blur Kernel (Educational: Horizontal + Vertical in one pass)
+// Fused Gaussian Blur Kernel (Horizontal + Vertical in one pass)
 // ============================================================================
 // This kernel performs both horizontal and vertical blur passes using shared
 // threadgroup memory to avoid global memory round-trips. It processes 16×16

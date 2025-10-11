@@ -127,7 +127,7 @@ void buildGaussianPyramidMetal(const cv::Mat& base, std::vector<cv::Mat>& pyr,
 
                 // Allocate temporary texture for separable convolution (sized for this octave)
                 resources.tempBuffers[o] = [device newBufferWithLength:bufferSize
-                                                            options:MTLResourceStorageModeShared];
+                                                            options:MTLResourceStorageModePrivate];
                 MTLTextureDescriptor* tempDesc = [MTLTextureDescriptor
                     texture2DDescriptorWithPixelFormat:MTLPixelFormatR32Float
                     width:octaveWidth height:octaveHeight mipmapped:NO];
@@ -292,7 +292,7 @@ void buildGaussianPyramidMetal(const cv::Mat& base, std::vector<cv::Mat>& pyr,
                     // Create kernel buffer
                     id<MTLBuffer> kernelBuffer = [device newBufferWithBytes:kernel.data()
                                                                       length:kernel.size() * sizeof(float)
-                                                                     options:MTLResourceStorageModeShared];
+                                                                     options:MTLResourceStorageModePrivate];
 
                     // Setup parameters
                     GaussianBlurParams params;
@@ -303,7 +303,7 @@ void buildGaussianPyramidMetal(const cv::Mat& base, std::vector<cv::Mat>& pyr,
 
                     id<MTLBuffer> paramsBuffer = [device newBufferWithBytes:&params
                                                                       length:sizeof(GaussianBlurParams)
-                                                                     options:MTLResourceStorageModeShared];
+                                                                     options:MTLResourceStorageModePrivate];
 
                     // Horizontal pass: source → temp
                     id<MTLComputeCommandEncoder> horizEncoder = [commandBuffer computeCommandEncoder];
@@ -315,9 +315,10 @@ void buildGaussianPyramidMetal(const cv::Mat& base, std::vector<cv::Mat>& pyr,
 
                     MTLSize gridSize = MTLSizeMake(octaveWidth, octaveHeight, 1);
                     NSUInteger threadExecutionWidth = [horizPipeline threadExecutionWidth];
-                    MTLSize threadgroupSize = MTLSizeMake(threadExecutionWidth, 1, 1);
+                    MTLSize threadgroupHorizSize = MTLSizeMake(threadExecutionWidth, 1, 1);
+                    MTLSize threadgroupVertSize = MTLSizeMake(4, threadExecutionWidth/4, 1);
 
-                    [horizEncoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
+                    [horizEncoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupHorizSize];
                     [horizEncoder endEncoding];
 
                     // Vertical pass: temp → destination
@@ -328,7 +329,7 @@ void buildGaussianPyramidMetal(const cv::Mat& base, std::vector<cv::Mat>& pyr,
                     [vertEncoder setBuffer:paramsBuffer offset:0 atIndex:2];
                     [vertEncoder setBuffer:kernelBuffer offset:0 atIndex:3];
 
-                    [vertEncoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
+                    [vertEncoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupVertSize];
                     [vertEncoder endEncoding];
 
                     RELEASE_IF_MANUAL(paramsBuffer);

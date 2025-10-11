@@ -5,6 +5,7 @@
 #ifndef SIFT_CONSTANTS_METAL_H
 #define SIFT_CONSTANTS_METAL_H
 
+
 // Descriptor parameters
 constant int SIFT_DESCR_WIDTH = 4;
 constant int SIFT_DESCR_HIST_BINS = 8;

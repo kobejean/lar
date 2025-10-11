@@ -5,10 +5,12 @@
 #include <cmath>
 #include <algorithm>
 #include <iostream>
+#include <chrono>
 
 // Define LAR_USE_METAL_SIFT to enable Metal-accelerated Gaussian pyramid
 #define LAR_USE_METAL_SIFTO 1
 #define LAR_USE_METAL_SIFTO_FUSED 1
+#define LAR_PROFILE_SIFT 1
 
 #ifdef LAR_USE_METAL_SIFTO
 // Forward declarations of Metal implementations (defined in sift_metal.mm)
@@ -947,6 +949,10 @@ void SIFT::detectAndCompute(cv::InputArray _image, cv::InputArray _mask,
                             std::vector<cv::KeyPoint>& keypoints,
                             cv::OutputArray _descriptors,
                             bool useProvidedKeypoints) {
+#ifdef LAR_PROFILE_SIFT
+    auto startTotal = std::chrono::high_resolution_clock::now();
+#endif
+
     cv::Mat image = _image.getMat(), mask = _mask.getMat();
 
     if (image.empty() || image.depth() != CV_8U)
@@ -956,12 +962,22 @@ void SIFT::detectAndCompute(cv::InputArray _image, cv::InputArray _mask,
         CV_Error(cv::Error::StsBadArg, "mask has incorrect type (!=CV_8UC1)");
 
     int firstOctave = 0;
-    
+
+#ifdef LAR_PROFILE_SIFT
+    auto startImagePrep = std::chrono::high_resolution_clock::now();
+#endif
     cv::Mat base = createInitialImage(image, firstOctave < 0, (float)sigma_);
     std::vector<cv::Mat> gpyr;
     int nOctaves = cvRound(std::log((double)std::min(base.cols, base.rows)) / std::log(2.) - 2) - firstOctave;
+#ifdef LAR_PROFILE_SIFT
+    auto endImagePrep = std::chrono::high_resolution_clock::now();
+    double imagePrepTime = std::chrono::duration<double, std::milli>(endImagePrep - startImagePrep).count();
+#endif
 
-    
+
+#ifdef LAR_PROFILE_SIFT
+    auto startDetection = std::chrono::high_resolution_clock::now();
+#endif
 #if defined(LAR_USE_METAL_SIFTO) && defined(LAR_USE_METAL_SIFTO_FUSED)
     // Use fused Metal kernel for GPU-accelerated GaussianPyramid + DoG + extrema detection
     const int threshold = cvFloor(0.5 * contrastThreshold_ / nOctaveLayers_ * 255 * SIFT_FIXPT_SCALE);
@@ -974,14 +990,29 @@ void SIFT::detectAndCompute(cv::InputArray _image, cv::InputArray _mask,
     buildDoGPyramid(gpyr, dogpyr);
     findScaleSpaceExtrema(gpyr, dogpyr, keypoints);
 #endif
+#ifdef LAR_PROFILE_SIFT
+    auto endDetection = std::chrono::high_resolution_clock::now();
+    double detectionTime = std::chrono::duration<double, std::milli>(endDetection - startDetection).count();
+#endif
+
+#ifdef LAR_PROFILE_SIFT
+    auto startFiltering = std::chrono::high_resolution_clock::now();
+#endif
     cv::KeyPointsFilter::removeDuplicatedSorted(keypoints);
 
     if( nfeatures_ > 0 ) {
         cv::KeyPointsFilter::retainBest(keypoints, nfeatures_);
         keypoints.resize(nfeatures_);
     }
-        
+#ifdef LAR_PROFILE_SIFT
+    auto endFiltering = std::chrono::high_resolution_clock::now();
+    double filteringTime = std::chrono::duration<double, std::milli>(endFiltering - startFiltering).count();
+#endif
 
+
+#ifdef LAR_PROFILE_SIFT
+    auto startAdjustment = std::chrono::high_resolution_clock::now();
+#endif
     // Adjust keypoint positions for firstOctave = -1
     for (size_t i = 0; i < keypoints.size(); i++) {
         cv::KeyPoint& kpt = keypoints[i];
@@ -990,10 +1021,24 @@ void SIFT::detectAndCompute(cv::InputArray _image, cv::InputArray _mask,
         kpt.pt *= scale;
         kpt.size *= scale;
     }
+#ifdef LAR_PROFILE_SIFT
+    auto endAdjustment = std::chrono::high_resolution_clock::now();
+    double adjustmentTime = std::chrono::duration<double, std::milli>(endAdjustment - startAdjustment).count();
+#endif
 
+#ifdef LAR_PROFILE_SIFT
+    auto startMaskFilter = std::chrono::high_resolution_clock::now();
+#endif
     if (!mask.empty())
         cv::KeyPointsFilter::runByPixelsMask(keypoints, mask);
+#ifdef LAR_PROFILE_SIFT
+    auto endMaskFilter = std::chrono::high_resolution_clock::now();
+    double maskFilterTime = std::chrono::duration<double, std::milli>(endMaskFilter - startMaskFilter).count();
+#endif
 
+#ifdef LAR_PROFILE_SIFT
+    auto startDescriptors = std::chrono::high_resolution_clock::now();
+#endif
     if (_descriptors.needed()) {
         int dsize = descriptorSize();
         _descriptors.create((int)keypoints.size(), dsize, descriptorType_);
@@ -1006,7 +1051,7 @@ void SIFT::detectAndCompute(cv::InputArray _image, cv::InputArray _mask,
             int octave, layer;
             float scale;
             unpackOctave(kpt, octave, layer, scale);
-            
+
             float size = kpt.size*scale;
             cv::Point2f ptf(kpt.pt.x*scale, kpt.pt.y*scale);
             const cv::Mat& img = gpyr[(octave - firstOctave)*(nOctaveLayers_ + 3) + layer];
@@ -1014,10 +1059,32 @@ void SIFT::detectAndCompute(cv::InputArray _image, cv::InputArray _mask,
             float angle = 360.f - kpt.angle;
             if (std::abs(angle - 360.f) < FLT_EPSILON)
                 angle = 0.f;
-            
+
             calcSIFTDescriptor(img, ptf, angle, size*0.5f, d, n, descriptors, i);
         }
     }
+#ifdef LAR_PROFILE_SIFT
+    auto endDescriptors = std::chrono::high_resolution_clock::now();
+    double descriptorsTime = std::chrono::duration<double, std::milli>(endDescriptors - startDescriptors).count();
+
+    auto endTotal = std::chrono::high_resolution_clock::now();
+    double totalTime = std::chrono::duration<double, std::milli>(endTotal - startTotal).count();
+
+    std::cout << "\n=== SIFT detectAndCompute Profile ===\n";
+    std::cout << "Preprocessing:\n";
+    std::cout << "  Image preparation:   " << imagePrepTime << " ms\n";
+    std::cout << "Feature Detection:\n";
+    std::cout << "  Pyramid + extrema:   " << detectionTime << " ms\n";
+    std::cout << "Postprocessing:\n";
+    std::cout << "  Keypoint filtering:  " << filteringTime << " ms\n";
+    std::cout << "  Octave adjustment:   " << adjustmentTime << " ms\n";
+    std::cout << "  Mask filtering:      " << maskFilterTime << " ms\n";
+    std::cout << "Descriptor Computation:\n";
+    std::cout << "  SIFT descriptors:    " << descriptorsTime << " ms (" << keypoints.size() << " keypoints)\n";
+    std::cout << "Total:\n";
+    std::cout << "  Wall-clock time:     " << totalTime << " ms\n";
+    std::cout << "=====================================\n\n";
+#endif
 }
 
 } // namespace lar
