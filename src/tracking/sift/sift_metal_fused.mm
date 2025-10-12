@@ -12,7 +12,7 @@
 #include <chrono>
 #include <vector>
 
-#define LAR_PROFILE_METAL_SIFT 1
+// #define LAR_PROFILE_METAL_SIFT 1
 
 namespace lar {
 
@@ -69,9 +69,9 @@ bool initializeMetalPipelines(
             return false;
         }
 
-        id<MTLFunction> extremaFunction = [cachedLibrary newFunctionWithName:@"detectScaleSpaceExtrema"];
+        id<MTLFunction> extremaFunction = [cachedLibrary newFunctionWithName:@"detectExtrema"];
         if (!extremaFunction) {
-            std::cerr << "Failed to find Metal function: detectScaleSpaceExtrema" << std::endl;
+            std::cerr << "Failed to find Metal function: detectExtrema" << std::endl;
             return false;
         }
 
@@ -282,7 +282,7 @@ void extractKeypoints(
             }
         }
     }
-    std::cout << "extracted keypoints from octave " << octave << " layer " << layer << " adding " << count << " keypoints" << std::endl;
+    // std::cout << "extracted keypoints from octave " << octave << " layer " << layer << " adding " << count << " keypoints" << std::endl;
 #ifdef LAR_PROFILE_METAL_SIFT
     cpuTime += std::chrono::duration<double, std::milli>(
         std::chrono::high_resolution_clock::now() - cpuStart).count();
@@ -327,13 +327,13 @@ void findScaleSpaceExtremaMetalFused(
         id<MTLDevice> device = resources.device;
         id<MTLCommandQueue> commandQueue = resources.commandQueue;
 
-#ifdef LAR_PROFILE_METAL_SIFT
-        auto startTotal = std::chrono::high_resolution_clock::now();
         double cpuTime = 0;
         double gpuKernelTime = 0;
         double bufferAllocTime = 0;
         double blurTime = 0;
         double dogTime = 0;
+#ifdef LAR_PROFILE_METAL_SIFT
+        auto startTotal = std::chrono::high_resolution_clock::now();
 #endif
 
         // Initialize Metal pipelines

@@ -132,7 +132,7 @@ namespace lar {
     cv::Mat desc;
     vision.extractFeatures(image, cv::noArray(), kpts, desc);
     
-    std::vector<cv::DMatch> matches = vision.match(desc, map_desc);
+    std::vector<cv::DMatch> matches = vision.match(desc, map_desc, kpts);
     if (matches.size() <= 3) return false; 
     
     cv::Mat object_points = objectPoints(local_landmarks, matches);

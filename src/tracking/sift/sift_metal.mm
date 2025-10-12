@@ -738,7 +738,7 @@ void findScaleSpaceExtremaMetal(
                     }
                 }
 
-                std::cout << "extracted keypoints from octave " << params.octave << " layer " << params.layer << " adding " << count << " keypoints" << std::endl;
+                // std::cout << "extracted keypoints from octave " << params.octave << " layer " << params.layer << " adding " << count << " keypoints" << std::endl;
 #ifdef LAR_PROFILE_METAL_SIFT
                 cpuTime += std::chrono::duration<double, std::milli>(
                     std::chrono::high_resolution_clock::now() - cpuStart).count();

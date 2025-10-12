@@ -22,7 +22,7 @@ namespace lar {
 
     private:
       void extractLandmarks(const Frame &frame, const cv::Mat &desc, const std::vector<cv::KeyPoint>& kpts, const std::vector<float>& depth, std::vector<Landmark*> &results);
-      std::map<size_t, size_t> getMatches(const cv::Mat &query_desc, const cv::Mat &train_desc);
+      std::map<size_t, size_t> getMatches(const cv::Mat &query_desc, const cv::Mat &train_desc, const std::vector<cv::KeyPoint>& kpts);
       std::string getPathPrefix(int id, std::string directory);
   };
 
