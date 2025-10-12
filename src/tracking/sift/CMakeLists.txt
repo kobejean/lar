@@ -14,7 +14,7 @@ set(SIFT_SOURCES
 if(LAR_USE_METAL_SIFT AND APPLE)
   list(APPEND SIFT_SOURCES sift_metal_common.mm sift_metal.mm)
   if(LAR_USE_METAL_SIFT_FUSED)
-    list(APPEND SIFT_SOURCES sift_metal_fused.mm)
+    list(APPEND SIFT_SOURCES sift_metal_fused.mm sift_metal_pipelined.mm)
   endif()
   message(STATUS "Metal-accelerated SIFT enabled")
 endif()

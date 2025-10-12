@@ -9,7 +9,8 @@
 
 // Define LAR_USE_METAL_SIFT to enable Metal-accelerated Gaussian pyramid
 #define LAR_USE_METAL_SIFTO 1
-#define LAR_USE_METAL_SIFTO_FUSED 1
+// #define LAR_USE_METAL_SIFTO_FUSED 1
+#define LAR_USE_METAL_SIFTO_PIPELINED 1
 #define LAR_PROFILE_SIFT 1
 
 #ifdef LAR_USE_METAL_SIFTO
@@ -25,12 +26,20 @@ namespace lar {
                                     int nOctaves, int nOctaveLayers, float threshold,
                                     double contrastThreshold, double edgeThreshold, double sigma);
 #ifdef LAR_USE_METAL_SIFTO_FUSED
-    // Main fused SIFT function
+    // Fused SIFT function (blur + DoG + extrema in single pipeline per octave)
     void findScaleSpaceExtremaMetalFused(const cv::Mat& base,
                                          std::vector<cv::Mat>& gauss_pyr,
                                          std::vector<cv::KeyPoint>& keypoints,
                                          int nOctaves, int nOctaveLayers, float threshold,
                                          double contrastThreshold, double edgeThreshold, double sigma);
+#endif
+#ifdef LAR_USE_METAL_SIFTO_PIPELINED
+    // Pipelined SIFT function (all octaves run in parallel on GPU)
+    void findScaleSpaceExtremaMetalPipelined(const cv::Mat& base,
+                                             std::vector<cv::Mat>& gauss_pyr,
+                                             std::vector<cv::KeyPoint>& keypoints,
+                                             int nOctaves, int nOctaveLayers, float threshold,
+                                             double contrastThreshold, double edgeThreshold, double sigma);
 #endif
 }
 #endif
@@ -978,7 +987,12 @@ void SIFT::detectAndCompute(cv::InputArray _image, cv::InputArray _mask,
 #ifdef LAR_PROFILE_SIFT
     auto startDetection = std::chrono::high_resolution_clock::now();
 #endif
-#if defined(LAR_USE_METAL_SIFTO) && defined(LAR_USE_METAL_SIFTO_FUSED)
+#if defined(LAR_USE_METAL_SIFTO) && defined(LAR_USE_METAL_SIFTO_PIPELINED)
+    // Use pipelined Metal kernel for maximum GPU parallelism (all octaves in parallel)
+    const int threshold = cvFloor(0.5 * contrastThreshold_ / nOctaveLayers_ * 255 * SIFT_FIXPT_SCALE);
+    findScaleSpaceExtremaMetalPipelined(base, gpyr, keypoints, nOctaves, nOctaveLayers_,
+        (float)threshold, contrastThreshold_, edgeThreshold_, sigma_);
+#elif defined(LAR_USE_METAL_SIFTO) && defined(LAR_USE_METAL_SIFTO_FUSED)
     // Use fused Metal kernel for GPU-accelerated GaussianPyramid + DoG + extrema detection
     const int threshold = cvFloor(0.5 * contrastThreshold_ / nOctaveLayers_ * 255 * SIFT_FIXPT_SCALE);
     findScaleSpaceExtremaMetalFused(base, gpyr, keypoints, nOctaves, nOctaveLayers_,
