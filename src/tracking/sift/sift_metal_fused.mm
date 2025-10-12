@@ -34,23 +34,36 @@ bool initializeMetalPipelines(
 
     if (!cachedLibrary) {
         NSError* error = nil;
+        NSURL* libraryURL = nil;
 
-        // Try to load from runtime bin directory first
-        NSString* binPath = @"bin/sift_fused.metallib";
-        NSURL* libraryURL = [NSURL fileURLWithPath:binPath];
+        // Priority 1: Check SPM resource bundle (for Swift Package distribution)
+        NSString* resourcePath = [[NSBundle mainBundle] pathForResource:@"sift_fused" ofType:@"metallib"];
+        if (resourcePath) {
+            libraryURL = [NSURL fileURLWithPath:resourcePath];
+            cachedLibrary = [device newLibraryWithURL:libraryURL error:&error];
+        }
 
-        // Fallback: try relative to executable
-        if (![[NSFileManager defaultManager] fileExistsAtPath:binPath]) {
+        // Priority 2: Try runtime bin directory (for standalone C++ builds)
+        if (!cachedLibrary) {
+            NSString* binPath = @"bin/sift_fused.metallib";
+            if ([[NSFileManager defaultManager] fileExistsAtPath:binPath]) {
+                libraryURL = [NSURL fileURLWithPath:binPath];
+                cachedLibrary = [device newLibraryWithURL:libraryURL error:&error];
+            }
+        }
+
+        // Priority 3: Try relative to executable
+        if (!cachedLibrary) {
             NSString* execPath = [[NSBundle mainBundle] executablePath];
             NSString* execDir = [execPath stringByDeletingLastPathComponent];
             NSString* metalLibPath = [execDir stringByAppendingPathComponent:@"sift_fused.metallib"];
             libraryURL = [NSURL fileURLWithPath:metalLibPath];
+            cachedLibrary = [device newLibraryWithURL:libraryURL error:&error];
         }
 
-        cachedLibrary = [device newLibraryWithURL:libraryURL error:&error];
         if (!cachedLibrary) {
-            std::cerr << "Failed to load Metal library: " << [[error localizedDescription] UTF8String] << std::endl;
-            std::cerr << "Searched path: " << [binPath UTF8String] << std::endl;
+            std::cerr << "Failed to load Metal library from any location" << std::endl;
+            std::cerr << "Last error: " << [[error localizedDescription] UTF8String] << std::endl;
             return false;
         }
 

@@ -598,30 +598,37 @@ void findScaleSpaceExtremaMetal(
 
         // Load compiled Metal shader library
         NSError* error = nil;
+        NSURL* libraryURL = nil;
+        id<MTLLibrary> library = nil;
 
-        // Try to load from runtime bin directory first (where executables are)
-        NSString* binPath = @"bin/sift.metallib";
-        NSBundle* mainBundle = [NSBundle mainBundle];
-        NSString* bundlePath = [[mainBundle resourcePath] stringByAppendingPathComponent:binPath];
-        NSURL* libraryURL = [NSURL fileURLWithPath:bundlePath];
-
-        // Fallback: try current working directory
-        if (![[NSFileManager defaultManager] fileExistsAtPath:bundlePath]) {
-            libraryURL = [NSURL fileURLWithPath:@"bin/sift.metallib"];
+        // Priority 1: Check SPM resource bundle (for Swift Package distribution)
+        NSString* resourcePath = [[NSBundle mainBundle] pathForResource:@"sift" ofType:@"metallib"];
+        if (resourcePath) {
+            libraryURL = [NSURL fileURLWithPath:resourcePath];
+            library = [device newLibraryWithURL:libraryURL error:&error];
         }
 
-        // Fallback: try relative to executable
-        if (![[NSFileManager defaultManager] fileExistsAtPath:[libraryURL path]]) {
+        // Priority 2: Try runtime bin directory (for standalone C++ builds)
+        if (!library) {
+            NSString* binPath = @"bin/sift.metallib";
+            if ([[NSFileManager defaultManager] fileExistsAtPath:binPath]) {
+                libraryURL = [NSURL fileURLWithPath:binPath];
+                library = [device newLibraryWithURL:libraryURL error:&error];
+            }
+        }
+
+        // Priority 3: Try relative to executable
+        if (!library) {
             NSString* execPath = [[NSBundle mainBundle] executablePath];
             NSString* execDir = [execPath stringByDeletingLastPathComponent];
             NSString* metalLibPath = [execDir stringByAppendingPathComponent:@"sift.metallib"];
             libraryURL = [NSURL fileURLWithPath:metalLibPath];
+            library = [device newLibraryWithURL:libraryURL error:&error];
         }
 
-        id<MTLLibrary> library = [device newLibraryWithURL:libraryURL error:&error];
         if (!library) {
-            std::cerr << "Failed to load Metal library: " << [[error localizedDescription] UTF8String] << std::endl;
-            std::cerr << "Searched paths: " << [bundlePath UTF8String] << std::endl;
+            std::cerr << "Failed to load Metal library from any location" << std::endl;
+            std::cerr << "Last error: " << [[error localizedDescription] UTF8String] << std::endl;
             return;
         }
 
