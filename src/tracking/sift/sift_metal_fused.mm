@@ -29,7 +29,6 @@ bool initializeMetalPipelines(
 {
     static id<MTLLibrary> cachedLibrary = nil;
     static id<MTLComputePipelineState> cachedBlurAndDoGPipeline = nil;
-    static id<MTLComputePipelineState> cachedFusedPipeline = nil;
     static id<MTLComputePipelineState> cachedExtremaPipeline = nil;
 
     if (!cachedLibrary) {
@@ -55,20 +54,6 @@ bool initializeMetalPipelines(
             return false;
         }
 
-        // Create pipeline for fused extrema detection
-        id<MTLFunction> fusedFunction = [cachedLibrary newFunctionWithName:@"detectExtrema"];
-        if (!fusedFunction) {
-            std::cerr << "Failed to find Metal function: detectExtrema" << std::endl;
-            return false;
-        }
-
-        cachedFusedPipeline = [device newComputePipelineStateWithFunction:fusedFunction error:&error];
-        RELEASE_IF_MANUAL(fusedFunction);
-        if (!cachedFusedPipeline) {
-            std::cerr << "Failed to create extrema pipeline: " << [[error localizedDescription] UTF8String] << std::endl;
-            return false;
-        }
-
         id<MTLFunction> extremaFunction = [cachedLibrary newFunctionWithName:@"detectExtrema"];
         if (!extremaFunction) {
             std::cerr << "Failed to find Metal function: detectExtrema" << std::endl;
@@ -84,7 +69,6 @@ bool initializeMetalPipelines(
     }
 
     blurAndDoGPipeline = cachedBlurAndDoGPipeline;
-    fusedPipeline = cachedFusedPipeline;
     extremaPipeline = cachedExtremaPipeline;
     return true;
 }
@@ -430,45 +414,46 @@ void findScaleSpaceExtremaMetalFused(
 
             // Compute initial Gaussian layers and DoG sequentially
             // Each blur depends on the previous one, so we create separate encoders
-            id<MTLCommandBuffer> initCommandBuffer = [commandQueue commandBuffer];
+            id<MTLCommandBuffer> commandBuffer = [commandQueue commandBuffer];
 
-            for (int i = 1; i <= 3; i++) {
-                GaussianBlurParams blurParams;
-                blurParams.width = octaveWidth;
-                blurParams.height = octaveHeight;
-                blurParams.rowStride = rowStride;
-                blurParams.kernelSize = (int)gaussianKernels[i].size();
+            for (int i = 1; i < nLevels; i++) {
+                GaussianBlurParams params;
+                params.width = octaveWidth;
+                params.height = octaveHeight;
+                params.rowStride = rowStride;
+                params.kernelSize = (int)gaussianKernels[i].size();
 
-                id<MTLBuffer> blurParamsBuffer = [device newBufferWithBytes:&blurParams
-                                                                    length:sizeof(GaussianBlurParams)
-                                                                    options:MTLResourceStorageModeShared];
+                id<MTLBuffer> paramsBuffer = [device newBufferWithBytes:&params
+                                                    length:sizeof(GaussianBlurParams)
+                                                    options:MTLResourceStorageModeShared];
 
-                id<MTLBuffer> blurKernelBuffer = [device newBufferWithBytes:gaussianKernels[i].data()
-                                                                    length:gaussianKernels[i].size() * sizeof(float)
-                                                                    options:MTLResourceStorageModeShared];
+                id<MTLBuffer> kernelBuffer = [device newBufferWithBytes:gaussianKernels[i].data()
+                                                    length:gaussianKernels[i].size() * sizeof(float)
+                                                    options:MTLResourceStorageModeShared];
 
                 // Create a new encoder for each blur - ensures sequential execution
-                id<MTLComputeCommandEncoder> blurEncoder = [initCommandBuffer computeCommandEncoder];
+                id<MTLComputeCommandEncoder> encoder = [commandBuffer computeCommandEncoder];
 
-                [blurEncoder setComputePipelineState:blurAndDoGPipeline];
-                [blurEncoder setBuffer:gaussBuffers[i-1] offset:0 atIndex:0];
-                [blurEncoder setBuffer:gaussBuffers[i] offset:0 atIndex:1];
-                [blurEncoder setBuffer:dogBuffers[i-1] offset:0 atIndex:2];
-                [blurEncoder setBuffer:blurParamsBuffer offset:0 atIndex:3];
-                [blurEncoder setBuffer:blurKernelBuffer offset:0 atIndex:4];
+                [encoder setComputePipelineState:blurAndDoGPipeline];
+                [encoder setBuffer:gaussBuffers[i-1] offset:0 atIndex:0];
+                [encoder setBuffer:gaussBuffers[i] offset:0 atIndex:1];
+                [encoder setBuffer:dogBuffers[i-1] offset:0 atIndex:2];
+                [encoder setBuffer:paramsBuffer offset:0 atIndex:3];
+                [encoder setBuffer:kernelBuffer offset:0 atIndex:4];
 
                 MTLSize gridSize = MTLSizeMake(octaveWidth, octaveHeight, 1);
                 MTLSize threadgroupSize = MTLSizeMake(16, 16, 1);
 
-                [blurEncoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
-                [blurEncoder endEncoding];  // Ensures this blur completes before next encoder starts
+                [encoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
+                [encoder endEncoding];  // Ensures this blur completes before next encoder starts
 
-                RELEASE_IF_MANUAL(blurParamsBuffer);
-                RELEASE_IF_MANUAL(blurKernelBuffer);
+                RELEASE_IF_MANUAL(paramsBuffer);
+                RELEASE_IF_MANUAL(kernelBuffer);
             }
 
-            [initCommandBuffer commit];
-            [initCommandBuffer waitUntilCompleted];
+            [commandBuffer commit];
+            
+            [commandBuffer waitUntilCompleted];
 
 #ifdef LAR_PROFILE_METAL_SIFT
             blurTime += std::chrono::duration<double, std::milli>(
@@ -480,47 +465,13 @@ void findScaleSpaceExtremaMetalFused(
                 std::vector<id<MTLBuffer>>& gaussBuffers = resources.octaveBuffers[octave];
                 std::vector<id<MTLBuffer>>& dogBuffers = resources.dogBuffers[octave];
 
-                // Clear bitarray
-                uint32_t octavePixels = octaveWidth * octaveHeight;
-                uint32_t octaveBitarraySize = (octavePixels + 31) / 32;
-                memset(bitarrayBuffer.contents, 0, octaveBitarraySize * sizeof(uint32_t));
-
                 // Dispatch extrema detection kernel
             #ifdef LAR_PROFILE_METAL_SIFT
                 auto gpuKernelStart = std::chrono::high_resolution_clock::now();
             #endif
 
                 id<MTLCommandBuffer> commandBuffer = [commandQueue commandBuffer];
-                GaussianBlurParams blurParams;
-                blurParams.width = octaveWidth;
-                blurParams.height = octaveHeight;
-                blurParams.rowStride = rowStride;
-                blurParams.kernelSize = (int)gaussianKernels[layer+2].size();
 
-                id<MTLBuffer> blurParamsBuffer = [device newBufferWithBytes:&blurParams
-                                                                    length:sizeof(GaussianBlurParams)
-                                                                    options:MTLResourceStorageModeShared];
-
-                id<MTLBuffer> blurKernelBuffer = [device newBufferWithBytes:gaussianKernels[layer+2].data()
-                                                                    length:gaussianKernels[layer+2].size() * sizeof(float)
-                                                                    options:MTLResourceStorageModeShared];
-
-                id<MTLComputeCommandEncoder> blurEncoder = [commandBuffer computeCommandEncoder];
-
-                [blurEncoder setComputePipelineState:blurAndDoGPipeline];
-                [blurEncoder setBuffer:gaussBuffers[layer+1] offset:0 atIndex:0];
-                [blurEncoder setBuffer:gaussBuffers[layer+2] offset:0 atIndex:1];
-                [blurEncoder setBuffer:dogBuffers[layer+1] offset:0 atIndex:2];
-                [blurEncoder setBuffer:blurParamsBuffer offset:0 atIndex:3];
-                [blurEncoder setBuffer:blurKernelBuffer offset:0 atIndex:4];
-
-                MTLSize gridSize = MTLSizeMake(octaveWidth, octaveHeight, 1);
-                MTLSize threadgroupSize = MTLSizeMake(16, 16, 1);
-
-                [blurEncoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
-                [blurEncoder endEncoding];
-
-                {
                 // Setup parameters
                 ExtremaParams params;
                 params.width = octaveWidth;
@@ -553,7 +504,7 @@ void findScaleSpaceExtremaMetalFused(
 
                 [encoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
                 [encoder endEncoding];
-                }
+                
                 [commandBuffer commit];
                 [commandBuffer waitUntilCompleted];
 
@@ -563,8 +514,6 @@ void findScaleSpaceExtremaMetalFused(
                     std::chrono::high_resolution_clock::now() - gpuKernelStart).count();
             #endif
 
-                RELEASE_IF_MANUAL(blurParamsBuffer);
-                RELEASE_IF_MANUAL(blurKernelBuffer);
                 // Extract keypoints from previous layer (GPU work is now complete)
                 extractKeypoints(
                     bitarrayBuffer, octave, nLevels, octaveBitarraySize,

@@ -6,6 +6,7 @@
 #include "lar/tracking/sift/sift_constants.h"
 #import <Metal/Metal.h>
 #include <opencv2/core.hpp>
+#include <opencv2/imgproc.hpp>
 #include <vector>
 
 // Helper macro for conditional release

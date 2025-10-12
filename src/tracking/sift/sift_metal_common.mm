@@ -125,6 +125,22 @@ id<MTLLibrary> loadMetalLibrary(id<MTLDevice> device, NSString* libraryName) {
 
         return nil;
     }
+    
+}
+
+// Create 1D Gaussian kernel using OpenCV's bit-exact implementation
+std::vector<float> createGaussianKernel(double sigma) {
+    // OpenCV formula for CV_32F: cvRound(sigma*4*2+1)|1 ensures odd size
+    int ksize = cvRound(sigma * 8 + 1) | 1;
+    cv::Mat kernelMat = cv::getGaussianKernel(ksize, sigma, CV_32F);
+
+    // Convert cv::Mat to std::vector<float>
+    std::vector<float> kernel(ksize);
+    for (int i = 0; i < ksize; i++) {
+        kernel[i] = kernelMat.at<float>(i);
+    }
+
+    return kernel;
 }
 
 } // namespace lar
