@@ -11,6 +11,8 @@
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
 #include "lar/tracking/sift/sift.h"
+#include "lar/tracking/sift/sift_config.h"
+#include "lar/tracking/sift/sift_common.h"
 #include "lar/tracking/sift/sift_constants.h"
 #include "sift_metal_common.h"
 #include <iostream>
@@ -19,8 +21,6 @@
 #include <mutex>
 #include <atomic>
 #include <condition_variable>
-
-#define LAR_PROFILE_METAL_SIFT 1
 
 namespace lar {
 
@@ -114,7 +114,7 @@ static void computeGaussianKernels(
         double sig_prev = std::pow(k, (double)(i-1)) * sigma;
         double sig_total = sig_prev * k;
         sigmas[i] = std::sqrt(sig_total*sig_total - sig_prev*sig_prev);
-        kernels[i] = createGaussianKernel(sigmas[i]);
+        kernels[i] = sift_common::createGaussianKernel(sigmas[i]);  // Use shared implementation
     }
 }
 
@@ -278,7 +278,7 @@ void extractKeypointsAndDescriptors(
                 cv::KeyPoint kpt;
                 int keypoint_layer = layer; // make copy so that adjustLocalExtrema mutates this one
 
-                if (!adjustLocalExtrema(dog_pyr, kpt, octave, keypoint_layer, r, c_pos,
+                if (!sift_common::adjustLocalExtrema(dog_pyr, kpt, octave, keypoint_layer, r, c_pos,
                                     nOctaveLayers, (float)contrastThreshold,
                                     (float)edgeThreshold, (float)sigma)) {
                     continue;
@@ -290,7 +290,7 @@ void extractKeypointsAndDescriptors(
                 float scl_octv = kpt.size * 0.5f / (1 << octave);
 
                 int gaussIdx = octave * (nOctaveLayers + 3) + keypoint_layer;
-                float omax = calcOrientationHist(gauss_pyr[gaussIdx],
+                float omax = sift_common::calcOrientationHist(gauss_pyr[gaussIdx],
                                                 cv::Point(c_pos, r),
                                                 cvRound(SIFT_ORI_RADIUS * scl_octv),
                                                 SIFT_ORI_SIG_FCTR * scl_octv,
@@ -329,7 +329,7 @@ void extractKeypointsAndDescriptors(
                         if (std::abs(angle - 360.f) < FLT_EPSILON)
                             angle = 0.f;
 
-                        calcSIFTDescriptor(img, ptf, angle,
+                        sift_common::calcSIFTDescriptor(img, ptf, angle,
                                          scl, SIFT_DESCR_WIDTH, SIFT_DESCR_HIST_BINS,
                                          localDescriptors, count);
 
@@ -344,8 +344,6 @@ void extractKeypointsAndDescriptors(
     if (count > 0) {
         descriptors = localDescriptors.rowRange(0, count).clone();
     }
-
-    std::cout << "extracted " << count << " keypoints+descriptors from octave " << octave << " layer " << layer << std::endl;
 }
 
 // ============================================================================
@@ -690,32 +688,15 @@ void findScaleSpaceExtremaMetalPipelined(
             }
         }
 
-#ifdef LAR_PROFILE_METAL_SIFT
-        cpuPrepTime = std::chrono::duration<double, std::milli>(
-            std::chrono::high_resolution_clock::now() - cpuPrepStart).count();
-#endif
-
         // ========================================================================
         // Wait for all layers to complete (GPU work + async CPU extraction in handlers)
         // Producer-consumer pattern: CPU extraction overlaps with GPU execution
         // ========================================================================
-#ifdef LAR_PROFILE_METAL_SIFT
-        auto gpuWaitStart = std::chrono::high_resolution_clock::now();
-#endif
 
         // Wait for all command buffers (completion handlers will have extracted keypoints+descriptors)
         for (auto& cmdBuf : allCommandBuffers) {
             [cmdBuf waitUntilCompleted];
         }
-
-#ifdef LAR_PROFILE_METAL_SIFT
-        double gpuWaitTime = std::chrono::duration<double, std::milli>(
-            std::chrono::high_resolution_clock::now() - gpuWaitStart).count();
-
-        // Note: CPU extraction happens asynchronously in Metal completion handlers
-        // This achieves true CPU/GPU overlap - extraction starts as soon as each layer completes
-        cpuExtractTime = 0;  // Async extraction time is included in gpuWaitTime
-#endif
 
         // Merge keypoints and descriptors in deterministic layer order
         // This ensures keypoint[i] corresponds to descriptor.row(i)
@@ -746,23 +727,6 @@ void findScaleSpaceExtremaMetalPipelined(
             RELEASE_IF_MANUAL(buffer);
         }
 
-#ifdef LAR_PROFILE_METAL_SIFT
-        auto endTotal = std::chrono::high_resolution_clock::now();
-        double totalTime = std::chrono::duration<double, std::milli>(
-            endTotal - startTotal).count();
-
-        std::cout << "\n=== Metal Pipelined SIFT Profile (Per-Layer) ===\n";
-        std::cout << "CPU Operations:\n";
-        std::cout << "  Octave prep:         " << cpuPrepTime << " ms\n";
-        std::cout << "  Keypoint extraction: " << cpuExtractTime << " ms\n";
-        std::cout << "GPU Operations:\n";
-        std::cout << "  GPU wait time:       " << gpuWaitTime << " ms (wall-clock)\n";
-        std::cout << "  Command buffers:     " << allCommandBuffers.size() << " (per-layer)\n";
-        std::cout << "Total:\n";
-        std::cout << "  Wall-clock time:     " << totalTime << " ms\n";
-        std::cout << "  Speedup potential:   " << (cpuPrepTime + gpuWaitTime) / gpuWaitTime << "x (overlap)\n";
-        std::cout << "=================================================\n\n";
-#endif
     }
 }
 

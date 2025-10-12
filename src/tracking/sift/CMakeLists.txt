@@ -3,19 +3,19 @@
 
 set(SIFT_HEADER_LIST
   "${PROJECT_SOURCE_DIR}/include/lar/tracking/sift/sift.h"
+  "${PROJECT_SOURCE_DIR}/include/lar/tracking/sift/sift_config.h"
+  "${PROJECT_SOURCE_DIR}/include/lar/tracking/sift/sift_common.h"
   "${PROJECT_SOURCE_DIR}/include/lar/tracking/sift/sift_constants.h"
 )
 
 set(SIFT_SOURCES
   sift.cpp
+  sift_common.cpp
 )
 
 # Add Metal implementation on Apple platforms if enabled
 if(LAR_USE_METAL_SIFT AND APPLE)
-  list(APPEND SIFT_SOURCES sift_metal_common.mm sift_metal.mm)
-  if(LAR_USE_METAL_SIFT_FUSED)
-    list(APPEND SIFT_SOURCES sift_metal_fused.mm sift_metal_pipelined.mm)
-  endif()
+  list(APPEND SIFT_SOURCES sift_metal_common.mm sift_metal_pipelined.mm)
   message(STATUS "Metal-accelerated SIFT enabled")
 endif()
 

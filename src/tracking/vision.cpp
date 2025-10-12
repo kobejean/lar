@@ -7,7 +7,7 @@
 
 namespace lar {
 
-  const float RATIO_TEST_THRESHOLD = 0.98f;
+  const float RATIO_TEST_THRESHOLD = 0.99f;
   const float MAX_DISTANCE_THRESHOLD = 210.0f;
   const bool ENABLE_CROSS_CHECK = false; // seems best to use only for image to image matching
 

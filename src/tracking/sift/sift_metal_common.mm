@@ -6,6 +6,12 @@
 
 namespace lar {
 
+// Thread-safe singleton for Metal resources
+MetalSiftResources& getMetalResources() {
+    static MetalSiftResources resources;
+    return resources;
+}
+
 // Load a Metal shader library with comprehensive fallback locations
 id<MTLLibrary> loadMetalLibrary(id<MTLDevice> device, NSString* libraryName) {
     @autoreleasepool {

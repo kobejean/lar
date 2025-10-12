@@ -29,6 +29,9 @@ constexpr float SIFT_DESCR_SCL_FCTR = 3.f;
 constexpr float SIFT_DESCR_MAG_THR = 0.2f;
 constexpr float SIFT_INT_DESCR_FCTR = 512.f;
 
+// Fixed-point scale factor (1 = floating-point, higher values for fixed-point arithmetic)
+constexpr int SIFT_FIXPT_SCALE = 1;
+
 } // namespace lar
 
 #endif // LAR_TRACKING_SIFT_CONSTANTS_H

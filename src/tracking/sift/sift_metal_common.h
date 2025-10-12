@@ -1,5 +1,5 @@
-// Shared utilities for Metal-accelerated SIFT implementations
-// This header contains types and functions shared between sift_metal.mm and sift_metal_fused.mm
+// Shared utilities for Metal-accelerated SIFT implementation
+// This header contains types and functions used by sift_metal_pipelined.mm for GPU resource management
 #ifndef LAR_TRACKING_SIFT_METAL_COMMON_H
 #define LAR_TRACKING_SIFT_METAL_COMMON_H
 
