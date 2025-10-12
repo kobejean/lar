@@ -82,20 +82,6 @@ namespace lar {
     return success;
   }
 
-  bool Tracker::localize(cv::InputArray image, const cv::Mat& intrinsics, cv::Mat &transform, const cv::Mat &gvec) {
-    cv::Mat rvec, tvec;
-    if (!transform.empty()) {
-      std::cout << "transform" << transform << std::endl;
-      fromTransform(transform, rvec, tvec);
-    }
-
-    bool success = localize(image, intrinsics, cv::Mat(), rvec, tvec, gvec);
-    if (success) {
-      toTransform(rvec, tvec, transform);
-    }
-    return success;
-  }
-
   bool Tracker::localize(cv::InputArray image, const cv::Mat& intrinsics, const cv::Mat& dist_coeffs, cv::Mat &rvec, cv::Mat &tvec, const cv::Mat &gvec, double query_x, double query_z, double query_diameter) {
     for (Landmark *landmark : local_landmarks) { landmark->is_matched = false; }
     this->matches.clear();
@@ -162,13 +148,11 @@ namespace lar {
       landmark->is_matched = true;
       this->inliers.emplace_back(landmark, kpts[match.queryIdx]);
     }
-    // for (auto& match : matches) {
-    //   this->inliers.emplace_back(local_landmarks[match.trainIdx], kpts[match.queryIdx]);
-    // }
+    
 // #endif
 
     return success;
-}
+  }
 
   // Private Methods
 
