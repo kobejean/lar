@@ -215,7 +215,7 @@ kernel void gaussianBlurVertical(
 // Complexity cost: Requires threadgroup coordination and halo loading
 
 #pragma METAL fp math_mode(safe)
-kernel void gaussianBlurFused(
+kernel void gaussianBlur(
     const device float* source [[buffer(0)]],
     device float* destination [[buffer(1)]],
     constant GaussianBlurParams& params [[buffer(2)]],

@@ -23,9 +23,9 @@ namespace lar {
 // Initialize Metal pipelines (cached across calls)
 bool initializeMetalPipelines(
     id<MTLDevice> device,
-    id<MTLComputePipelineState>& blurAndDoGPipeline,
-    id<MTLComputePipelineState>& extremaPipeline,
-    id<MTLComputePipelineState>& fusedPipeline)
+    __strong id<MTLComputePipelineState>& blurAndDoGPipeline,
+    __strong id<MTLComputePipelineState>& extremaPipeline,
+    __strong id<MTLComputePipelineState>& fusedPipeline)
 {
     static id<MTLLibrary> cachedLibrary = nil;
     static id<MTLComputePipelineState> cachedBlurAndDoGPipeline = nil;
@@ -69,9 +69,9 @@ bool initializeMetalPipelines(
         }
 
         // Create pipeline for fused extrema detection
-        id<MTLFunction> fusedFunction = [cachedLibrary newFunctionWithName:@"detectScaleSpaceExtremaFused"];
+        id<MTLFunction> fusedFunction = [cachedLibrary newFunctionWithName:@"detectExtrema"];
         if (!fusedFunction) {
-            std::cerr << "Failed to find Metal function: detectScaleSpaceExtremaFused" << std::endl;
+            std::cerr << "Failed to find Metal function: detectExtrema" << std::endl;
             return false;
         }
 
@@ -584,7 +584,7 @@ void findScaleSpaceExtremaMetalFused(
                 params.threshold = threshold;
                 params.border = SIFT_IMG_BORDER;
                 params.octave = o;
-                params.layer = 1;
+                params.layer = layer;
 
                 // Create parameter buffer
                 id<MTLBuffer> paramsBuffer = [device newBufferWithBytes:&params
@@ -610,16 +610,14 @@ void findScaleSpaceExtremaMetalFused(
                 [encoder endEncoding];
                 }
                 [commandBuffer commit];
+                [commandBuffer waitUntilCompleted];
 
-                // process last keypoints while waiting
+                // Extract keypoints from previous layer (GPU work is now complete)
                 extractKeypoints(
                     bitarrayBuffer, octave, nLevels, octaveBitarraySize,
                     octaveWidth, layer-1, nOctaveLayers, contrastThreshold, edgeThreshold, sigma,
                     gaussIdx, cpuTime, gauss_pyr, dog_pyr, keypoints
                 );
-
-
-                [commandBuffer waitUntilCompleted];
 
                 std::swap(bitarrayBuffer, nextBitarrayBuffer);
 

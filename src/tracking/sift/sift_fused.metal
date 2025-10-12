@@ -541,7 +541,7 @@ kernel void detectScaleSpaceExtremaFused(
 // - Memory efficient (1 bit per pixel vs 4 bytes per candidate)
 // - Host scans bitarray using SIMD for fast candidate extraction
 #pragma METAL fp math_mode(safe)
-kernel void detectScaleSpaceExtrema(
+kernel void detectExtrema(
     const device float* prevDoG [[buffer(0)]],   // DoG layer i-1
     const device float* currDoG [[buffer(1)]],   // DoG layer i (center)
     const device float* nextDoG [[buffer(2)]],   // DoG layer i+1

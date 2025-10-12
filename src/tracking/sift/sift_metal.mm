@@ -363,7 +363,7 @@ void buildGaussianPyramidMetal(const cv::Mat& base, std::vector<cv::Mat>& pyr,
                     }
 
                     // Create pipeline for fused blur
-                    id<MTLFunction> fusedFunc = [library newFunctionWithName:@"gaussianBlurFused"];
+                    id<MTLFunction> fusedFunc = [library newFunctionWithName:@"gaussianBlur"];
                     if (fusedFunc) {
                         fusedPipeline = [device newComputePipelineStateWithFunction:fusedFunc error:&error];
                         RELEASE_IF_MANUAL(fusedFunc);

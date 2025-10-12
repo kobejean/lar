@@ -60,7 +60,7 @@ namespace lar {
     nlohmann::json map_json = data->map;
     // Save
     std::ofstream file(dir + "/map.json");
-    file << std::setw(2) << map_json << std::endl;
+    file << map_json << std::endl;
   }
 
 }
