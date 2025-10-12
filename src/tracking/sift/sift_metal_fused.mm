@@ -33,39 +33,13 @@ bool initializeMetalPipelines(
     static id<MTLComputePipelineState> cachedExtremaPipeline = nil;
 
     if (!cachedLibrary) {
-        NSError* error = nil;
-        NSURL* libraryURL = nil;
-
-        // Priority 1: Check SPM resource bundle (for Swift Package distribution)
-        NSString* resourcePath = [[NSBundle mainBundle] pathForResource:@"sift_fused" ofType:@"metallib"];
-        if (resourcePath) {
-            libraryURL = [NSURL fileURLWithPath:resourcePath];
-            cachedLibrary = [device newLibraryWithURL:libraryURL error:&error];
-        }
-
-        // Priority 2: Try runtime bin directory (for standalone C++ builds)
+        // Load Metal library using shared function
+        cachedLibrary = loadMetalLibrary(device, @"sift_fused");
         if (!cachedLibrary) {
-            NSString* binPath = @"bin/sift_fused.metallib";
-            if ([[NSFileManager defaultManager] fileExistsAtPath:binPath]) {
-                libraryURL = [NSURL fileURLWithPath:binPath];
-                cachedLibrary = [device newLibraryWithURL:libraryURL error:&error];
-            }
-        }
-
-        // Priority 3: Try relative to executable
-        if (!cachedLibrary) {
-            NSString* execPath = [[NSBundle mainBundle] executablePath];
-            NSString* execDir = [execPath stringByDeletingLastPathComponent];
-            NSString* metalLibPath = [execDir stringByAppendingPathComponent:@"sift_fused.metallib"];
-            libraryURL = [NSURL fileURLWithPath:metalLibPath];
-            cachedLibrary = [device newLibraryWithURL:libraryURL error:&error];
-        }
-
-        if (!cachedLibrary) {
-            std::cerr << "Failed to load Metal library from any location" << std::endl;
-            std::cerr << "Last error: " << [[error localizedDescription] UTF8String] << std::endl;
             return false;
         }
+
+        NSError* error = nil;
 
         // Create pipeline for fused blur
         id<MTLFunction> fusedBlurAndDoGFunc = [cachedLibrary newFunctionWithName:@"gaussianBlurAndDoGFused"];

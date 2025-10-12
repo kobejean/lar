@@ -9,7 +9,7 @@
 
 // Define LAR_USE_METAL_SIFT to enable Metal-accelerated Gaussian pyramid
 #define LAR_USE_METAL_SIFTO 1
-#define LAR_USE_METAL_SIFTO_FUSED 1
+// #define LAR_USE_METAL_SIFTO_FUSED 1
 // #define LAR_PROFILE_SIFT 1
 
 #ifdef LAR_USE_METAL_SIFTO

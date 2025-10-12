@@ -103,6 +103,23 @@ struct MetalSiftResources {
 MetalSiftResources& getMetalResources();
 
 // ============================================================================
+// Metal Library Loading
+// ============================================================================
+
+/// Load a Metal shader library with comprehensive fallback locations
+/// @param device The Metal device to use for loading the library
+/// @param libraryName The base name of the metallib file (without extension)
+/// @return The loaded Metal library, or nil if loading failed
+/// @note Tries multiple locations in priority order:
+///       1. SPM resource bundle in main bundle
+///       2. Default library (SPM embedded)
+///       3. bin/ directory (CMake builds)
+///       4. Relative to executable
+///       5. App bundle Resources/ (macOS/iOS apps)
+///       6. SPM build directory (for tests)
+id<MTLLibrary> loadMetalLibrary(id<MTLDevice> device, NSString* libraryName);
+
+// ============================================================================
 // Gaussian Kernel Utilities
 // ============================================================================
 

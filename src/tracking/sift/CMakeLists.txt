@@ -12,7 +12,7 @@ set(SIFT_SOURCES
 
 # Add Metal implementation on Apple platforms if enabled
 if(LAR_USE_METAL_SIFT AND APPLE)
-  list(APPEND SIFT_SOURCES sift_metal.mm)
+  list(APPEND SIFT_SOURCES sift_metal_common.mm sift_metal.mm)
   if(LAR_USE_METAL_SIFT_FUSED)
     list(APPEND SIFT_SOURCES sift_metal_fused.mm)
   endif()

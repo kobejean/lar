@@ -131,7 +131,7 @@ void buildGaussianPyramidMetal(const cv::Mat& base, std::vector<cv::Mat>& pyr,
                 MTLTextureDescriptor* tempDesc = [MTLTextureDescriptor
                     texture2DDescriptorWithPixelFormat:MTLPixelFormatR32Float
                     width:octaveWidth height:octaveHeight mipmapped:NO];
-                tempDesc.storageMode = MTLStorageModeShared;
+                tempDesc.storageMode = MTLStorageModePrivate;
                 tempDesc.usage = MTLTextureUsageShaderRead | MTLTextureUsageShaderWrite;
                 resources.tempTextures[o] = [resources.tempBuffers[o] newTextureWithDescriptor:tempDesc
                                                                                          offset:0
@@ -244,21 +244,12 @@ void buildGaussianPyramidMetal(const cv::Mat& base, std::vector<cv::Mat>& pyr,
                 static id<MTLComputePipelineState> vertPipeline = nil;
 
                 if (!library) {
-                    NSError* error = nil;
-                    NSString* binPath = @"bin/sift.metallib";
-                    NSURL* libraryURL = [NSURL fileURLWithPath:binPath];
-
-                    if (![[NSFileManager defaultManager] fileExistsAtPath:binPath]) {
-                        NSString* execPath = [[NSBundle mainBundle] executablePath];
-                        NSString* execDir = [execPath stringByDeletingLastPathComponent];
-                        libraryURL = [NSURL fileURLWithPath:[execDir stringByAppendingPathComponent:@"sift.metallib"]];
-                    }
-
-                    library = [device newLibraryWithURL:libraryURL error:&error];
+                    library = loadMetalLibrary(device, @"sift");
                     if (!library) {
-                        std::cerr << "Failed to load custom blur Metal library: " << [[error localizedDescription] UTF8String] << std::endl;
                         return;  // Fatal error
                     }
+
+                    NSError* error = nil;
 
                     // Create pipeline for horizontal blur
                     id<MTLFunction> horizFunc = [library newFunctionWithName:@"gaussianBlurHorizontal"];
@@ -346,21 +337,12 @@ void buildGaussianPyramidMetal(const cv::Mat& base, std::vector<cv::Mat>& pyr,
                 static id<MTLComputePipelineState> fusedPipeline = nil;
 
                 if (!library) {
-                    NSError* error = nil;
-                    NSString* binPath = @"bin/sift.metallib";
-                    NSURL* libraryURL = [NSURL fileURLWithPath:binPath];
-
-                    if (![[NSFileManager defaultManager] fileExistsAtPath:binPath]) {
-                        NSString* execPath = [[NSBundle mainBundle] executablePath];
-                        NSString* execDir = [execPath stringByDeletingLastPathComponent];
-                        libraryURL = [NSURL fileURLWithPath:[execDir stringByAppendingPathComponent:@"sift.metallib"]];
-                    }
-
-                    library = [device newLibraryWithURL:libraryURL error:&error];
+                    library = loadMetalLibrary(device, @"sift");
                     if (!library) {
-                        std::cerr << "Failed to load fused blur Metal library: " << [[error localizedDescription] UTF8String] << std::endl;
                         return;  // Fatal error
                     }
+
+                    NSError* error = nil;
 
                     // Create pipeline for fused blur
                     id<MTLFunction> fusedFunc = [library newFunctionWithName:@"gaussianBlur"];
@@ -596,39 +578,9 @@ void findScaleSpaceExtremaMetal(
         double gpuTime = 0, cpuTime = 0;
 #endif
 
-        // Load compiled Metal shader library
-        NSError* error = nil;
-        NSURL* libraryURL = nil;
-        id<MTLLibrary> library = nil;
-
-        // Priority 1: Check SPM resource bundle (for Swift Package distribution)
-        NSString* resourcePath = [[NSBundle mainBundle] pathForResource:@"sift" ofType:@"metallib"];
-        if (resourcePath) {
-            libraryURL = [NSURL fileURLWithPath:resourcePath];
-            library = [device newLibraryWithURL:libraryURL error:&error];
-        }
-
-        // Priority 2: Try runtime bin directory (for standalone C++ builds)
+        // Load compiled Metal shader library using shared function
+        id<MTLLibrary> library = loadMetalLibrary(device, @"sift");
         if (!library) {
-            NSString* binPath = @"bin/sift.metallib";
-            if ([[NSFileManager defaultManager] fileExistsAtPath:binPath]) {
-                libraryURL = [NSURL fileURLWithPath:binPath];
-                library = [device newLibraryWithURL:libraryURL error:&error];
-            }
-        }
-
-        // Priority 3: Try relative to executable
-        if (!library) {
-            NSString* execPath = [[NSBundle mainBundle] executablePath];
-            NSString* execDir = [execPath stringByDeletingLastPathComponent];
-            NSString* metalLibPath = [execDir stringByAppendingPathComponent:@"sift.metallib"];
-            libraryURL = [NSURL fileURLWithPath:metalLibPath];
-            library = [device newLibraryWithURL:libraryURL error:&error];
-        }
-
-        if (!library) {
-            std::cerr << "Failed to load Metal library from any location" << std::endl;
-            std::cerr << "Last error: " << [[error localizedDescription] UTF8String] << std::endl;
             return;
         }
 
@@ -639,6 +591,7 @@ void findScaleSpaceExtremaMetal(
             return;
         }
 
+        NSError* error = nil;
         id<MTLComputePipelineState> pipeline = [device newComputePipelineStateWithFunction:extremaFunction
                                                                                       error:&error];
         if (!pipeline) {
