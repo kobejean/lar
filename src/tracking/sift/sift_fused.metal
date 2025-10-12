@@ -197,34 +197,58 @@ kernel void gaussianBlurAndDoGFused(
     uint2 tgSize [[threads_per_threadgroup]])
 {
     // Tile configuration: 16×16 processing + vertical halo only
-    const int TILE_HEIGHT = 16;
-    const int MAX_PADDED_HEIGHT = TILE_HEIGHT + 26;
+    const int TILE_SIZE = 16;
     int radius = params.kernelSize / 2;
-    int paddedHeight = TILE_HEIGHT + 2 * radius;  // Only need vertical halo
-    threadgroup float sharedHoriz[MAX_PADDED_HEIGHT][256/TILE_HEIGHT];
+    int paddedHeight = TILE_SIZE + 2 * radius;  // Only need vertical halo
+
+    // Shared memory for horizontal blur results (with vertical halo)
+    // Each column stores TILE_SIZE rows + 2*radius halo rows
+    // Max kernel size ~27 (sigma ~3.0), so max radius ~13, max paddedHeight = 16 + 26 = 42
+    threadgroup float sharedHoriz[48][16];  // [paddedHeight][TILE_SIZE]
 
     int globalX = gid.x;
     int globalY = gid.y;
     int localX = tid.x;
     int localY = tid.y;
-    int sharedY = localY + radius;
 
     // Calculate tile origin in Y dimension (X doesn't need tiling)
-    int tileY = (gid.y / TILE_HEIGHT) * TILE_HEIGHT - radius;
+    int tileY = (gid.y / TILE_SIZE) * TILE_SIZE - radius;
 
     // === Step 1: Horizontal blur (global → shared) ===
     // Each thread processes multiple rows to fill the padded height
-    for (int py = localY; py < paddedHeight; py += TILE_HEIGHT) {
-        // Skip if X is out of bounds
-        if (globalX >= params.width) continue;
+    for (int py = localY; py < paddedHeight; py += tgSize.y) {
+        int srcY = tileY + py;
 
         // Clamp to image bounds (border replication)
-        int srcY = clamp(tileY + py, 0, params.height - 1);
+        srcY = clamp(srcY, 0, params.height - 1);
+
+        // Skip if X is out of bounds
+        if (globalX >= params.width) {
+            continue;
+        }
+
+        // Perform horizontal blur exactly like gaussianBlurHorizontal
+        float centerPixel = currGauss[srcY * params.rowStride + globalX];
+        float gauss = gaussKernel[radius] * centerPixel;
+
+        // Symmetric pairs: m[j]*left + m[j]*right
+        for (int j = 0; j < radius; j++) {
+            int leftX = globalX - radius + j;
+            int rightX = globalX + radius - j;
+
+            // Border replication via clamp
+            leftX = clamp(leftX, 0, params.width - 1);
+            rightX = clamp(rightX, 0, params.width - 1);
+
+            float leftPixel = currGauss[srcY * params.rowStride + leftX];
+            float rightPixel = currGauss[srcY * params.rowStride + rightX];
+            float weight = gaussKernel[j];
+
+            gauss = gauss + (weight * leftPixel + weight * rightPixel);
+        }
 
         // Store in shared memory
-        sharedHoriz[py][localX] = horizontalGaussianBlur(
-            currGauss, gaussKernel, globalX, srcY, radius, params.width, params.rowStride
-        );
+        sharedHoriz[py][localX] = gauss;
     }
 
     // Wait for all threads to finish horizontal blur
@@ -232,13 +256,35 @@ kernel void gaussianBlurAndDoGFused(
 
     // === Step 2: Vertical blur (shared → global) ===
     // Only process valid output pixels
-    if (globalX >= params.width || globalY >= params.height) return;
+    if (globalX >= params.width || globalY >= params.height) {
+        return;
+    }
+
+    // Calculate position in shared memory (accounting for halo offset)
+    int sharedY = localY + radius;
+
+    // Perform vertical blur exactly like gaussianBlurVertical
+    float centerPixel = sharedHoriz[sharedY][localX];
+    float gauss = gaussKernel[radius] * centerPixel;
+
+    // Symmetric pairs: m[j]*top + m[j]*bottom
+    for (int j = 0; j < radius; j++) {
+        int topY = sharedY - radius + j;
+        int bottomY = sharedY + radius - j;
+
+        // Clamp to shared memory bounds (sharedHoriz is [48][16])
+        topY = clamp(topY, 0, 47);
+        bottomY = clamp(bottomY, 0, 47);
+
+        float topPixel = sharedHoriz[topY][localX];
+        float bottomPixel = sharedHoriz[bottomY][localX];
+        float weight = gaussKernel[j];
+
+        gauss = gauss + (weight * topPixel + weight * bottomPixel);
+    }
 
     // Write final result to global memory
     int idx = globalY * params.rowStride + globalX;
-    float gauss = verticalGaussianBlur(
-        (const threadgroup float*)sharedHoriz, gaussKernel, localX, sharedY, radius, 47, 16
-    );
     nextGauss[idx] = gauss;
     nextDoG[idx] = gauss - currGauss[idx];
 }

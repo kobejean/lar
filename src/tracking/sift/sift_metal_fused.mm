@@ -243,7 +243,7 @@ void extractKeypoints(
 #endif
 
     uint32_t* bitarray = (uint32_t*)bitarrayBuffer.contents;
-
+    int count = 0;
     for (uint32_t chunkIdx = 0; chunkIdx < octaveBitarraySize; chunkIdx++) {
         uint32_t chunk = bitarray[chunkIdx];
         if (chunk == 0) continue;
@@ -289,12 +289,13 @@ void extractKeypoints(
                             kpt.angle = 0.f;
 
                         keypoints.push_back(kpt);
+                        count++;
                     }
                 }
             }
         }
     }
-
+    std::cout << "extracted keypoints from octave " << octave << " layer " << layer << " adding " << count << " keypoints" << std::endl;
 #ifdef LAR_PROFILE_METAL_SIFT
     cpuTime += std::chrono::duration<double, std::milli>(
         std::chrono::high_resolution_clock::now() - cpuStart).count();
@@ -594,9 +595,9 @@ void findScaleSpaceExtremaMetalFused(
                 id<MTLComputeCommandEncoder> encoder = [commandBuffer computeCommandEncoder];
 
                 [encoder setComputePipelineState:extremaPipeline];
-                [encoder setBuffer:dogBuffers[0] offset:0 atIndex:0]; // prevLayer
-                [encoder setBuffer:dogBuffers[1] offset:0 atIndex:1]; // currLayer
-                [encoder setBuffer:dogBuffers[2] offset:0 atIndex:2]; // nextLayer
+                [encoder setBuffer:dogBuffers[layer-1] offset:0 atIndex:0]; // prevLayer
+                [encoder setBuffer:dogBuffers[layer] offset:0 atIndex:1]; // currLayer
+                [encoder setBuffer:dogBuffers[layer+1] offset:0 atIndex:2]; // nextLayer
                 [encoder setBuffer:nextBitarrayBuffer offset:0 atIndex:3];  // bitarray output
                 [encoder setBuffer:paramsBuffer offset:0 atIndex:5];
 
@@ -633,7 +634,7 @@ void findScaleSpaceExtremaMetalFused(
 
             extractKeypoints(
                 bitarrayBuffer, octave, nLevels, octaveBitarraySize,
-                octaveWidth, nOctaveLayers-1, nOctaveLayers, contrastThreshold, edgeThreshold, sigma,
+                octaveWidth, nOctaveLayers, nOctaveLayers, contrastThreshold, edgeThreshold, sigma,
                 gaussIdx, cpuTime, gauss_pyr, dog_pyr, keypoints
             );
 

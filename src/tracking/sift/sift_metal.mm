@@ -39,7 +39,7 @@ std::vector<float> createGaussianKernel(double sigma) {
 // Single-threaded Metal implementation with resource reuse
 void buildGaussianPyramidMetal(const cv::Mat& base, std::vector<cv::Mat>& pyr,
                                 int nOctaves, const std::vector<double>& sigmas) {
-    GaussianKernelMode kernelMode = GaussianKernelMode::CustomSeparable;
+    GaussianKernelMode kernelMode = GaussianKernelMode::CustomFused;
     @autoreleasepool {
         MetalSiftResources& resources = getMetalResources();
         int nLevels = (int)sigmas.size();
@@ -719,7 +719,7 @@ void findScaleSpaceExtremaMetal(
                 auto cpuStart = std::chrono::high_resolution_clock::now();
 #endif
                 uint32_t* bitarray = (uint32_t*)bitarrayBuffer.contents;
-
+                int count = 0;
                 // Scan the bitarray for set bits
                 for (uint32_t chunkIdx = 0; chunkIdx < octaveBitarraySize; chunkIdx++) {
                     uint32_t chunk = bitarray[chunkIdx];
@@ -771,12 +771,14 @@ void findScaleSpaceExtremaMetal(
                                         kpt.angle = 0.f;
 
                                     keypoints.push_back(kpt);
+                                    count++;
                                 }
                             }
                         }
                     }
                 }
 
+                std::cout << "extracted keypoints from octave " << params.octave << " layer " << params.layer << " adding " << count << " keypoints" << std::endl;
 #ifdef LAR_PROFILE_METAL_SIFT
                 cpuTime += std::chrono::duration<double, std::milli>(
                     std::chrono::high_resolution_clock::now() - cpuStart).count();
