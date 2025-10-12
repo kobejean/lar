@@ -1,6 +1,7 @@
 // Metal-accelerated fused SIFT scale-space extrema detection
 // Usage: Build with -DLAR_USE_METAL_SIFT_FUSED=ON
 #import <Metal/Metal.h>
+#include <utility>
 #import <MetalPerformanceShaders/MetalPerformanceShaders.h>
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
@@ -387,6 +388,8 @@ void findScaleSpaceExtremaMetalFused(
         // Allocate bitarray buffer (1 bit per pixel, packed as uint32)
         id<MTLBuffer> bitarrayBuffer = [device newBufferWithLength:bitarraySize * sizeof(uint32_t)
                                                             options:MTLResourceStorageModeShared];
+        id<MTLBuffer> nextBitarrayBuffer = [device newBufferWithLength:bitarraySize * sizeof(uint32_t)
+                                                            options:MTLResourceStorageModeShared];
 
         keypoints.clear();
 
@@ -516,12 +519,6 @@ void findScaleSpaceExtremaMetalFused(
             [initialCommandBuffer commit];
             [initialCommandBuffer waitUntilCompleted];
 
-            extractKeypoints(
-                bitarrayBuffer, octave, nLevels, octaveBitarraySize,
-                octaveWidth, 1, nOctaveLayers, contrastThreshold, edgeThreshold, sigma,
-                gaussIdx, cpuTime, gauss_pyr, dog_pyr, keypoints
-            );
-
 #ifdef LAR_PROFILE_METAL_SIFT
             blurTime += std::chrono::duration<double, std::milli>(
                 std::chrono::high_resolution_clock::now() - blurStart).count();
@@ -540,7 +537,7 @@ void findScaleSpaceExtremaMetalFused(
                 // Clear bitarray
                 uint32_t octavePixels = octaveWidth * octaveHeight;
                 uint32_t octaveBitarraySize = (octavePixels + 31) / 32;
-                memset(bitarrayBuffer.contents, 0, octaveBitarraySize * sizeof(uint32_t));
+                memset(nextBitarrayBuffer.contents, 0, octaveBitarraySize * sizeof(uint32_t));
 
                 // Dispatch extrema detection kernel
             #ifdef LAR_PROFILE_METAL_SIFT
@@ -600,7 +597,7 @@ void findScaleSpaceExtremaMetalFused(
                 [encoder setBuffer:dogBuffers[0] offset:0 atIndex:0]; // prevLayer
                 [encoder setBuffer:dogBuffers[1] offset:0 atIndex:1]; // currLayer
                 [encoder setBuffer:dogBuffers[2] offset:0 atIndex:2]; // nextLayer
-                [encoder setBuffer:bitarrayBuffer offset:0 atIndex:3];  // bitarray output
+                [encoder setBuffer:nextBitarrayBuffer offset:0 atIndex:3];  // bitarray output
                 [encoder setBuffer:paramsBuffer offset:0 atIndex:5];
 
                 // Dispatch threads (one per pixel, excluding border)
@@ -623,6 +620,8 @@ void findScaleSpaceExtremaMetalFused(
 
                 [commandBuffer waitUntilCompleted];
 
+                std::swap(bitarrayBuffer, nextBitarrayBuffer);
+
             #ifdef LAR_PROFILE_METAL_SIFT
                 gpuKernelTime += std::chrono::duration<double, std::milli>(
                     std::chrono::high_resolution_clock::now() - gpuKernelStart).count();
@@ -630,8 +629,6 @@ void findScaleSpaceExtremaMetalFused(
 
                 RELEASE_IF_MANUAL(blurParamsBuffer);
                 RELEASE_IF_MANUAL(blurKernelBuffer);
-                // RELEASE_IF_MANUAL(paramsBuffer);
-                // RELEASE_IF_MANUAL(kernelBuffer);
             }
 
             extractKeypoints(
@@ -647,6 +644,7 @@ void findScaleSpaceExtremaMetalFused(
         }
 
         RELEASE_IF_MANUAL(bitarrayBuffer);
+        RELEASE_IF_MANUAL(nextBitarrayBuffer);
         // Note: pipeline, blurAndDoGPipeline, and library are cached as static and should not be released
 
 #ifdef LAR_PROFILE_METAL_SIFT
