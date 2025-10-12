@@ -1,10 +1,11 @@
 // Metal-accelerated pipelined SIFT scale-space extrema detection
 // Usage: Build with -DLAR_USE_METAL_SIFT_PIPELINED=ON
 //
-// This implementation pipelines octave processing for maximum GPU utilization:
-// - Each octave runs in its own command buffer (parallel GPU execution)
-// - CPU prepares octave bases while GPU processes previous octaves
-// - Separate bitarray sections per octave to avoid write conflicts
+// This implementation uses per-layer command buffers for fine-grained GPU scheduling:
+// - Each layer within each octave gets its own command buffer
+// - Dependencies handled by Metal's command queue ordering
+// - CPU prepares octave bases while GPU processes previous layers
+// - Separate bitarray sections per layer to avoid write conflicts
 // - Final keypoint extraction happens after all GPU work completes
 //
 #import <Metal/Metal.h>
@@ -32,11 +33,12 @@ bool initializeMetalPipelines(
     id<MTLDevice> device,
     __strong id<MTLComputePipelineState>& blurAndDoGPipeline,
     __strong id<MTLComputePipelineState>& extremaPipeline,
-    __strong id<MTLComputePipelineState>& fusedPipeline)
+    __strong id<MTLComputePipelineState>& resizePipeline)
 {
     static id<MTLLibrary> cachedLibrary = nil;
     static id<MTLComputePipelineState> cachedBlurAndDoGPipeline = nil;
     static id<MTLComputePipelineState> cachedExtremaPipeline = nil;
+    static id<MTLComputePipelineState> cachedResizePipeline = nil;
 
     if (!cachedLibrary) {
         // Load Metal library using shared function
@@ -50,7 +52,7 @@ bool initializeMetalPipelines(
         // Create pipeline for fused blur
         id<MTLFunction> fusedBlurAndDoGFunc = [cachedLibrary newFunctionWithName:@"gaussianBlurAndDoGFused"];
         if (!fusedBlurAndDoGFunc) {
-            std::cerr << "Failed to find Metal function: gaussianBlurFused" << std::endl;
+            std::cerr << "Failed to find Metal function: gaussianBlurAndDoGFused" << std::endl;
             return false;
         }
 
@@ -70,13 +72,27 @@ bool initializeMetalPipelines(
         cachedExtremaPipeline = [device newComputePipelineStateWithFunction:extremaFunction error:&error];
         RELEASE_IF_MANUAL(extremaFunction);
         if (!cachedExtremaPipeline) {
-            std::cerr << "Failed to create compute pipeline: " << [[error localizedDescription] UTF8String] << std::endl;
+            std::cerr << "Failed to create extrema pipeline: " << [[error localizedDescription] UTF8String] << std::endl;
+            return false;
+        }
+
+        id<MTLFunction> resizeFunction = [cachedLibrary newFunctionWithName:@"resizeNearestNeighbor2x"];
+        if (!resizeFunction) {
+            std::cerr << "Failed to find Metal function: resizeNearestNeighbor2x" << std::endl;
+            return false;
+        }
+
+        cachedResizePipeline = [device newComputePipelineStateWithFunction:resizeFunction error:&error];
+        RELEASE_IF_MANUAL(resizeFunction);
+        if (!cachedResizePipeline) {
+            std::cerr << "Failed to create resize pipeline: " << [[error localizedDescription] UTF8String] << std::endl;
             return false;
         }
     }
 
     blurAndDoGPipeline = cachedBlurAndDoGPipeline;
     extremaPipeline = cachedExtremaPipeline;
+    resizePipeline = cachedResizePipeline;
     return true;
 }
 
@@ -295,13 +311,14 @@ void extractKeypoints(
 }
 
 // ============================================================================
-// Pipelined SIFT Implementation
+// Per-Layer Command Buffer Pipeline
 // ============================================================================
-// This version processes all octaves in parallel on the GPU by:
-// 1. Preparing octave base images on CPU (can overlap with GPU work)
-// 2. Submitting command buffers for each octave independently
-// 3. Each octave gets its own bitarray section to avoid write conflicts
-// 4. Extracting keypoints after all GPU work completes
+// Strategy:
+// - Layer 1: blur(0→1) + blur(1→2) + blur(2→3) + DoG(0,1,2) + extrema(layer1)
+// - Layer 2: blur(3→4) + DoG(3) + extrema(layer2)
+// - Layer 3: blur(4→5) + DoG(4) + extrema(layer3)
+// Each layer's command buffer is submitted immediately after encoding
+// Metal's command queue handles dependencies automatically via submission order
 //
 void findScaleSpaceExtremaMetalPipelined(
     const cv::Mat& base,
@@ -333,8 +350,6 @@ void findScaleSpaceExtremaMetalPipelined(
 
         double cpuPrepTime = 0;
         double cpuExtractTime = 0;
-        double gpuBlurTime = 0;
-        double gpuExtremaTime = 0;
 #ifdef LAR_PROFILE_METAL_SIFT
         auto startTotal = std::chrono::high_resolution_clock::now();
 #endif
@@ -379,7 +394,7 @@ void findScaleSpaceExtremaMetalPipelined(
         std::vector<cv::Mat> dog_pyr(nOctaves * (nOctaveLayers + 2));
         gauss_pyr.resize(nOctaves * nLevels);
 
-        // Calculate total bitarray size (sum of all octaves)
+        // Calculate total bitarray size (sum of all octaves * layers)
         std::vector<uint32_t> octaveBitarrayOffsets(nOctaves);
         std::vector<uint32_t> octaveBitarraySizes(nOctaves);
         uint32_t totalBitarraySize = 0;
@@ -402,16 +417,17 @@ void findScaleSpaceExtremaMetalPipelined(
 
         keypoints.clear();
 
-        // ========================================================================
-        // PIPELINE PHASE 1: Prepare octave bases and submit GPU work
-        // ========================================================================
-        std::vector<id<MTLCommandBuffer>> commandBuffers(nOctaves);
-        std::vector<cv::Mat> octaveBases(nOctaves);
+        // Track command buffers for all layers across all octaves
+        std::vector<id<MTLCommandBuffer>> allCommandBuffers;
+        allCommandBuffers.reserve(nOctaves * nOctaveLayers);
 
 #ifdef LAR_PROFILE_METAL_SIFT
         auto cpuPrepStart = std::chrono::high_resolution_clock::now();
 #endif
 
+        // ========================================================================
+        // PIPELINE: Submit per-layer command buffers for all octaves
+        // ========================================================================
         for (int o = 0; o < nOctaves; o++) {
             int octaveWidth = base.cols >> o;
             int octaveHeight = base.rows >> o;
@@ -436,52 +452,63 @@ void findScaleSpaceExtremaMetalPipelined(
             }
 
             // Prepare octave base on CPU
-            octaveBases[o] = prepareOctaveBase(base, resources, o, nLevels, octaveWidth, octaveHeight);
+            cv::Mat octaveBase = prepareOctaveBase(base, resources, o, nLevels, octaveWidth, octaveHeight);
 
             // Upload to GPU
-            uploadOctaveBase(octaveBases[o], gaussBuffers[0], octaveWidth, octaveHeight, alignedRowBytes);
+            uploadOctaveBase(octaveBase, gaussBuffers[0], octaveWidth, octaveHeight, alignedRowBytes);
 
-            // Create command buffer for this octave
-            commandBuffers[o] = [commandQueue commandBuffer];
-            commandBuffers[o].label = [NSString stringWithFormat:@"Octave %d", o];
+            // Now submit per-layer command buffers
+            // Layer 1: needs blur 0→1, 1→2, 2→3 + DoG 0,1,2 + extrema
+            // Layer 2: needs blur 3→4 + DoG 3 + extrema
+            // Layer 3: needs blur 4→5 + DoG 4 + extrema
 
-            // Encode blur + DoG operations for all levels
-            for (int i = 1; i < nLevels; i++) {
-                GaussianBlurParams params;
-                params.width = octaveWidth;
-                params.height = octaveHeight;
-                params.rowStride = rowStride;
-                params.kernelSize = (int)gaussianKernels[i].size();
-
-                id<MTLBuffer> paramsBuffer = [device newBufferWithBytes:&params
-                                                    length:sizeof(GaussianBlurParams)
-                                                    options:MTLResourceStorageModeShared];
-
-                id<MTLBuffer> kernelBuffer = [device newBufferWithBytes:gaussianKernels[i].data()
-                                                    length:gaussianKernels[i].size() * sizeof(float)
-                                                    options:MTLResourceStorageModeShared];
-
-                id<MTLComputeCommandEncoder> encoder = [commandBuffers[o] computeCommandEncoder];
-
-                [encoder setComputePipelineState:blurAndDoGPipeline];
-                [encoder setBuffer:gaussBuffers[i-1] offset:0 atIndex:0];
-                [encoder setBuffer:gaussBuffers[i] offset:0 atIndex:1];
-                [encoder setBuffer:dogBuffers[i-1] offset:0 atIndex:2];
-                [encoder setBuffer:paramsBuffer offset:0 atIndex:3];
-                [encoder setBuffer:kernelBuffer offset:0 atIndex:4];
-
-                MTLSize gridSize = MTLSizeMake(octaveWidth, octaveHeight, 1);
-                MTLSize threadgroupSize = MTLSizeMake(16, 16, 1);
-
-                [encoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
-                [encoder endEncoding];
-
-                RELEASE_IF_MANUAL(paramsBuffer);
-                RELEASE_IF_MANUAL(kernelBuffer);
-            }
-
-            // Encode extrema detection for all layers
             for (int layer = 1; layer <= nOctaveLayers; layer++) {
+                id<MTLCommandBuffer> layerCmdBuf = [commandQueue commandBuffer];
+                layerCmdBuf.label = [NSString stringWithFormat:@"Octave %d Layer %d", o, layer];
+
+                // Determine which blurs this layer needs
+                // Layer 1: blur indices 1,2,3 (to get Gauss[1], Gauss[2], Gauss[3])
+                // Layer 2: blur index 4 (to get Gauss[4])
+                // Layer 3: blur index 5 (to get Gauss[5])
+                int blurStart = (layer == 1) ? 1 : (layer + 2);
+                int blurEnd = (layer == 1) ? 4 : (layer + 3);
+
+                // Encode blur + DoG operations
+                for (int i = blurStart; i < blurEnd && i < nLevels; i++) {
+                    GaussianBlurParams params;
+                    params.width = octaveWidth;
+                    params.height = octaveHeight;
+                    params.rowStride = rowStride;
+                    params.kernelSize = (int)gaussianKernels[i].size();
+
+                    id<MTLBuffer> paramsBuffer = [device newBufferWithBytes:&params
+                                                        length:sizeof(GaussianBlurParams)
+                                                        options:MTLResourceStorageModeShared];
+
+                    id<MTLBuffer> kernelBuffer = [device newBufferWithBytes:gaussianKernels[i].data()
+                                                        length:gaussianKernels[i].size() * sizeof(float)
+                                                        options:MTLResourceStorageModeShared];
+
+                    id<MTLComputeCommandEncoder> encoder = [layerCmdBuf computeCommandEncoder];
+
+                    [encoder setComputePipelineState:blurAndDoGPipeline];
+                    [encoder setBuffer:gaussBuffers[i-1] offset:0 atIndex:0];
+                    [encoder setBuffer:gaussBuffers[i] offset:0 atIndex:1];
+                    [encoder setBuffer:dogBuffers[i-1] offset:0 atIndex:2];
+                    [encoder setBuffer:paramsBuffer offset:0 atIndex:3];
+                    [encoder setBuffer:kernelBuffer offset:0 atIndex:4];
+
+                    MTLSize gridSize = MTLSizeMake(octaveWidth, octaveHeight, 1);
+                    MTLSize threadgroupSize = MTLSizeMake(16, 16, 1);
+
+                    [encoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
+                    [encoder endEncoding];
+
+                    RELEASE_IF_MANUAL(paramsBuffer);
+                    RELEASE_IF_MANUAL(kernelBuffer);
+                }
+
+                // Encode extrema detection for this layer
                 ExtremaParams params;
                 params.width = octaveWidth;
                 params.height = octaveHeight;
@@ -495,7 +522,7 @@ void findScaleSpaceExtremaMetalPipelined(
                                                                     length:sizeof(ExtremaParams)
                                                                     options:MTLResourceStorageModeShared];
 
-                id<MTLComputeCommandEncoder> encoder = [commandBuffers[o] computeCommandEncoder];
+                id<MTLComputeCommandEncoder> encoder = [layerCmdBuf computeCommandEncoder];
 
                 [encoder setComputePipelineState:extremaPipeline];
                 [encoder setBuffer:dogBuffers[layer-1] offset:0 atIndex:0]; // prevLayer
@@ -514,11 +541,11 @@ void findScaleSpaceExtremaMetalPipelined(
                 [encoder endEncoding];
 
                 RELEASE_IF_MANUAL(paramsBuffer);
-            }
 
-            // ✅ Submit this octave's command buffer immediately
-            // GPU will start processing while we prepare the next octave
-            [commandBuffers[o] commit];
+                // ✅ Submit this layer's command buffer immediately
+                [layerCmdBuf commit];
+                allCommandBuffers.push_back(layerCmdBuf);
+            }
         }
 
 #ifdef LAR_PROFILE_METAL_SIFT
@@ -527,14 +554,14 @@ void findScaleSpaceExtremaMetalPipelined(
 #endif
 
         // ========================================================================
-        // PIPELINE PHASE 2: Wait for all GPU work to complete
+        // Wait for all GPU work to complete
         // ========================================================================
 #ifdef LAR_PROFILE_METAL_SIFT
         auto gpuWaitStart = std::chrono::high_resolution_clock::now();
 #endif
 
-        for (int o = 0; o < nOctaves; o++) {
-            [commandBuffers[o] waitUntilCompleted];
+        for (auto& cmdBuf : allCommandBuffers) {
+            [cmdBuf waitUntilCompleted];
         }
 
 #ifdef LAR_PROFILE_METAL_SIFT
@@ -543,7 +570,7 @@ void findScaleSpaceExtremaMetalPipelined(
 #endif
 
         // ========================================================================
-        // PIPELINE PHASE 3: Extract keypoints from all octaves/layers
+        // Extract keypoints from all octaves/layers
         // ========================================================================
 #ifdef LAR_PROFILE_METAL_SIFT
         auto cpuExtractStart = std::chrono::high_resolution_clock::now();
@@ -590,16 +617,17 @@ void findScaleSpaceExtremaMetalPipelined(
         double totalTime = std::chrono::duration<double, std::milli>(
             endTotal - startTotal).count();
 
-        std::cout << "\n=== Metal Pipelined SIFT Profile ===\n";
+        std::cout << "\n=== Metal Pipelined SIFT Profile (Per-Layer) ===\n";
         std::cout << "CPU Operations:\n";
         std::cout << "  Octave prep:         " << cpuPrepTime << " ms\n";
         std::cout << "  Keypoint extraction: " << cpuExtractTime << " ms\n";
         std::cout << "GPU Operations:\n";
         std::cout << "  GPU wait time:       " << gpuWaitTime << " ms (wall-clock)\n";
+        std::cout << "  Command buffers:     " << allCommandBuffers.size() << " (per-layer)\n";
         std::cout << "Total:\n";
         std::cout << "  Wall-clock time:     " << totalTime << " ms\n";
         std::cout << "  Speedup potential:   " << (cpuPrepTime + gpuWaitTime) / gpuWaitTime << "x (overlap)\n";
-        std::cout << "====================================\n\n";
+        std::cout << "=================================================\n\n";
 #endif
     }
 }

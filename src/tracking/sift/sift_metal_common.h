@@ -178,6 +178,16 @@ struct FusedExtremaParams {
     int kernelSize;
 };
 
+// Resize parameters (nearest-neighbor 2x downsample)
+struct ResizeParams {
+    int srcWidth;
+    int srcHeight;
+    int srcRowStride;
+    int dstWidth;
+    int dstHeight;
+    int dstRowStride;
+};
+
 } // namespace lar
 
 #endif // LAR_TRACKING_SIFT_METAL_COMMON_H

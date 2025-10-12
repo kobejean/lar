@@ -31,6 +31,15 @@ struct ExtremaParams {
     int layer;              // Current layer index (1 to nOctaveLayers)
 };
 
+struct ResizeParams {
+    int srcWidth;           // Source image width
+    int srcHeight;          // Source image height
+    int srcRowStride;       // Source row stride in floats
+    int dstWidth;           // Destination image width
+    int dstHeight;          // Destination image height
+    int dstRowStride;       // Destination row stride in floats
+};
+
 #pragma METAL fp math_mode(safe)
 kernel void gaussianBlurAndDoGFused(
     const device float* currGauss [[buffer(0)]],
@@ -211,4 +220,44 @@ kernel void detectExtrema(
     // Set the bit using atomic OR
     // This is safe because each pixel maps to exactly one bit
     atomic_fetch_or_explicit(&extremaBitarray[chunkIndex], (1u << bitOffset), memory_order_relaxed);
+}
+
+// ============================================================================
+// Nearest-Neighbor Downsample (2x)
+// ============================================================================
+// Implements OpenCV's cv::resize(..., cv::INTER_NEAREST) algorithm:
+//   sx = floor(dst_x * inv_scale_x) = floor(dst_x * 2.0)
+//   sy = floor(dst_y * inv_scale_y) = floor(dst_y * 2.0)
+//   dst[dst_y][dst_x] = src[sy][sx]
+//
+// This specialized kernel eliminates CPU/GPU sync bottleneck when preparing
+// octave base images (octave N+1 base = downsample octave N's gauss[nLevels-3])
+//
+#pragma METAL fp math_mode(safe)
+kernel void resizeNearestNeighbor2x(
+    const device float* src [[buffer(0)]],
+    device float* dst [[buffer(1)]],
+    constant ResizeParams& params [[buffer(2)]],
+    uint2 gid [[thread_position_in_grid]])
+{
+    int dstX = gid.x;
+    int dstY = gid.y;
+
+    // Bounds check
+    if (dstX >= params.dstWidth || dstY >= params.dstHeight) {
+        return;
+    }
+
+    // OpenCV INTER_NEAREST mapping: floor(dst_coord * inv_scale)
+    // For 2x downsample: inv_scale = 2.0
+    int srcX = dstX * 2;
+    int srcY = dstY * 2;
+
+    // Clamp to source bounds (OpenCV uses min(sx, width-1))
+    srcX = min(srcX, params.srcWidth - 1);
+    srcY = min(srcY, params.srcHeight - 1);
+
+    // Read from source and write to destination
+    float value = src[srcY * params.srcRowStride + srcX];
+    dst[dstY * params.dstRowStride + dstX] = value;
 }
