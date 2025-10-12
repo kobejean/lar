@@ -22,12 +22,14 @@ namespace lar {
 // Initialize Metal pipelines (cached across calls)
 bool initializeMetalPipelines(
     id<MTLDevice> device,
-    id<MTLComputePipelineState>& blurPipeline,
-    id<MTLComputePipelineState>& extremaPipeline)
+    id<MTLComputePipelineState>& blurAndDoGPipeline,
+    id<MTLComputePipelineState>& extremaPipeline,
+    id<MTLComputePipelineState>& fusedPipeline)
 {
     static id<MTLLibrary> cachedLibrary = nil;
-    static id<MTLComputePipelineState> cachedBlurPipeline = nil;
-    static id<MTLComputePipelineState> cachedPipeline = nil;
+    static id<MTLComputePipelineState> cachedBlurAndDoGPipeline = nil;
+    static id<MTLComputePipelineState> cachedFusedPipeline = nil;
+    static id<MTLComputePipelineState> cachedExtremaPipeline = nil;
 
     if (!cachedLibrary) {
         NSError* error = nil;
@@ -52,15 +54,15 @@ bool initializeMetalPipelines(
         }
 
         // Create pipeline for fused blur
-        id<MTLFunction> fusedBlurFunc = [cachedLibrary newFunctionWithName:@"gaussianBlurFused"];
-        if (!fusedBlurFunc) {
+        id<MTLFunction> fusedBlurAndDoGFunc = [cachedLibrary newFunctionWithName:@"gaussianBlurAndDoGFused"];
+        if (!fusedBlurAndDoGFunc) {
             std::cerr << "Failed to find Metal function: gaussianBlurFused" << std::endl;
             return false;
         }
 
-        cachedBlurPipeline = [device newComputePipelineStateWithFunction:fusedBlurFunc error:&error];
-        RELEASE_IF_MANUAL(fusedBlurFunc);
-        if (!cachedBlurPipeline) {
+        cachedBlurAndDoGPipeline = [device newComputePipelineStateWithFunction:fusedBlurAndDoGFunc error:&error];
+        RELEASE_IF_MANUAL(fusedBlurAndDoGFunc);
+        if (!cachedBlurAndDoGPipeline) {
             std::cerr << "Failed to create blur pipeline: " << [[error localizedDescription] UTF8String] << std::endl;
             return false;
         }
@@ -72,16 +74,30 @@ bool initializeMetalPipelines(
             return false;
         }
 
-        cachedPipeline = [device newComputePipelineStateWithFunction:fusedFunction error:&error];
+        cachedFusedPipeline = [device newComputePipelineStateWithFunction:fusedFunction error:&error];
         RELEASE_IF_MANUAL(fusedFunction);
-        if (!cachedPipeline) {
+        if (!cachedFusedPipeline) {
             std::cerr << "Failed to create extrema pipeline: " << [[error localizedDescription] UTF8String] << std::endl;
+            return false;
+        }
+
+        id<MTLFunction> extremaFunction = [cachedLibrary newFunctionWithName:@"detectScaleSpaceExtrema"];
+        if (!extremaFunction) {
+            std::cerr << "Failed to find Metal function: detectScaleSpaceExtrema" << std::endl;
+            return false;
+        }
+
+        cachedExtremaPipeline = [device newComputePipelineStateWithFunction:extremaFunction error:&error];
+        RELEASE_IF_MANUAL(extremaFunction);
+        if (!cachedExtremaPipeline) {
+            std::cerr << "Failed to create compute pipeline: " << [[error localizedDescription] UTF8String] << std::endl;
             return false;
         }
     }
 
-    blurPipeline = cachedBlurPipeline;
-    extremaPipeline = cachedPipeline;
+    blurAndDoGPipeline = cachedBlurAndDoGPipeline;
+    fusedPipeline = cachedFusedPipeline;
+    extremaPipeline = cachedExtremaPipeline;
     return true;
 }
 
@@ -212,196 +228,20 @@ void uploadOctaveBase(
     }
 }
 
-// Apply Gaussian blur using Metal compute shader
-void applyGaussianBlur(
-    id<MTLDevice> device,
-    id<MTLCommandQueue> commandQueue,
-    id<MTLComputePipelineState> blurPipeline,
-    id<MTLBuffer> sourceBuffer,
-    id<MTLBuffer> destBuffer,
-    const std::vector<float>& kernel,
-    int width,
-    int height,
-    int rowStride)
-{
-    GaussianBlurParams blurParams;
-    blurParams.width = width;
-    blurParams.height = height;
-    blurParams.rowStride = rowStride;
-    blurParams.kernelSize = (int)kernel.size();
-
-    id<MTLBuffer> blurParamsBuffer = [device newBufferWithBytes:&blurParams
-                                                          length:sizeof(GaussianBlurParams)
-                                                         options:MTLResourceStorageModeShared];
-
-    id<MTLBuffer> blurKernelBuffer = [device newBufferWithBytes:kernel.data()
-                                                          length:kernel.size() * sizeof(float)
-                                                         options:MTLResourceStorageModeShared];
-
-    id<MTLCommandBuffer> blurCommandBuffer = [commandQueue commandBuffer];
-    id<MTLComputeCommandEncoder> blurEncoder = [blurCommandBuffer computeCommandEncoder];
-
-    [blurEncoder setComputePipelineState:blurPipeline];
-    [blurEncoder setBuffer:sourceBuffer offset:0 atIndex:0];
-    [blurEncoder setBuffer:destBuffer offset:0 atIndex:1];
-    [blurEncoder setBuffer:blurParamsBuffer offset:0 atIndex:2];
-    [blurEncoder setBuffer:blurKernelBuffer offset:0 atIndex:3];
-
-    MTLSize gridSize = MTLSizeMake(width, height, 1);
-    MTLSize threadgroupSize = MTLSizeMake(16, 16, 1);
-
-    [blurEncoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
-    [blurEncoder endEncoding];
-
-    [blurCommandBuffer commit];
-    [blurCommandBuffer waitUntilCompleted];
-
-    RELEASE_IF_MANUAL(blurParamsBuffer);
-    RELEASE_IF_MANUAL(blurKernelBuffer);
-}
-
-// Compute initial Gaussian layers and DoG for an octave
-void computeInitialGaussianAndDoG(
-    id<MTLDevice> device,
-    id<MTLCommandQueue> commandQueue,
-    id<MTLComputePipelineState> blurPipeline,
-    MetalSiftResources& resources,
-    const std::vector<std::vector<float>>& gaussianKernels,
-    int octave,
-    int octaveWidth,
-    int octaveHeight,
-    int rowStride)
-{
-    std::vector<id<MTLBuffer>>& gaussBuffers = resources.octaveBuffers[octave];
-    std::vector<id<MTLBuffer>>& dogBuffers = resources.dogBuffers[octave];
-
-    // Compute Gauss[1] and Gauss[2]
-    for (int i = 1; i <= 2; i++) {
-        applyGaussianBlur(device, commandQueue, blurPipeline,
-                         gaussBuffers[i-1], gaussBuffers[i],
-                         gaussianKernels[i], octaveWidth, octaveHeight, rowStride);
-    }
-
-    // Compute DoG[0] = Gauss[1] - Gauss[0]
-    float* gauss0 = (float*)gaussBuffers[0].contents;
-    float* gauss1 = (float*)gaussBuffers[1].contents;
-    float* dog0 = (float*)dogBuffers[0].contents;
-    for (int pixel = 0; pixel < octaveHeight * rowStride; pixel++) {
-        dog0[pixel] = gauss1[pixel] - gauss0[pixel];
-    }
-
-    // Compute DoG[1] = Gauss[2] - Gauss[1]
-    float* gauss2 = (float*)gaussBuffers[2].contents;
-    float* dog1 = (float*)dogBuffers[1].contents;
-    for (int pixel = 0; pixel < octaveHeight * rowStride; pixel++) {
-        dog1[pixel] = gauss2[pixel] - gauss1[pixel];
-    }
-}
-
-// Detect extrema in a single layer and extract keypoints
-void detectExtremaInLayer(
-    id<MTLDevice> device,
-    id<MTLCommandQueue> commandQueue,
-    id<MTLComputePipelineState> extremaPipeline,
-    MetalSiftResources& resources,
-    const std::vector<std::vector<float>>& gaussianKernels,
-    id<MTLBuffer> bitarrayBuffer,
-    std::vector<cv::Mat>& gauss_pyr,
-    std::vector<cv::Mat>& dog_pyr,
-    std::vector<cv::KeyPoint>& keypoints,
-    int octave,
-    int layer,
-    int nOctaveLayers,
-    int nLevels,
-    int octaveWidth,
-    int octaveHeight,
-    int rowStride,
-    float threshold,
-    double contrastThreshold,
-    double edgeThreshold,
-    double sigma,
+void extractKeypoints(
+    id<MTLBuffer> bitarrayBuffer, int octave, int nLevels, int octaveBitarraySize,
+    int octaveWidth, int layer, int nOctaveLayers, float contrastThreshold, float edgeThreshold, float sigma,
+    int gaussIdx,
     double& cpuTime,
-    double& gpuKernelTime,
-    double& bufferAllocTime)
-{
-    std::vector<id<MTLBuffer>>& gaussBuffers = resources.octaveBuffers[octave];
-    std::vector<id<MTLBuffer>>& dogBuffers = resources.dogBuffers[octave];
-
-    // Clear bitarray
-    uint32_t octavePixels = octaveWidth * octaveHeight;
-    uint32_t octaveBitarraySize = (octavePixels + 31) / 32;
-    memset(bitarrayBuffer.contents, 0, octaveBitarraySize * sizeof(uint32_t));
-
-    // Setup parameters
-#ifdef LAR_PROFILE_METAL_SIFT
-    auto bufferAllocStart = std::chrono::high_resolution_clock::now();
-#endif
-
-    FusedExtremaParams params;
-    params.width = octaveWidth;
-    params.height = octaveHeight;
-    params.rowStride = rowStride;
-    params.threshold = threshold;
-    params.border = SIFT_IMG_BORDER;
-    params.octave = octave;
-    params.layer = layer;
-    params.kernelSize = (int)gaussianKernels[layer+2].size();
-
-    id<MTLBuffer> paramsBuffer = [device newBufferWithBytes:&params
-                                                      length:sizeof(FusedExtremaParams)
-                                                     options:MTLResourceStorageModeShared];
-
-    id<MTLBuffer> kernelBuffer = [device newBufferWithBytes:gaussianKernels[layer+2].data()
-                                                      length:gaussianKernels[layer+2].size() * sizeof(float)
-                                                     options:MTLResourceStorageModeShared];
-
-#ifdef LAR_PROFILE_METAL_SIFT
-    bufferAllocTime += std::chrono::duration<double, std::milli>(
-        std::chrono::high_resolution_clock::now() - bufferAllocStart).count();
-#endif
-
-    // Dispatch extrema detection kernel
-#ifdef LAR_PROFILE_METAL_SIFT
-    auto gpuKernelStart = std::chrono::high_resolution_clock::now();
-#endif
-
-    id<MTLCommandBuffer> commandBuffer = [commandQueue commandBuffer];
-    id<MTLComputeCommandEncoder> encoder = [commandBuffer computeCommandEncoder];
-
-    [encoder setComputePipelineState:extremaPipeline];
-    [encoder setBuffer:dogBuffers[layer-1] offset:0 atIndex:0];
-    [encoder setBuffer:dogBuffers[layer] offset:0 atIndex:1];
-    [encoder setBuffer:gaussBuffers[layer+1] offset:0 atIndex:2];
-    [encoder setBuffer:gaussBuffers[layer+2] offset:0 atIndex:3];
-    [encoder setBuffer:dogBuffers[layer+1] offset:0 atIndex:4];
-    [encoder setBuffer:bitarrayBuffer offset:0 atIndex:5];
-    [encoder setBuffer:paramsBuffer offset:0 atIndex:7];
-    [encoder setBuffer:kernelBuffer offset:0 atIndex:9];
-
-    MTLSize gridSize = MTLSizeMake(octaveWidth, octaveHeight, 1);
-    MTLSize threadgroupSize = MTLSizeMake(16, 16, 1);
-
-    [encoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
-    [encoder endEncoding];
-
-    [commandBuffer commit];
-    [commandBuffer waitUntilCompleted];
-
-#ifdef LAR_PROFILE_METAL_SIFT
-    gpuKernelTime += std::chrono::duration<double, std::milli>(
-        std::chrono::high_resolution_clock::now() - gpuKernelStart).count();
-#endif
-
-    RELEASE_IF_MANUAL(paramsBuffer);
-    RELEASE_IF_MANUAL(kernelBuffer);
-
+    std::vector<cv::Mat>& gauss_pyr, std::vector<cv::Mat>& dog_pyr,
+    std::vector<cv::KeyPoint>& keypoints
+) {
     // Scan bitarray and extract keypoints
 #ifdef LAR_PROFILE_METAL_SIFT
     auto cpuStart = std::chrono::high_resolution_clock::now();
 #endif
 
     uint32_t* bitarray = (uint32_t*)bitarrayBuffer.contents;
-    int gaussIdx = octave * nLevels;
 
     for (uint32_t chunkIdx = 0; chunkIdx < octaveBitarraySize; chunkIdx++) {
         uint32_t chunk = bitarray[chunkIdx];
@@ -417,8 +257,8 @@ void detectExtremaInLayer(
                 int keypoint_layer = layer; // make copy so that adjustLocalExtrema mutates this one
 
                 if (!adjustLocalExtrema(dog_pyr, kpt, octave, keypoint_layer, r, c_pos,
-                                       nOctaveLayers, (float)contrastThreshold,
-                                       (float)edgeThreshold, (float)sigma)) {
+                                    nOctaveLayers, (float)contrastThreshold,
+                                    (float)edgeThreshold, (float)sigma)) {
                     continue;
                 }
 
@@ -457,90 +297,6 @@ void detectExtremaInLayer(
 #ifdef LAR_PROFILE_METAL_SIFT
     cpuTime += std::chrono::duration<double, std::milli>(
         std::chrono::high_resolution_clock::now() - cpuStart).count();
-#endif
-}
-
-// Process a single octave: compute Gaussian pyramid, DoG, and detect extrema
-void processOctave(
-    id<MTLDevice> device,
-    id<MTLCommandQueue> commandQueue,
-    id<MTLComputePipelineState> blurPipeline,
-    id<MTLComputePipelineState> extremaPipeline,
-    const cv::Mat& base,
-    MetalSiftResources& resources,
-    const std::vector<std::vector<float>>& gaussianKernels,
-    id<MTLBuffer> bitarrayBuffer,
-    std::vector<cv::Mat>& gauss_pyr,
-    std::vector<cv::Mat>& dog_pyr,
-    std::vector<cv::KeyPoint>& keypoints,
-    int octave,
-    int nOctaves,
-    int nOctaveLayers,
-    int nLevels,
-    float threshold,
-    double contrastThreshold,
-    double edgeThreshold,
-    double sigma,
-    double& cpuTime,
-    double& gpuKernelTime,
-    double& bufferAllocTime,
-    double& blurTime,
-    double& dogTime)
-{
-    int octaveWidth = base.cols >> octave;
-    int octaveHeight = base.rows >> octave;
-
-    size_t rowBytes = octaveWidth * sizeof(float);
-    size_t alignedRowBytes = ((rowBytes + METAL_BUFFER_ALIGNMENT - 1) / METAL_BUFFER_ALIGNMENT) * METAL_BUFFER_ALIGNMENT;
-    int rowStride = (int)(alignedRowBytes / sizeof(float));
-
-    // Upload octave base image
-    uploadOctaveBase(base, resources, octave, nLevels, octaveWidth, octaveHeight, alignedRowBytes);
-
-    // Compute initial Gaussian layers and DoG
-#ifdef LAR_PROFILE_METAL_SIFT
-    auto blurStart = std::chrono::high_resolution_clock::now();
-#endif
-
-    computeInitialGaussianAndDoG(device, commandQueue, blurPipeline, resources,
-                                 gaussianKernels, octave, octaveWidth, octaveHeight, rowStride);
-
-#ifdef LAR_PROFILE_METAL_SIFT
-    blurTime += std::chrono::duration<double, std::milli>(
-        std::chrono::high_resolution_clock::now() - blurStart).count();
-#endif
-
-    // Populate gauss_pyr and dog_pyr with cv::Mat wrappers
-    int gaussIdx = octave * nLevels;
-    int dogIdx = octave * (nLevels - 1);
-
-    std::vector<id<MTLBuffer>>& gaussBuffers = resources.octaveBuffers[octave];
-    std::vector<id<MTLBuffer>>& dogBuffers = resources.dogBuffers[octave];
-
-    for (int i = 0; i < nLevels; i++) {
-        gauss_pyr[gaussIdx + i] = cv::Mat(octaveHeight, octaveWidth, CV_32F, gaussBuffers[i].contents, alignedRowBytes);
-    }
-    for (int i = 0; i < nLevels - 1; i++) {
-        dog_pyr[dogIdx + i] = cv::Mat(octaveHeight, octaveWidth, CV_32F, dogBuffers[i].contents, alignedRowBytes);
-    }
-
-#ifdef LAR_PROFILE_METAL_SIFT
-    auto dogStart = std::chrono::high_resolution_clock::now();
-#endif
-
-    // Process each layer for extrema detection
-    for (int layer = 1; layer <= nOctaveLayers; layer++) {
-        detectExtremaInLayer(device, commandQueue, extremaPipeline, resources,
-                           gaussianKernels, bitarrayBuffer, gauss_pyr, dog_pyr, keypoints,
-                           octave, layer, nOctaveLayers, nLevels,
-                           octaveWidth, octaveHeight, rowStride,
-                           threshold, contrastThreshold, edgeThreshold, sigma, cpuTime,
-                           gpuKernelTime, bufferAllocTime);
-    }
-
-#ifdef LAR_PROFILE_METAL_SIFT
-    dogTime += std::chrono::duration<double, std::milli>(
-        std::chrono::high_resolution_clock::now() - dogStart).count();
 #endif
 }
 
@@ -592,10 +348,11 @@ void findScaleSpaceExtremaMetalFused(
 #endif
 
         // Initialize Metal pipelines
-        id<MTLComputePipelineState> blurPipeline = nil;
-        id<MTLComputePipelineState> pipeline = nil;
+        id<MTLComputePipelineState> blurAndDoGPipeline = nil;
+        id<MTLComputePipelineState> extremaPipeline = nil;
+        id<MTLComputePipelineState> fusedPipeline = nil;
 
-        if (!initializeMetalPipelines(device, blurPipeline, pipeline)) {
+        if (!initializeMetalPipelines(device, blurAndDoGPipeline, extremaPipeline, fusedPipeline)) {
             return;
         }
 
@@ -644,16 +401,253 @@ void findScaleSpaceExtremaMetalFused(
 
         // Process each octave
         for (int o = 0; o < nOctaves; o++) {
-            processOctave(device, commandQueue, blurPipeline, pipeline,
-                         base, resources, gaussianKernels, bitarrayBuffer,
-                         gauss_pyr, dog_pyr, keypoints,
-                         o, nOctaves, nOctaveLayers, nLevels,
-                         threshold, contrastThreshold, edgeThreshold, sigma, cpuTime,
-                         gpuKernelTime, bufferAllocTime, blurTime, dogTime);
+            // processOctave(device, commandQueue, blurAndDoGPipeline, fusedPipeline,
+            //              base, resources, gaussianKernels, bitarrayBuffer,
+            //              gauss_pyr, dog_pyr, keypoints,
+            //              o, nOctaves, nOctaveLayers, nLevels,
+            //              threshold, contrastThreshold, edgeThreshold, sigma, cpuTime,
+            //              gpuKernelTime, bufferAllocTime, blurTime, dogTime);
+            int octave = o;
+            int octaveWidth = base.cols >> octave;
+            int octaveHeight = base.rows >> octave;
+
+            // Populate gauss_pyr and dog_pyr with cv::Mat wrappers
+            int gaussIdx = octave * nLevels;
+            int dogIdx = octave * (nLevels - 1);
+
+            size_t rowBytes = octaveWidth * sizeof(float);
+            size_t alignedRowBytes = ((rowBytes + METAL_BUFFER_ALIGNMENT - 1) / METAL_BUFFER_ALIGNMENT) * METAL_BUFFER_ALIGNMENT;
+            int rowStride = (int)(alignedRowBytes / sizeof(float));
+
+            std::vector<id<MTLBuffer>>& gaussBuffers = resources.octaveBuffers[octave];
+            std::vector<id<MTLBuffer>>& dogBuffers = resources.dogBuffers[octave];
+
+            for (int i = 0; i < nLevels; i++) {
+                gauss_pyr[gaussIdx + i] = cv::Mat(octaveHeight, octaveWidth, CV_32F, gaussBuffers[i].contents, alignedRowBytes);
+            }
+
+            for (int i = 0; i < nLevels - 1; i++) {
+                dog_pyr[dogIdx + i] = cv::Mat(octaveHeight, octaveWidth, CV_32F, dogBuffers[i].contents, alignedRowBytes);
+            }
+
+            // Upload octave base image
+            uploadOctaveBase(base, resources, octave, nLevels, octaveWidth, octaveHeight, alignedRowBytes);
+
+            // Compute initial Gaussian layers and DoG
+#ifdef LAR_PROFILE_METAL_SIFT
+            auto blurStart = std::chrono::high_resolution_clock::now();
+#endif
+
+            // Clear bitarray
+            uint32_t octavePixels = octaveWidth * octaveHeight;
+            uint32_t octaveBitarraySize = (octavePixels + 31) / 32;
+            memset(bitarrayBuffer.contents, 0, octaveBitarraySize * sizeof(uint32_t));
+
+            id<MTLCommandBuffer> initialCommandBuffer = [commandQueue commandBuffer];
+            for (int i = 1; i <= 3; i++) {
+                GaussianBlurParams blurParams;
+                blurParams.width = octaveWidth;
+                blurParams.height = octaveHeight;
+                blurParams.rowStride = rowStride;
+                blurParams.kernelSize = (int)gaussianKernels[i].size();
+
+                id<MTLBuffer> blurParamsBuffer = [device newBufferWithBytes:&blurParams
+                                                                    length:sizeof(GaussianBlurParams)
+                                                                    options:MTLResourceStorageModeShared];
+
+                id<MTLBuffer> blurKernelBuffer = [device newBufferWithBytes:gaussianKernels[i].data()
+                                                                    length:gaussianKernels[i].size() * sizeof(float)
+                                                                    options:MTLResourceStorageModeShared];
+
+                id<MTLComputeCommandEncoder> blurEncoder = [initialCommandBuffer computeCommandEncoder];
+
+                [blurEncoder setComputePipelineState:blurAndDoGPipeline];
+                [blurEncoder setBuffer:gaussBuffers[i-1] offset:0 atIndex:0];
+                [blurEncoder setBuffer:gaussBuffers[i] offset:0 atIndex:1];
+                [blurEncoder setBuffer:dogBuffers[i-1] offset:0 atIndex:2];
+                [blurEncoder setBuffer:blurParamsBuffer offset:0 atIndex:3];
+                [blurEncoder setBuffer:blurKernelBuffer offset:0 atIndex:4];
+
+                MTLSize gridSize = MTLSizeMake(octaveWidth, octaveHeight, 1);
+                MTLSize threadgroupSize = MTLSizeMake(16, 16, 1);
+
+                [blurEncoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
+                [blurEncoder endEncoding];
+
+                RELEASE_IF_MANUAL(blurParamsBuffer);
+                RELEASE_IF_MANUAL(blurKernelBuffer);
+            }
+            // first extrema
+            {
+            // Setup parameters
+            ExtremaParams params;
+            params.width = octaveWidth;
+            params.height = octaveHeight;
+            params.rowStride = rowStride;
+            params.threshold = threshold;
+            params.border = SIFT_IMG_BORDER;
+            params.octave = o;
+            params.layer = 1;
+
+            // Create parameter buffer
+            id<MTLBuffer> paramsBuffer = [device newBufferWithBytes:&params
+                                                                length:sizeof(ExtremaParams)
+                                                                options:MTLResourceStorageModeShared];
+
+            // Create command buffer
+            id<MTLComputeCommandEncoder> encoder = [initialCommandBuffer computeCommandEncoder];
+
+            [encoder setComputePipelineState:extremaPipeline];
+            [encoder setBuffer:dogBuffers[0] offset:0 atIndex:0]; // prevLayer
+            [encoder setBuffer:dogBuffers[1] offset:0 atIndex:1]; // currLayer
+            [encoder setBuffer:dogBuffers[2] offset:0 atIndex:2]; // nextLayer
+            [encoder setBuffer:bitarrayBuffer offset:0 atIndex:3];  // bitarray output
+            [encoder setBuffer:paramsBuffer offset:0 atIndex:5];
+
+            // Dispatch threads (one per pixel, excluding border)
+            // Use 16×16 threadgroups for better cache locality in 2D image processing
+            MTLSize gridSize = MTLSizeMake(octaveWidth, octaveHeight, 1);
+            MTLSize threadgroupSize = MTLSizeMake(16, 16, 1);
+
+            [encoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
+            [encoder endEncoding];
+            }
+
+            [initialCommandBuffer commit];
+            [initialCommandBuffer waitUntilCompleted];
+
+            extractKeypoints(
+                bitarrayBuffer, octave, nLevels, octaveBitarraySize,
+                octaveWidth, 1, nOctaveLayers, contrastThreshold, edgeThreshold, sigma,
+                gaussIdx, cpuTime, gauss_pyr, dog_pyr, keypoints
+            );
+
+#ifdef LAR_PROFILE_METAL_SIFT
+            blurTime += std::chrono::duration<double, std::milli>(
+                std::chrono::high_resolution_clock::now() - blurStart).count();
+#endif
+
+
+#ifdef LAR_PROFILE_METAL_SIFT
+            auto dogStart = std::chrono::high_resolution_clock::now();
+#endif
+
+            // Process each layer for extrema detection
+            for (int layer = 2; layer <= nOctaveLayers; layer++) {
+                std::vector<id<MTLBuffer>>& gaussBuffers = resources.octaveBuffers[octave];
+                std::vector<id<MTLBuffer>>& dogBuffers = resources.dogBuffers[octave];
+
+                // Clear bitarray
+                uint32_t octavePixels = octaveWidth * octaveHeight;
+                uint32_t octaveBitarraySize = (octavePixels + 31) / 32;
+                memset(bitarrayBuffer.contents, 0, octaveBitarraySize * sizeof(uint32_t));
+
+                // Dispatch extrema detection kernel
+            #ifdef LAR_PROFILE_METAL_SIFT
+                auto gpuKernelStart = std::chrono::high_resolution_clock::now();
+            #endif
+
+                id<MTLCommandBuffer> commandBuffer = [commandQueue commandBuffer];
+                GaussianBlurParams blurParams;
+                blurParams.width = octaveWidth;
+                blurParams.height = octaveHeight;
+                blurParams.rowStride = rowStride;
+                blurParams.kernelSize = (int)gaussianKernels[layer+2].size();
+
+                id<MTLBuffer> blurParamsBuffer = [device newBufferWithBytes:&blurParams
+                                                                    length:sizeof(GaussianBlurParams)
+                                                                    options:MTLResourceStorageModeShared];
+
+                id<MTLBuffer> blurKernelBuffer = [device newBufferWithBytes:gaussianKernels[layer+2].data()
+                                                                    length:gaussianKernels[layer+2].size() * sizeof(float)
+                                                                    options:MTLResourceStorageModeShared];
+
+                id<MTLComputeCommandEncoder> blurEncoder = [commandBuffer computeCommandEncoder];
+
+                [blurEncoder setComputePipelineState:blurAndDoGPipeline];
+                [blurEncoder setBuffer:gaussBuffers[layer+1] offset:0 atIndex:0];
+                [blurEncoder setBuffer:gaussBuffers[layer+2] offset:0 atIndex:1];
+                [blurEncoder setBuffer:dogBuffers[layer+1] offset:0 atIndex:2];
+                [blurEncoder setBuffer:blurParamsBuffer offset:0 atIndex:3];
+                [blurEncoder setBuffer:blurKernelBuffer offset:0 atIndex:4];
+
+                MTLSize gridSize = MTLSizeMake(octaveWidth, octaveHeight, 1);
+                MTLSize threadgroupSize = MTLSizeMake(16, 16, 1);
+
+                [blurEncoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
+                [blurEncoder endEncoding];
+
+                {
+                // Setup parameters
+                ExtremaParams params;
+                params.width = octaveWidth;
+                params.height = octaveHeight;
+                params.rowStride = rowStride;
+                params.threshold = threshold;
+                params.border = SIFT_IMG_BORDER;
+                params.octave = o;
+                params.layer = 1;
+
+                // Create parameter buffer
+                id<MTLBuffer> paramsBuffer = [device newBufferWithBytes:&params
+                                                                    length:sizeof(ExtremaParams)
+                                                                    options:MTLResourceStorageModeShared];
+
+                // Create command buffer
+                id<MTLComputeCommandEncoder> encoder = [commandBuffer computeCommandEncoder];
+
+                [encoder setComputePipelineState:extremaPipeline];
+                [encoder setBuffer:dogBuffers[0] offset:0 atIndex:0]; // prevLayer
+                [encoder setBuffer:dogBuffers[1] offset:0 atIndex:1]; // currLayer
+                [encoder setBuffer:dogBuffers[2] offset:0 atIndex:2]; // nextLayer
+                [encoder setBuffer:bitarrayBuffer offset:0 atIndex:3];  // bitarray output
+                [encoder setBuffer:paramsBuffer offset:0 atIndex:5];
+
+                // Dispatch threads (one per pixel, excluding border)
+                // Use 16×16 threadgroups for better cache locality in 2D image processing
+                MTLSize gridSize = MTLSizeMake(octaveWidth, octaveHeight, 1);
+                MTLSize threadgroupSize = MTLSizeMake(16, 16, 1);
+
+                [encoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
+                [encoder endEncoding];
+                }
+                [commandBuffer commit];
+
+                // process last keypoints while waiting
+                extractKeypoints(
+                    bitarrayBuffer, octave, nLevels, octaveBitarraySize,
+                    octaveWidth, layer-1, nOctaveLayers, contrastThreshold, edgeThreshold, sigma,
+                    gaussIdx, cpuTime, gauss_pyr, dog_pyr, keypoints
+                );
+
+
+                [commandBuffer waitUntilCompleted];
+
+            #ifdef LAR_PROFILE_METAL_SIFT
+                gpuKernelTime += std::chrono::duration<double, std::milli>(
+                    std::chrono::high_resolution_clock::now() - gpuKernelStart).count();
+            #endif
+
+                RELEASE_IF_MANUAL(blurParamsBuffer);
+                RELEASE_IF_MANUAL(blurKernelBuffer);
+                // RELEASE_IF_MANUAL(paramsBuffer);
+                // RELEASE_IF_MANUAL(kernelBuffer);
+            }
+
+            extractKeypoints(
+                bitarrayBuffer, octave, nLevels, octaveBitarraySize,
+                octaveWidth, nOctaveLayers-1, nOctaveLayers, contrastThreshold, edgeThreshold, sigma,
+                gaussIdx, cpuTime, gauss_pyr, dog_pyr, keypoints
+            );
+
+        #ifdef LAR_PROFILE_METAL_SIFT
+            dogTime += std::chrono::duration<double, std::milli>(
+                std::chrono::high_resolution_clock::now() - dogStart).count();
+        #endif
         }
 
         RELEASE_IF_MANUAL(bitarrayBuffer);
-        // Note: pipeline, blurPipeline, and library are cached as static and should not be released
+        // Note: pipeline, blurAndDoGPipeline, and library are cached as static and should not be released
 
 #ifdef LAR_PROFILE_METAL_SIFT
         auto endTotal = std::chrono::high_resolution_clock::now();

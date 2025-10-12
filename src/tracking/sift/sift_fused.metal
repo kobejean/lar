@@ -44,6 +44,16 @@ struct FusedExtremaParams {
     int kernelSize;         // Gaussian kernel size for nextGauss
 };
 
+struct ExtremaParams {
+    int width;              // Image width for this layer
+    int height;             // Image height for this layer
+    int rowStride;          // Row stride in floats (for aligned buffers)
+    float threshold;        // Absolute threshold for extrema detection
+    int border;             // Border size (uses SIFT_IMG_BORDER constant)
+    int octave;             // Current octave index
+    int layer;              // Current layer index (1 to nOctaveLayers)
+};
+
 // Helper for 1D horizontal Gaussian blur with border replication
 #pragma METAL fp math_mode(safe)
 float horizontalGaussianBlur(
@@ -197,6 +207,7 @@ kernel void gaussianBlurAndDoGFused(
     int globalY = gid.y;
     int localX = tid.x;
     int localY = tid.y;
+    int sharedY = localY + radius;
 
     // Calculate tile origin in Y dimension (X doesn't need tiling)
     int tileY = (gid.y / TILE_HEIGHT) * TILE_HEIGHT - radius;
@@ -223,13 +234,10 @@ kernel void gaussianBlurAndDoGFused(
     // Only process valid output pixels
     if (globalX >= params.width || globalY >= params.height) return;
 
-    // Position in shared memory (accounting for halo offset)
-    int sharedY = localY + radius;
-
     // Write final result to global memory
     int idx = globalY * params.rowStride + globalX;
     float gauss = verticalGaussianBlur(
-        (const threadgroup float*)sharedHoriz, gaussKernel, localX, localY + radius, radius, 47, 16
+        (const threadgroup float*)sharedHoriz, gaussKernel, localX, sharedY, radius, 47, 16
     );
     nextGauss[idx] = gauss;
     nextDoG[idx] = gauss - currGauss[idx];
@@ -414,8 +422,6 @@ kernel void detectScaleSpaceExtremaFused(
     if (globalX < params.border || globalX >= params.width - params.border ||
         globalY < params.border || globalY >= params.height - params.border) return;
 
-    bool isExtremum = false;
-
     // Read center value from currDoG (use global memory)
     float val = currDoG[globalY * params.rowStride + globalX];
     int i = globalY * params.rowStride + globalX;
@@ -467,6 +473,94 @@ kernel void detectScaleSpaceExtremaFused(
 
     // Calculate linear bit index: row-major order
     uint bitIndex = globalY * params.width + globalX;
+
+    // Calculate chunk index and bit offset
+    // Each uint32 stores 32 bits (pixels)
+    uint chunkIndex = bitIndex >> 5;      // Divide by 32
+    uint bitOffset = bitIndex & 31;       // Modulo 32
+
+    // Set the bit using atomic OR
+    // This is safe because each pixel maps to exactly one bit
+    atomic_fetch_or_explicit(&extremaBitarray[chunkIndex], (1u << bitOffset), memory_order_relaxed);
+}
+
+
+// Kernel: Detect local extrema in 3D scale space (26-neighbor comparison)
+// Each thread processes one pixel in the middle layer
+// Note: Extrema detection requires precise floating-point comparisons
+// Compiled with -fno-fast-math to ensure IEEE-754 compliant comparisons
+//
+// Output: Bitarray encoding extrema positions (1 bit per pixel)
+// - Deterministic output (no race conditions)
+// - Memory efficient (1 bit per pixel vs 4 bytes per candidate)
+// - Host scans bitarray using SIMD for fast candidate extraction
+#pragma METAL fp math_mode(safe)
+kernel void detectScaleSpaceExtrema(
+    const device float* prevDoG [[buffer(0)]],   // DoG layer i-1
+    const device float* currDoG [[buffer(1)]],   // DoG layer i (center)
+    const device float* nextDoG [[buffer(2)]],   // DoG layer i+1
+    device atomic_uint* extremaBitarray [[buffer(3)]], // Bitarray output (1 bit per pixel, packed as uint32)
+    constant ExtremaParams& params [[buffer(5)]],
+    uint2 gid [[thread_position_in_grid]])
+{
+    int x = gid.x;
+    int y = gid.y;
+
+    // Check if this thread should process (not border, not out of bounds)
+    if (x < params.border || x >= params.width - params.border ||
+        y < params.border || y >= params.height - params.border) return;
+
+    // Read center pixel value
+    int step = params.rowStride;
+    int i = y * step + x;
+    float val = currDoG[i];
+
+    // Quick threshold rejection
+    if (fabs(val) <= params.threshold) return;
+    float _00,_01,_02;
+    float _10,    _12;
+    float _20,_21,_22;
+
+    if (val > 0) {
+        _00 = currDoG[i-step-1]; _01 = currDoG[i-step]; _02 = currDoG[i-step+1];
+        _10 = currDoG[i-1]; _12 = currDoG[i+1];
+        _20 = currDoG[i+step-1]; _21 = currDoG[i+step]; _22 = currDoG[i+step+1];
+        float vmax = fmax(fmax(fmax(_00,_01),fmax(_02,_10)),fmax(fmax(_12,_20),fmax(_21,_22)));
+        if (val < vmax) return;
+        _00 = prevDoG[i-step-1]; _01 = prevDoG[i-step]; _02 = prevDoG[i-step+1];
+        _10 = prevDoG[i-1]; _12 = prevDoG[i+1];
+        _20 = prevDoG[i+step-1]; _21 = prevDoG[i+step]; _22 = prevDoG[i+step+1];
+        vmax = fmax(fmax(fmax(_00,_01),fmax(_02,_10)),fmax(fmax(_12,_20),fmax(_21,_22)));
+        if (val < vmax) return;
+        _00 = nextDoG[i-step-1]; _01 = nextDoG[i-step]; _02 = nextDoG[i-step+1];
+        _10 = nextDoG[i-1]; _12 = nextDoG[i+1];
+        _20 = nextDoG[i+step-1]; _21 = nextDoG[i+step]; _22 = nextDoG[i+step+1];
+        vmax = fmax(fmax(fmax(_00,_01),fmax(_02,_10)),fmax(fmax(_12,_20),fmax(_21,_22)));
+        if (val < vmax) return;
+        vmax = fmax(prevDoG[i], nextDoG[i]);
+        if (val < vmax) return;
+    } else {
+        _00 = currDoG[i-step-1]; _01 = currDoG[i-step]; _02 = currDoG[i-step+1];
+        _10 = currDoG[i-1]; _12 = currDoG[i+1];
+        _20 = currDoG[i+step-1]; _21 = currDoG[i+step]; _22 = currDoG[i+step+1];
+        float vmin = fmin(fmin(fmin(_00,_01),fmin(_02,_10)),fmin(fmin(_12,_20),fmin(_21,_22)));
+        if (val > vmin) return;
+        _00 = prevDoG[i-step-1]; _01 = prevDoG[i-step]; _02 = prevDoG[i-step+1];
+        _10 = prevDoG[i-1]; _12 = prevDoG[i+1];
+        _20 = prevDoG[i+step-1]; _21 = prevDoG[i+step]; _22 = prevDoG[i+step+1];
+        vmin = fmin(fmin(fmin(_00,_01),fmin(_02,_10)),fmin(fmin(_12,_20),fmin(_21,_22)));
+        if (val > vmin) return;
+        _00 = nextDoG[i-step-1]; _01 = nextDoG[i-step]; _02 = nextDoG[i-step+1];
+        _10 = nextDoG[i-1]; _12 = nextDoG[i+1];
+        _20 = nextDoG[i+step-1]; _21 = nextDoG[i+step]; _22 = nextDoG[i+step+1];
+        vmin = fmin(fmin(fmin(_00,_01),fmin(_02,_10)),fmin(fmin(_12,_20),fmin(_21,_22)));
+        if (val > vmin) return;
+        vmin = fmin(prevDoG[i], nextDoG[i]);
+        if (val > vmin) return;
+    }
+
+    // Calculate linear bit index: row-major order
+    uint bitIndex = y * params.width + x;
 
     // Calculate chunk index and bit offset
     // Each uint32 stores 32 bits (pixels)
