@@ -1,9 +1,9 @@
-// This implementation uses per-layer command buffers for fine-grained GPU scheduling:
+// This implementation uses per-layer command buffers with async CPU/GPU overlap:
 // - Each layer within each octave gets its own command buffer
 // - Octave 1+ layer 1 includes GPU resize from previous octave (eliminates CPU/GPU sync)
 // - Dependencies handled by Metal's command queue ordering
 // - Separate extrema bitarray buffers per layer for cache coherency
-// - Final keypoint extraction happens after all GPU work completes
+// - Producer-consumer pattern: CPU extraction starts immediately as each GPU layer completes
 
 #import <Metal/Metal.h>
 #include <utility>
@@ -16,6 +16,9 @@
 #include <iostream>
 #include <chrono>
 #include <vector>
+#include <mutex>
+#include <atomic>
+#include <condition_variable>
 
 #define LAR_PROFILE_METAL_SIFT 1
 
@@ -244,8 +247,8 @@ void extractKeypoints(
     float edgeThreshold,
     float sigma,
     int gaussIdx,
-    std::vector<cv::Mat>& gauss_pyr,
-    std::vector<cv::Mat>& dog_pyr,
+    const std::vector<cv::Mat>& gauss_pyr,
+    const std::vector<cv::Mat>& dog_pyr,
     std::vector<cv::KeyPoint>& keypoints)
 {
     uint32_t* octaveBitarray = bitarray + octaveBitarrayOffset;
@@ -415,9 +418,14 @@ void findScaleSpaceExtremaMetalPipelined(
 
         keypoints.clear();
 
+        // Producer-consumer synchronization (use shared_ptr for block capture)
+        auto keypointsMutex = std::make_shared<std::mutex>();  // Protects shared keypoints vector
+        auto completedLayers = std::make_shared<std::atomic<int>>(0);  // Track completed layers
+        int totalLayers = nOctaves * nOctaveLayers;  // Total number of layers to process
+
         // Track command buffers for all layers across all octaves
         std::vector<id<MTLCommandBuffer>> allCommandBuffers;
-        allCommandBuffers.reserve(nOctaves * nOctaveLayers);
+        allCommandBuffers.reserve(totalLayers);
 
 #ifdef LAR_PROFILE_METAL_SIFT
         auto cpuPrepStart = std::chrono::high_resolution_clock::now();
@@ -585,6 +593,43 @@ void findScaleSpaceExtremaMetalPipelined(
 
                 RELEASE_IF_MANUAL(paramsBuffer);
 
+                // Add completion handler for async keypoint extraction (producer-consumer pattern)
+                // Capture all necessary data by value to ensure thread-safety
+                [layerCmdBuf addCompletedHandler:^(id<MTLCommandBuffer> commandBuffer) {
+                    // Extract keypoints for this layer as soon as GPU completes
+                    uint32_t* layerExtremaBitarray = (uint32_t*)layerExtremaBitarrays[layerIndex].contents;
+
+                    // Thread-local temporary storage for keypoints from this layer
+                    std::vector<cv::KeyPoint> localKeypoints;
+
+                    extractKeypoints(
+                        layerExtremaBitarray,
+                        0,  // No offset needed
+                        o,
+                        nLevels,
+                        layerExtremaBitarraySizes[layerIndex],
+                        octaveWidth,
+                        layer,
+                        nOctaveLayers,
+                        (float)contrastThreshold,
+                        (float)edgeThreshold,
+                        (float)sigma,
+                        gaussIdx,
+                        gauss_pyr,
+                        dog_pyr,
+                        localKeypoints
+                    );
+
+                    // Merge local keypoints into shared vector with mutex protection
+                    {
+                        std::lock_guard<std::mutex> lock(*keypointsMutex);
+                        keypoints.insert(keypoints.end(), localKeypoints.begin(), localKeypoints.end());
+                    }
+
+                    // Increment completed counter
+                    completedLayers->fetch_add(1, std::memory_order_release);
+                }];
+
                 // ✅ Submit this layer's command buffer immediately
                 [layerCmdBuf commit];
                 allCommandBuffers.push_back(layerCmdBuf);
@@ -597,12 +642,14 @@ void findScaleSpaceExtremaMetalPipelined(
 #endif
 
         // ========================================================================
-        // Wait for all GPU work to complete
+        // Wait for all layers to complete (GPU work + async CPU extraction in handlers)
+        // Producer-consumer pattern: CPU extraction overlaps with GPU execution
         // ========================================================================
 #ifdef LAR_PROFILE_METAL_SIFT
         auto gpuWaitStart = std::chrono::high_resolution_clock::now();
 #endif
 
+        // Wait for all command buffers (completion handlers will have extracted keypoints)
         for (auto& cmdBuf : allCommandBuffers) {
             [cmdBuf waitUntilCompleted];
         }
@@ -610,46 +657,10 @@ void findScaleSpaceExtremaMetalPipelined(
 #ifdef LAR_PROFILE_METAL_SIFT
         double gpuWaitTime = std::chrono::duration<double, std::milli>(
             std::chrono::high_resolution_clock::now() - gpuWaitStart).count();
-#endif
 
-        // ========================================================================
-        // Extract keypoints from all octaves/layers
-        // ========================================================================
-#ifdef LAR_PROFILE_METAL_SIFT
-        auto cpuExtractStart = std::chrono::high_resolution_clock::now();
-#endif
-
-        for (int o = 0; o < nOctaves; o++) {
-            int octaveWidth = base.cols >> o;
-            int gaussIdx = o * nLevels;
-
-            for (int layer = 1; layer <= nOctaveLayers; layer++) {
-                int layerIndex = o * nOctaveLayers + (layer - 1);
-                uint32_t* layerExtremaBitarray = (uint32_t*)layerExtremaBitarrays[layerIndex].contents;
-
-                extractKeypoints(
-                    layerExtremaBitarray,
-                    0,  // No offset needed - each layer has its own buffer
-                    o,
-                    nLevels,
-                    layerExtremaBitarraySizes[layerIndex],
-                    octaveWidth,
-                    layer,
-                    nOctaveLayers,
-                    contrastThreshold,
-                    edgeThreshold,
-                    sigma,
-                    gaussIdx,
-                    gauss_pyr,
-                    dog_pyr,
-                    keypoints
-                );
-            }
-        }
-
-#ifdef LAR_PROFILE_METAL_SIFT
-        cpuExtractTime = std::chrono::duration<double, std::milli>(
-            std::chrono::high_resolution_clock::now() - cpuExtractStart).count();
+        // Note: CPU extraction happens asynchronously in Metal completion handlers
+        // This achieves true CPU/GPU overlap - extraction starts as soon as each layer completes
+        cpuExtractTime = 0;  // Async extraction time is included in gpuWaitTime
 #endif
 
         // Cleanup individual layer extrema bitarray buffers
