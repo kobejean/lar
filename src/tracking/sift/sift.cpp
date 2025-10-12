@@ -38,6 +38,8 @@ namespace lar {
     void findScaleSpaceExtremaMetalPipelined(const cv::Mat& base,
                                              std::vector<cv::Mat>& gauss_pyr,
                                              std::vector<cv::KeyPoint>& keypoints,
+                                             cv::Mat& descriptors,
+                                             int descriptorType,
                                              int nOctaves, int nOctaveLayers, float threshold,
                                              double contrastThreshold, double edgeThreshold, double sigma);
 #endif
@@ -612,8 +614,8 @@ static void findScaleSpaceExtremaInLayer(
 }
 
 // Calculate SIFT descriptor with SIMD optimization
-static void calcSIFTDescriptor(const cv::Mat& img, cv::Point2f ptf, float ori, float scl,
-                              int d, int n, cv::Mat& dstMat, int row) {
+void calcSIFTDescriptor(const cv::Mat& img, cv::Point2f ptf, float ori, float scl,
+                        int d, int n, cv::Mat& dstMat, int row) {
     cv::Point pt(cvRound(ptf.x), cvRound(ptf.y));
     float cos_t = cosf(ori*(float)(CV_PI/180));
     float sin_t = sinf(ori*(float)(CV_PI/180));
@@ -989,9 +991,11 @@ void SIFT::detectAndCompute(cv::InputArray _image, cv::InputArray _mask,
 #endif
 #if defined(LAR_USE_METAL_SIFTO) && defined(LAR_USE_METAL_SIFTO_PIPELINED)
     // Use pipelined Metal kernel for maximum GPU parallelism (all octaves in parallel)
+    // Descriptors are computed incrementally in the pipeline
     const int threshold = cvFloor(0.5 * contrastThreshold_ / nOctaveLayers_ * 255 * SIFT_FIXPT_SCALE);
-    findScaleSpaceExtremaMetalPipelined(base, gpyr, keypoints, nOctaves, nOctaveLayers_,
-        (float)threshold, contrastThreshold_, edgeThreshold_, sigma_);
+    cv::Mat metalDescriptors;  // Will be populated by pipelined extraction
+    findScaleSpaceExtremaMetalPipelined(base, gpyr, keypoints, metalDescriptors, descriptorType_,
+        nOctaves, nOctaveLayers_, (float)threshold, contrastThreshold_, edgeThreshold_, sigma_);
 #elif defined(LAR_USE_METAL_SIFTO) && defined(LAR_USE_METAL_SIFTO_FUSED)
     // Use fused Metal kernel for GPU-accelerated GaussianPyramid + DoG + extrema detection
     const int threshold = cvFloor(0.5 * contrastThreshold_ / nOctaveLayers_ * 255 * SIFT_FIXPT_SCALE);
@@ -1012,7 +1016,7 @@ void SIFT::detectAndCompute(cv::InputArray _image, cv::InputArray _mask,
 #ifdef LAR_PROFILE_SIFT
     auto startFiltering = std::chrono::high_resolution_clock::now();
 #endif
-    cv::KeyPointsFilter::removeDuplicatedSorted(keypoints);
+    // cv::KeyPointsFilter::removeDuplicatedSorted(keypoints);
 
     if( nfeatures_ > 0 ) {
         cv::KeyPointsFilter::retainBest(keypoints, nfeatures_);
@@ -1054,6 +1058,36 @@ void SIFT::detectAndCompute(cv::InputArray _image, cv::InputArray _mask,
     auto startDescriptors = std::chrono::high_resolution_clock::now();
 #endif
     if (_descriptors.needed()) {
+#if defined(LAR_USE_METAL_SIFTO) && defined(LAR_USE_METAL_SIFTO_PIPELINED)
+        // Descriptors already computed incrementally in Metal pipeline
+        // Just copy the pre-computed descriptors to the output
+        if (!metalDescriptors.empty()) {
+            metalDescriptors.copyTo(_descriptors);
+        } else {
+            // No keypoints found, create empty descriptor matrix
+            _descriptors.create(0, descriptorSize(), descriptorType_);
+        }
+
+        cv::Mat descriptors = _descriptors.getMat();
+        // Debug: Print first keypoint and descriptor
+        if (!keypoints.empty() && !descriptors.empty()) {
+            const cv::KeyPoint& firstKpt = keypoints[0];
+            std::cout << "\n=== DEBUG: First Keypoint+Descriptor (Pipelined) ===\n";
+            std::cout << "Keypoint[0]: pt=(" << firstKpt.pt.x << ", " << firstKpt.pt.y
+                      << ") size=" << firstKpt.size << " angle=" << firstKpt.angle
+                      << " response=" << firstKpt.response << " octave=" << firstKpt.octave << "\n";
+            std::cout << "Descriptor[0] (first 16 values): ";
+            for (int i = 0; i < 16 && i < descriptors.cols; i++) {
+                if (descriptors.type() == CV_8U) {
+                    std::cout << (int)descriptors.at<uint8_t>(0, i) << " ";
+                } else if (descriptors.type() == CV_32F) {
+                    std::cout << descriptors.at<float>(0, i) << " ";
+                }
+            }
+            std::cout << "\n=====================================================\n\n";
+        }
+#else
+        // CPU path: compute descriptors for all keypoints
         int dsize = descriptorSize();
         _descriptors.create((int)keypoints.size(), dsize, descriptorType_);
         cv::Mat descriptors = _descriptors.getMat();
@@ -1076,6 +1110,25 @@ void SIFT::detectAndCompute(cv::InputArray _image, cv::InputArray _mask,
 
             calcSIFTDescriptor(img, ptf, angle, size*0.5f, d, n, descriptors, i);
         }
+
+        // Debug: Print first keypoint and descriptor (CPU path)
+        if (!keypoints.empty() && !descriptors.empty()) {
+            const cv::KeyPoint& firstKpt = keypoints[0];
+            std::cout << "\n=== DEBUG: First Keypoint+Descriptor (CPU) ===\n";
+            std::cout << "Keypoint[0]: pt=(" << firstKpt.pt.x << ", " << firstKpt.pt.y
+                      << ") size=" << firstKpt.size << " angle=" << firstKpt.angle
+                      << " response=" << firstKpt.response << " octave=" << firstKpt.octave << "\n";
+            std::cout << "Descriptor[0] (first 16 values): ";
+            for (int i = 0; i < 16 && i < descriptors.cols; i++) {
+                if (descriptors.type() == CV_8U) {
+                    std::cout << (int)descriptors.at<uint8_t>(0, i) << " ";
+                } else if (descriptors.type() == CV_32F) {
+                    std::cout << descriptors.at<float>(0, i) << " ";
+                }
+            }
+            std::cout << "\n===============================================\n\n";
+        }
+#endif
     }
 #ifdef LAR_PROFILE_SIFT
     auto endDescriptors = std::chrono::high_resolution_clock::now();

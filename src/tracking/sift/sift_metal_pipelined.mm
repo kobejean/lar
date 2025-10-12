@@ -29,7 +29,7 @@ namespace lar {
 // ============================================================================
 
 // Initialize Metal pipelines (cached across calls)
-bool initializeMetalPipelines(
+static bool initializeMetalPipelines(
     id<MTLDevice> device,
     __strong id<MTLComputePipelineState>& blurAndDoGPipeline,
     __strong id<MTLComputePipelineState>& extremaPipeline,
@@ -97,7 +97,7 @@ bool initializeMetalPipelines(
 }
 
 // Compute Gaussian kernels for all pyramid levels
-void computeGaussianKernels(
+static void computeGaussianKernels(
     int nLevels,
     int nOctaveLayers,
     double sigma,
@@ -119,7 +119,7 @@ void computeGaussianKernels(
 }
 
 // Allocate Metal buffers and textures for an octave
-void allocateOctaveResources(
+static void allocateOctaveResources(
     id<MTLDevice> device,
     MetalSiftResources& resources,
     int octave,
@@ -234,7 +234,8 @@ void uploadOctaveBase(
 }
 
 // Extract keypoints from bitarray for a specific octave/layer
-void extractKeypoints(
+// AND compute descriptors incrementally
+void extractKeypointsAndDescriptors(
     uint32_t* bitarray,
     int octaveBitarrayOffset,
     int octave,
@@ -249,10 +250,20 @@ void extractKeypoints(
     int gaussIdx,
     const std::vector<cv::Mat>& gauss_pyr,
     const std::vector<cv::Mat>& dog_pyr,
-    std::vector<cv::KeyPoint>& keypoints)
+    std::vector<cv::KeyPoint>& keypoints,
+    cv::Mat& descriptors,
+    int descriptorType)
 {
     uint32_t* octaveBitarray = bitarray + octaveBitarrayOffset;
     int count = 0;
+
+    // Pre-allocate local descriptor matrix (upper bound: all pixels in octave could be keypoints)
+    // In practice, we'll only use a small fraction of this
+    const int SIFT_DESCR_WIDTH = 4;
+    const int SIFT_DESCR_HIST_BINS = 8;
+    const int descriptorSize = SIFT_DESCR_WIDTH * SIFT_DESCR_WIDTH * SIFT_DESCR_HIST_BINS;
+    int maxKeypoints = octaveWidth * octaveWidth;  // Upper bound estimate
+    cv::Mat localDescriptors(maxKeypoints, descriptorSize, descriptorType);
 
     for (uint32_t chunkIdx = 0; chunkIdx < octaveBitarraySize; chunkIdx++) {
         uint32_t chunk = octaveBitarray[chunkIdx];
@@ -287,7 +298,7 @@ void extractKeypoints(
 
                 float mag_thr = omax * SIFT_ORI_PEAK_RATIO;
 
-                // Find orientation peaks and create keypoints
+                // Find orientation peaks and create keypoints + descriptors
                 for (int j = 0; j < n; j++) {
                     int l = j > 0 ? j - 1 : n - 1;
                     int r2 = j < n-1 ? j + 1 : 0;
@@ -300,6 +311,28 @@ void extractKeypoints(
                             kpt.angle = 0.f;
 
                         keypoints.push_back(kpt);
+
+                        // Compute descriptor for this keypoint immediately
+                        // Use the updated gaussIdx from adjustLocalExtrema
+                        int finalGaussIdx = octave * (nOctaveLayers + 3) + keypoint_layer;
+                        const cv::Mat& img = gauss_pyr[finalGaussIdx];
+
+                        // kpt.pt is in full-resolution coordinates, but img is at octave resolution
+                        // Scale back to octave space: divide by (1 << octave)
+                        float octaveScale = 1.f / (1 << octave);
+                        cv::Point2f ptf(kpt.pt.x * octaveScale, kpt.pt.y * octaveScale);
+                        float scl = kpt.size * 0.5f * octaveScale;
+
+                        // calcSIFTDescriptor expects angle in DEGREES with inverted convention (360 - angle)
+                        // (it converts to radians internally)
+                        float angle = 360.f - kpt.angle;
+                        if (std::abs(angle - 360.f) < FLT_EPSILON)
+                            angle = 0.f;
+
+                        calcSIFTDescriptor(img, ptf, angle,
+                                         scl, SIFT_DESCR_WIDTH, SIFT_DESCR_HIST_BINS,
+                                         localDescriptors, count);
+
                         count++;
                     }
                 }
@@ -307,7 +340,12 @@ void extractKeypoints(
         }
     }
 
-    std::cout << "extracted keypoints from octave " << octave << " layer " << layer << " adding " << count << " keypoints" << std::endl;
+    // Resize local descriptors to actual count and assign to output
+    if (count > 0) {
+        descriptors = localDescriptors.rowRange(0, count).clone();
+    }
+
+    std::cout << "extracted " << count << " keypoints+descriptors from octave " << octave << " layer " << layer << std::endl;
 }
 
 // ============================================================================
@@ -324,6 +362,8 @@ void findScaleSpaceExtremaMetalPipelined(
     const cv::Mat& base,
     std::vector<cv::Mat>& gauss_pyr,
     std::vector<cv::KeyPoint>& keypoints,
+    cv::Mat& descriptors,
+    int descriptorType,
     int nOctaves,
     int nOctaveLayers,
     float threshold,
@@ -419,9 +459,14 @@ void findScaleSpaceExtremaMetalPipelined(
         keypoints.clear();
 
         // Producer-consumer synchronization (use shared_ptr for block capture)
-        auto keypointsMutex = std::make_shared<std::mutex>();  // Protects shared keypoints vector
-        auto completedLayers = std::make_shared<std::atomic<int>>(0);  // Track completed layers
+        auto keypointsMutex = std::make_shared<std::mutex>();  // Protects per-layer keypoints storage
+        auto descriptorsMutex = std::make_shared<std::mutex>();  // Protects per-layer descriptors storage
         int totalLayers = nOctaves * nOctaveLayers;  // Total number of layers to process
+        // Pre-allocate storage with fixed indices (one per layer, in order)
+        // This ensures keypoints and descriptors are stored in deterministic order regardless of completion order
+        auto allKeypoints = std::make_shared<std::vector<std::vector<cv::KeyPoint>>>(totalLayers);  // Fixed-size vector of keypoint vectors
+        auto allDescriptors = std::make_shared<std::vector<cv::Mat>>(totalLayers);  // Fixed-size vector
+        auto completedLayers = std::make_shared<std::atomic<int>>(0);  // Track completed layers
 
         // Track command buffers for all layers across all octaves
         std::vector<id<MTLCommandBuffer>> allCommandBuffers;
@@ -593,16 +638,17 @@ void findScaleSpaceExtremaMetalPipelined(
 
                 RELEASE_IF_MANUAL(paramsBuffer);
 
-                // Add completion handler for async keypoint extraction (producer-consumer pattern)
+                // Add completion handler for async keypoint+descriptor extraction (producer-consumer pattern)
                 // Capture all necessary data by value to ensure thread-safety
                 [layerCmdBuf addCompletedHandler:^(id<MTLCommandBuffer> commandBuffer) {
-                    // Extract keypoints for this layer as soon as GPU completes
+                    // Extract keypoints+descriptors for this layer as soon as GPU completes
                     uint32_t* layerExtremaBitarray = (uint32_t*)layerExtremaBitarrays[layerIndex].contents;
 
-                    // Thread-local temporary storage for keypoints from this layer
+                    // Thread-local temporary storage for keypoints and descriptors from this layer
                     std::vector<cv::KeyPoint> localKeypoints;
+                    cv::Mat localDescriptors;
 
-                    extractKeypoints(
+                    extractKeypointsAndDescriptors(
                         layerExtremaBitarray,
                         0,  // No offset needed
                         o,
@@ -617,13 +663,21 @@ void findScaleSpaceExtremaMetalPipelined(
                         gaussIdx,
                         gauss_pyr,
                         dog_pyr,
-                        localKeypoints
+                        localKeypoints,
+                        localDescriptors,
+                        descriptorType
                     );
 
-                    // Merge local keypoints into shared vector with mutex protection
+                    // Store keypoints and descriptors at the correct layer index (maintains deterministic order)
+                    // This ensures keypoint[i] corresponds to descriptor.row(i) even when completion order varies
                     {
                         std::lock_guard<std::mutex> lock(*keypointsMutex);
-                        keypoints.insert(keypoints.end(), localKeypoints.begin(), localKeypoints.end());
+                        (*allKeypoints)[layerIndex] = localKeypoints;
+                    }
+
+                    {
+                        std::lock_guard<std::mutex> lock(*descriptorsMutex);
+                        (*allDescriptors)[layerIndex] = localDescriptors;
                     }
 
                     // Increment completed counter
@@ -649,7 +703,7 @@ void findScaleSpaceExtremaMetalPipelined(
         auto gpuWaitStart = std::chrono::high_resolution_clock::now();
 #endif
 
-        // Wait for all command buffers (completion handlers will have extracted keypoints)
+        // Wait for all command buffers (completion handlers will have extracted keypoints+descriptors)
         for (auto& cmdBuf : allCommandBuffers) {
             [cmdBuf waitUntilCompleted];
         }
@@ -662,6 +716,30 @@ void findScaleSpaceExtremaMetalPipelined(
         // This achieves true CPU/GPU overlap - extraction starts as soon as each layer completes
         cpuExtractTime = 0;  // Async extraction time is included in gpuWaitTime
 #endif
+
+        // Merge keypoints and descriptors in deterministic layer order
+        // This ensures keypoint[i] corresponds to descriptor.row(i)
+        for (size_t i = 0; i < allKeypoints->size(); i++) {
+            const auto& layerKeypoints = (*allKeypoints)[i];
+            if (!layerKeypoints.empty()) {
+                keypoints.insert(keypoints.end(), layerKeypoints.begin(), layerKeypoints.end());
+            }
+        }
+
+        // Merge descriptors in the same layer order (vertical concatenation)
+        // Filter out empty matrices (layers with 0 keypoints)
+        std::vector<cv::Mat> nonEmptyDescriptors;
+        nonEmptyDescriptors.reserve(allDescriptors->size());
+        for (const auto& mat : *allDescriptors) {
+            if (!mat.empty()) {
+                nonEmptyDescriptors.push_back(mat);
+            }
+        }
+
+        if (!nonEmptyDescriptors.empty()) {
+            cv::vconcat(nonEmptyDescriptors, descriptors);
+        }
+
 
         // Cleanup individual layer extrema bitarray buffers
         for (auto& buffer : layerExtremaBitarrays) {

@@ -50,6 +50,9 @@ bool adjustLocalExtrema(const std::vector<cv::Mat>& dog_pyr, cv::KeyPoint& kpt, 
                         int& layer, int& r, int& c, int nOctaveLayers,
                         float contrastThreshold, float edgeThreshold, float sigma);
 
+void calcSIFTDescriptor(const cv::Mat& img, cv::Point2f ptf, float ori, float scl,
+                        int d, int n, cv::Mat& dstMat, int row);
+
 } // namespace lar
 
 #endif // LAR_TRACKING_SIFT_H
