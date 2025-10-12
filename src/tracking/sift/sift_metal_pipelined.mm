@@ -1,13 +1,10 @@
-// Metal-accelerated pipelined SIFT scale-space extrema detection
-// Usage: Build with -DLAR_USE_METAL_SIFT_PIPELINED=ON
-//
 // This implementation uses per-layer command buffers for fine-grained GPU scheduling:
 // - Each layer within each octave gets its own command buffer
+// - Octave 1+ layer 1 includes GPU resize from previous octave (eliminates CPU/GPU sync)
 // - Dependencies handled by Metal's command queue ordering
-// - CPU prepares octave bases while GPU processes previous layers
 // - Separate bitarray sections per layer to avoid write conflicts
 // - Final keypoint extraction happens after all GPU work completes
-//
+
 #import <Metal/Metal.h>
 #include <utility>
 #import <MetalPerformanceShaders/MetalPerformanceShaders.h>
@@ -394,26 +391,27 @@ void findScaleSpaceExtremaMetalPipelined(
         std::vector<cv::Mat> dog_pyr(nOctaves * (nOctaveLayers + 2));
         gauss_pyr.resize(nOctaves * nLevels);
 
-        // Calculate total bitarray size (sum of all octaves * layers)
-        std::vector<uint32_t> octaveBitarrayOffsets(nOctaves);
-        std::vector<uint32_t> octaveBitarraySizes(nOctaves);
-        uint32_t totalBitarraySize = 0;
+        // Allocate separate bitarray buffers for each layer (better cache coherency)
+        // Structure: layerBitarrays[octave * nOctaveLayers + (layer-1)]
+        std::vector<id<MTLBuffer>> layerBitarrays;
+        std::vector<uint32_t> layerBitarraySizes;
+        layerBitarrays.reserve(nOctaves * nOctaveLayers);
+        layerBitarraySizes.reserve(nOctaves * nOctaveLayers);
 
         for (int o = 0; o < nOctaves; o++) {
             int octaveWidth = base.cols >> o;
             int octaveHeight = base.rows >> o;
             uint32_t octavePixels = octaveWidth * octaveHeight;
-            uint32_t octaveSize = (octavePixels + 31) / 32;  // Number of uint32 chunks
+            uint32_t bitarraySize = ((octavePixels + 31) / 32) * sizeof(uint32_t);  // Size in bytes
 
-            octaveBitarrayOffsets[o] = totalBitarraySize;
-            octaveBitarraySizes[o] = octaveSize;
-            totalBitarraySize += octaveSize * nOctaveLayers;  // Each layer needs its own bitarray section
+            for (int layer = 1; layer <= nOctaveLayers; layer++) {
+                id<MTLBuffer> buffer = [device newBufferWithLength:bitarraySize
+                                                           options:MTLResourceStorageModeShared];
+                memset(buffer.contents, 0, bitarraySize);
+                layerBitarrays.push_back(buffer);
+                layerBitarraySizes.push_back(bitarraySize / sizeof(uint32_t));  // Store size in uint32 count
+            }
         }
-
-        // Allocate unified bitarray buffer for all octaves
-        id<MTLBuffer> bitarrayBuffer = [device newBufferWithLength:totalBitarraySize * sizeof(uint32_t)
-                                                            options:MTLResourceStorageModeShared];
-        memset(bitarrayBuffer.contents, 0, totalBitarraySize * sizeof(uint32_t));
 
         keypoints.clear();
 
@@ -574,9 +572,9 @@ void findScaleSpaceExtremaMetalPipelined(
                 [encoder setBuffer:dogBuffers[layer] offset:0 atIndex:1];   // currLayer
                 [encoder setBuffer:dogBuffers[layer+1] offset:0 atIndex:2]; // nextLayer
 
-                // Calculate bitarray offset for this octave and layer
-                uint32_t layerBitarrayOffset = octaveBitarrayOffsets[o] + (layer - 1) * octaveBitarraySizes[o];
-                [encoder setBuffer:bitarrayBuffer offset:layerBitarrayOffset * sizeof(uint32_t) atIndex:3];
+                // Use the individual buffer for this layer (no offset needed)
+                int layerIndex = o * nOctaveLayers + (layer - 1);
+                [encoder setBuffer:layerBitarrays[layerIndex] offset:0 atIndex:3];
                 [encoder setBuffer:paramsBuffer offset:0 atIndex:5];
 
                 MTLSize gridSize = MTLSizeMake(octaveWidth, octaveHeight, 1);
@@ -621,21 +619,20 @@ void findScaleSpaceExtremaMetalPipelined(
         auto cpuExtractStart = std::chrono::high_resolution_clock::now();
 #endif
 
-        uint32_t* bitarray = (uint32_t*)bitarrayBuffer.contents;
-
         for (int o = 0; o < nOctaves; o++) {
             int octaveWidth = base.cols >> o;
             int gaussIdx = o * nLevels;
 
             for (int layer = 1; layer <= nOctaveLayers; layer++) {
-                uint32_t layerBitarrayOffset = octaveBitarrayOffsets[o] + (layer - 1) * octaveBitarraySizes[o];
+                int layerIndex = o * nOctaveLayers + (layer - 1);
+                uint32_t* layerBitarray = (uint32_t*)layerBitarrays[layerIndex].contents;
 
                 extractKeypoints(
-                    bitarray,
-                    layerBitarrayOffset,
+                    layerBitarray,
+                    0,  // No offset needed - each layer has its own buffer
                     o,
                     nLevels,
-                    octaveBitarraySizes[o],
+                    layerBitarraySizes[layerIndex],
                     octaveWidth,
                     layer,
                     nOctaveLayers,
@@ -655,7 +652,10 @@ void findScaleSpaceExtremaMetalPipelined(
             std::chrono::high_resolution_clock::now() - cpuExtractStart).count();
 #endif
 
-        RELEASE_IF_MANUAL(bitarrayBuffer);
+        // Cleanup individual layer bitarray buffers
+        for (auto& buffer : layerBitarrays) {
+            RELEASE_IF_MANUAL(buffer);
+        }
 
 #ifdef LAR_PROFILE_METAL_SIFT
         auto endTotal = std::chrono::high_resolution_clock::now();
