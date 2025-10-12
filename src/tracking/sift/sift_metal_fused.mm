@@ -12,7 +12,7 @@
 #include <chrono>
 #include <vector>
 
-// #define LAR_PROFILE_METAL_SIFT 1
+#define LAR_PROFILE_METAL_SIFT 1
 
 namespace lar {
 
@@ -234,6 +234,7 @@ void extractKeypoints(
     for (uint32_t chunkIdx = 0; chunkIdx < octaveBitarraySize; chunkIdx++) {
         uint32_t chunk = bitarray[chunkIdx];
         if (chunk == 0) continue;
+        bitarray[chunkIdx] = 0;
 
         for (int bitOffset = 0; bitOffset < 32; bitOffset++) {
             if (chunk & (1u << bitOffset)) {
@@ -255,7 +256,8 @@ void extractKeypoints(
                 float hist[n];
                 float scl_octv = kpt.size * 0.5f / (1 << octave);
 
-                float omax = calcOrientationHist(gauss_pyr[gaussIdx + keypoint_layer],
+                int gaussIdx = octave * (nOctaveLayers + 3) + keypoint_layer;
+                float omax = calcOrientationHist(gauss_pyr[gaussIdx],
                                                 cv::Point(c_pos, r),
                                                 cvRound(SIFT_ORI_RADIUS * scl_octv),
                                                 SIFT_ORI_SIG_FCTR * scl_octv,
@@ -282,7 +284,7 @@ void extractKeypoints(
             }
         }
     }
-    // std::cout << "extracted keypoints from octave " << octave << " layer " << layer << " adding " << count << " keypoints" << std::endl;
+    std::cout << "extracted keypoints from octave " << octave << " layer " << layer << " adding " << count << " keypoints" << std::endl;
 #ifdef LAR_PROFILE_METAL_SIFT
     cpuTime += std::chrono::duration<double, std::milli>(
         std::chrono::high_resolution_clock::now() - cpuStart).count();
@@ -376,8 +378,6 @@ void findScaleSpaceExtremaMetalFused(
         // Allocate bitarray buffer (1 bit per pixel, packed as uint32)
         id<MTLBuffer> bitarrayBuffer = [device newBufferWithLength:bitarraySize * sizeof(uint32_t)
                                                             options:MTLResourceStorageModeShared];
-        id<MTLBuffer> nextBitarrayBuffer = [device newBufferWithLength:bitarraySize * sizeof(uint32_t)
-                                                            options:MTLResourceStorageModeShared];
 
         keypoints.clear();
 
@@ -392,12 +392,6 @@ void findScaleSpaceExtremaMetalFused(
 
         // Process each octave
         for (int o = 0; o < nOctaves; o++) {
-            // processOctave(device, commandQueue, blurAndDoGPipeline, fusedPipeline,
-            //              base, resources, gaussianKernels, bitarrayBuffer,
-            //              gauss_pyr, dog_pyr, keypoints,
-            //              o, nOctaves, nOctaveLayers, nLevels,
-            //              threshold, contrastThreshold, edgeThreshold, sigma, cpuTime,
-            //              gpuKernelTime, bufferAllocTime, blurTime, dogTime);
             int octave = o;
             int octaveWidth = base.cols >> octave;
             int octaveHeight = base.rows >> octave;
@@ -434,7 +428,10 @@ void findScaleSpaceExtremaMetalFused(
             uint32_t octaveBitarraySize = (octavePixels + 31) / 32;
             memset(bitarrayBuffer.contents, 0, octaveBitarraySize * sizeof(uint32_t));
 
-            id<MTLCommandBuffer> initialCommandBuffer = [commandQueue commandBuffer];
+            // Compute initial Gaussian layers and DoG sequentially
+            // Each blur depends on the previous one, so we create separate encoders
+            id<MTLCommandBuffer> initCommandBuffer = [commandQueue commandBuffer];
+
             for (int i = 1; i <= 3; i++) {
                 GaussianBlurParams blurParams;
                 blurParams.width = octaveWidth;
@@ -450,7 +447,8 @@ void findScaleSpaceExtremaMetalFused(
                                                                     length:gaussianKernels[i].size() * sizeof(float)
                                                                     options:MTLResourceStorageModeShared];
 
-                id<MTLComputeCommandEncoder> blurEncoder = [initialCommandBuffer computeCommandEncoder];
+                // Create a new encoder for each blur - ensures sequential execution
+                id<MTLComputeCommandEncoder> blurEncoder = [initCommandBuffer computeCommandEncoder];
 
                 [blurEncoder setComputePipelineState:blurAndDoGPipeline];
                 [blurEncoder setBuffer:gaussBuffers[i-1] offset:0 atIndex:0];
@@ -463,69 +461,29 @@ void findScaleSpaceExtremaMetalFused(
                 MTLSize threadgroupSize = MTLSizeMake(16, 16, 1);
 
                 [blurEncoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
-                [blurEncoder endEncoding];
+                [blurEncoder endEncoding];  // Ensures this blur completes before next encoder starts
 
                 RELEASE_IF_MANUAL(blurParamsBuffer);
                 RELEASE_IF_MANUAL(blurKernelBuffer);
             }
-            // first extrema
-            {
-            // Setup parameters
-            ExtremaParams params;
-            params.width = octaveWidth;
-            params.height = octaveHeight;
-            params.rowStride = rowStride;
-            params.threshold = threshold;
-            params.border = SIFT_IMG_BORDER;
-            params.octave = o;
-            params.layer = 1;
 
-            // Create parameter buffer
-            id<MTLBuffer> paramsBuffer = [device newBufferWithBytes:&params
-                                                                length:sizeof(ExtremaParams)
-                                                                options:MTLResourceStorageModeShared];
-
-            // Create command buffer
-            id<MTLComputeCommandEncoder> encoder = [initialCommandBuffer computeCommandEncoder];
-
-            [encoder setComputePipelineState:extremaPipeline];
-            [encoder setBuffer:dogBuffers[0] offset:0 atIndex:0]; // prevLayer
-            [encoder setBuffer:dogBuffers[1] offset:0 atIndex:1]; // currLayer
-            [encoder setBuffer:dogBuffers[2] offset:0 atIndex:2]; // nextLayer
-            [encoder setBuffer:bitarrayBuffer offset:0 atIndex:3];  // bitarray output
-            [encoder setBuffer:paramsBuffer offset:0 atIndex:5];
-
-            // Dispatch threads (one per pixel, excluding border)
-            // Use 16×16 threadgroups for better cache locality in 2D image processing
-            MTLSize gridSize = MTLSizeMake(octaveWidth, octaveHeight, 1);
-            MTLSize threadgroupSize = MTLSizeMake(16, 16, 1);
-
-            [encoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
-            [encoder endEncoding];
-            }
-
-            [initialCommandBuffer commit];
-            [initialCommandBuffer waitUntilCompleted];
+            [initCommandBuffer commit];
+            [initCommandBuffer waitUntilCompleted];
 
 #ifdef LAR_PROFILE_METAL_SIFT
             blurTime += std::chrono::duration<double, std::milli>(
                 std::chrono::high_resolution_clock::now() - blurStart).count();
 #endif
 
-
-#ifdef LAR_PROFILE_METAL_SIFT
-            auto dogStart = std::chrono::high_resolution_clock::now();
-#endif
-
             // Process each layer for extrema detection
-            for (int layer = 2; layer <= nOctaveLayers; layer++) {
+            for (int layer = 1; layer <= nOctaveLayers; layer++) {
                 std::vector<id<MTLBuffer>>& gaussBuffers = resources.octaveBuffers[octave];
                 std::vector<id<MTLBuffer>>& dogBuffers = resources.dogBuffers[octave];
 
                 // Clear bitarray
                 uint32_t octavePixels = octaveWidth * octaveHeight;
                 uint32_t octaveBitarraySize = (octavePixels + 31) / 32;
-                memset(nextBitarrayBuffer.contents, 0, octaveBitarraySize * sizeof(uint32_t));
+                memset(bitarrayBuffer.contents, 0, octaveBitarraySize * sizeof(uint32_t));
 
                 // Dispatch extrema detection kernel
             #ifdef LAR_PROFILE_METAL_SIFT
@@ -585,7 +543,7 @@ void findScaleSpaceExtremaMetalFused(
                 [encoder setBuffer:dogBuffers[layer-1] offset:0 atIndex:0]; // prevLayer
                 [encoder setBuffer:dogBuffers[layer] offset:0 atIndex:1]; // currLayer
                 [encoder setBuffer:dogBuffers[layer+1] offset:0 atIndex:2]; // nextLayer
-                [encoder setBuffer:nextBitarrayBuffer offset:0 atIndex:3];  // bitarray output
+                [encoder setBuffer:bitarrayBuffer offset:0 atIndex:3];  // bitarray output
                 [encoder setBuffer:paramsBuffer offset:0 atIndex:5];
 
                 // Dispatch threads (one per pixel, excluding border)
@@ -599,14 +557,6 @@ void findScaleSpaceExtremaMetalFused(
                 [commandBuffer commit];
                 [commandBuffer waitUntilCompleted];
 
-                // Extract keypoints from previous layer (GPU work is now complete)
-                extractKeypoints(
-                    bitarrayBuffer, octave, nLevels, octaveBitarraySize,
-                    octaveWidth, layer-1, nOctaveLayers, contrastThreshold, edgeThreshold, sigma,
-                    gaussIdx, cpuTime, gauss_pyr, dog_pyr, keypoints
-                );
-
-                std::swap(bitarrayBuffer, nextBitarrayBuffer);
 
             #ifdef LAR_PROFILE_METAL_SIFT
                 gpuKernelTime += std::chrono::duration<double, std::milli>(
@@ -615,22 +565,17 @@ void findScaleSpaceExtremaMetalFused(
 
                 RELEASE_IF_MANUAL(blurParamsBuffer);
                 RELEASE_IF_MANUAL(blurKernelBuffer);
+                // Extract keypoints from previous layer (GPU work is now complete)
+                extractKeypoints(
+                    bitarrayBuffer, octave, nLevels, octaveBitarraySize,
+                    octaveWidth, layer, nOctaveLayers, contrastThreshold, edgeThreshold, sigma,
+                    gaussIdx, cpuTime, gauss_pyr, dog_pyr, keypoints
+                );
             }
 
-            extractKeypoints(
-                bitarrayBuffer, octave, nLevels, octaveBitarraySize,
-                octaveWidth, nOctaveLayers, nOctaveLayers, contrastThreshold, edgeThreshold, sigma,
-                gaussIdx, cpuTime, gauss_pyr, dog_pyr, keypoints
-            );
-
-        #ifdef LAR_PROFILE_METAL_SIFT
-            dogTime += std::chrono::duration<double, std::milli>(
-                std::chrono::high_resolution_clock::now() - dogStart).count();
-        #endif
         }
 
         RELEASE_IF_MANUAL(bitarrayBuffer);
-        RELEASE_IF_MANUAL(nextBitarrayBuffer);
         // Note: pipeline, blurAndDoGPipeline, and library are cached as static and should not be released
 
 #ifdef LAR_PROFILE_METAL_SIFT
@@ -642,7 +587,6 @@ void findScaleSpaceExtremaMetalFused(
         std::cout << "GPU Operations:\n";
         std::cout << "  Blur kernels:        " << blurTime << " ms\n";
         std::cout << "  Extrema kernels:     " << gpuKernelTime << " ms\n";
-        std::cout << "  Buffer allocation:   " << bufferAllocTime << " ms\n";
         std::cout << "CPU Operations:\n";
         std::cout << "  Keypoint extraction: " << cpuTime << " ms\n";
         std::cout << "Total:\n";

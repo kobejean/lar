@@ -10,7 +10,7 @@
 // Define LAR_USE_METAL_SIFT to enable Metal-accelerated Gaussian pyramid
 #define LAR_USE_METAL_SIFTO 1
 #define LAR_USE_METAL_SIFTO_FUSED 1
-// #define LAR_PROFILE_SIFT 1
+#define LAR_PROFILE_SIFT 1
 
 #ifdef LAR_USE_METAL_SIFTO
 // Forward declarations of Metal implementations (defined in sift_metal.mm)
@@ -380,7 +380,7 @@ bool adjustLocalExtrema(const std::vector<cv::Mat>& dog_pyr, cv::KeyPoint& kpt, 
     kpt.size = sigma*powf(2.f, (layer + xi) / nOctaveLayers)*(1 << octv)*2;
     kpt.response = std::abs(contr);
 
-    return kpt.size >= 2*2.9;
+    return true;
 }
 
 // Find extrema in one layer with SIMD optimization
@@ -961,7 +961,7 @@ void SIFT::detectAndCompute(cv::InputArray _image, cv::InputArray _mask,
     if (!mask.empty() && mask.type() != CV_8UC1)
         CV_Error(cv::Error::StsBadArg, "mask has incorrect type (!=CV_8UC1)");
 
-    int firstOctave = -1;
+    int firstOctave = 0;
 
 #ifdef LAR_PROFILE_SIFT
     auto startImagePrep = std::chrono::high_resolution_clock::now();

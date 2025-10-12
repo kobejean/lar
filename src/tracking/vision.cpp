@@ -80,13 +80,6 @@ namespace lar {
     std::vector<cv::DMatch> filtered_matches;
     if (desc1.rows <= 2 || desc2.rows <= 2) return filtered_matches;
 
-    // Verify sizes match
-    std::cout << "DEBUG: desc1.rows=" << desc1.rows << ", kpts.size()=" << kpts.size() << std::endl;
-    if (desc1.rows != kpts.size()) {
-      std::cerr << "ERROR: Descriptor count (" << desc1.rows << ") != keypoint count (" << kpts.size() << ")" << std::endl;
-      return filtered_matches;
-    }
-
     // Pre-allocate result vectors to reduce memory allocation overhead
     std::vector<std::vector<cv::DMatch>> nn_matches;
     nn_matches.reserve(desc1.rows);
