@@ -9,7 +9,6 @@
 
 // Only use pipelined Metal implementation (best performance)
 #define LAR_USE_METAL_SIFT_PIPELINED 1
-#define LAR_PROFILE_SIFT 1
 
 #ifdef LAR_USE_METAL_SIFT_PIPELINED
 // Forward declaration of pipelined Metal implementation (defined in sift_metal_pipelined.mm)

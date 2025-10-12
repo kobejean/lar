@@ -42,7 +42,7 @@ static bool initializeMetalPipelines(
 
     if (!cachedLibrary) {
         // Load Metal library using shared function
-        cachedLibrary = loadMetalLibrary(device, @"sift_fused");
+        cachedLibrary = loadMetalLibrary(device, @"sift");
         if (!cachedLibrary) {
             return false;
         }

@@ -9,7 +9,6 @@ namespace lar {
 
   const float RATIO_TEST_THRESHOLD = 0.99f;
   const float MAX_DISTANCE_THRESHOLD = 210.0f;
-  const bool ENABLE_CROSS_CHECK = false; // seems best to use only for image to image matching
 
   Vision::Vision() {
     detector = SIFT::create(0, 3, 0.02, 10, 1.6, CV_8U);
@@ -18,7 +17,6 @@ namespace lar {
     cv::Ptr<cv::flann::IndexParams> indexParams = cv::makePtr<cv::flann::KDTreeIndexParams>(3);
     cv::Ptr<cv::flann::SearchParams> searchParams = cv::makePtr<cv::flann::SearchParams>(32);
     flann_matcher = cv::FlannBasedMatcher(indexParams, searchParams);
-
     bf_matcher = cv::BFMatcher(cv::NORM_L2, false);
   }
 

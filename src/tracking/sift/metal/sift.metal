@@ -1,10 +1,26 @@
-// Metal compute shader for SIFT scale-space extrema detection
-// Performs 3D local extrema detection across DoG pyramid layers
+// Experimental: Fused Metal kernel for SIFT scale-space extrema detection
+// Combines Gaussian blur, DoG computation, and extrema detection in a single pass.
+//
+// Pipeline per iteration:
+//   Input:  prevDoG, currDoG, currGauss
+//   Compute: nextGauss (in shared memory), nextDoG (in shared memory)
+//   Detect:  Extrema in currDoG using [prevDoG, currDoG, nextDoG]
+//   Output:  nextGauss, nextDoG (for next iteration)
+//
+// Compile with: LAR_USE_METAL_SIFT_FUSED
+
 #include <metal_stdlib>
 #include "sift_constants.metal"
 using namespace metal;
 
-// Kernel parameters
+// Gaussian blur parameters (for custom Metal kernels)
+struct GaussianBlurParams {
+    int width;
+    int height;
+    int rowStride;
+    int kernelSize;
+};
+
 struct ExtremaParams {
     int width;              // Image width for this layer
     int height;             // Image height for this layer
@@ -15,100 +31,14 @@ struct ExtremaParams {
     int layer;              // Current layer index (1 to nOctaveLayers)
 };
 
-// Gaussian blur parameters (for custom Metal kernels)
-struct GaussianBlurParams {
-    int width;
-    int height;
-    int rowStride;
-    int kernelSize;
+struct ResizeParams {
+    int srcWidth;           // Source image width
+    int srcHeight;          // Source image height
+    int srcRowStride;       // Source row stride in floats
+    int dstWidth;           // Destination image width
+    int dstHeight;          // Destination image height
+    int dstRowStride;       // Destination row stride in floats
 };
-
-// Kernel: Detect local extrema in 3D scale space (26-neighbor comparison)
-// Each thread processes one pixel in the middle layer
-// Note: Extrema detection requires precise floating-point comparisons
-// Compiled with -fno-fast-math to ensure IEEE-754 compliant comparisons
-//
-// Output: Bitarray encoding extrema positions (1 bit per pixel)
-// - Deterministic output (no race conditions)
-// - Memory efficient (1 bit per pixel vs 4 bytes per candidate)
-// - Host scans bitarray using SIMD for fast candidate extraction
-#pragma METAL fp math_mode(safe)
-kernel void detectScaleSpaceExtrema(
-    const device float* prevDoG [[buffer(0)]],   // DoG layer i-1
-    const device float* currDoG [[buffer(1)]],   // DoG layer i (center)
-    const device float* nextDoG [[buffer(2)]],   // DoG layer i+1
-    device atomic_uint* extremaBitarray [[buffer(3)]], // Bitarray output (1 bit per pixel, packed as uint32)
-    constant ExtremaParams& params [[buffer(5)]],
-    uint2 gid [[thread_position_in_grid]])
-{
-    int x = gid.x;
-    int y = gid.y;
-
-    // Check if this thread should process (not border, not out of bounds)
-    if (x < params.border || x >= params.width - params.border ||
-        y < params.border || y >= params.height - params.border) return;
-
-    // Read center pixel value
-    int step = params.rowStride;
-    int i = y * step + x;
-    float val = currDoG[i];
-
-    // Quick threshold rejection
-    if (fabs(val) <= params.threshold) return;
-    float _00,_01,_02;
-    float _10,    _12;
-    float _20,_21,_22;
-
-    if (val > 0) {
-        _00 = currDoG[i-step-1]; _01 = currDoG[i-step]; _02 = currDoG[i-step+1];
-        _10 = currDoG[i-1]; _12 = currDoG[i+1];
-        _20 = currDoG[i+step-1]; _21 = currDoG[i+step]; _22 = currDoG[i+step+1];
-        float vmax = fmax(fmax(fmax(_00,_01),fmax(_02,_10)),fmax(fmax(_12,_20),fmax(_21,_22)));
-        if (val < vmax) return;
-        _00 = prevDoG[i-step-1]; _01 = prevDoG[i-step]; _02 = prevDoG[i-step+1];
-        _10 = prevDoG[i-1]; _12 = prevDoG[i+1];
-        _20 = prevDoG[i+step-1]; _21 = prevDoG[i+step]; _22 = prevDoG[i+step+1];
-        vmax = fmax(fmax(fmax(_00,_01),fmax(_02,_10)),fmax(fmax(_12,_20),fmax(_21,_22)));
-        if (val < vmax) return;
-        _00 = nextDoG[i-step-1]; _01 = nextDoG[i-step]; _02 = nextDoG[i-step+1];
-        _10 = nextDoG[i-1]; _12 = nextDoG[i+1];
-        _20 = nextDoG[i+step-1]; _21 = nextDoG[i+step]; _22 = nextDoG[i+step+1];
-        vmax = fmax(fmax(fmax(_00,_01),fmax(_02,_10)),fmax(fmax(_12,_20),fmax(_21,_22)));
-        if (val < vmax) return;
-        vmax = fmax(prevDoG[i], nextDoG[i]);
-        if (val < vmax) return;
-    } else {
-        _00 = currDoG[i-step-1]; _01 = currDoG[i-step]; _02 = currDoG[i-step+1];
-        _10 = currDoG[i-1]; _12 = currDoG[i+1];
-        _20 = currDoG[i+step-1]; _21 = currDoG[i+step]; _22 = currDoG[i+step+1];
-        float vmin = fmin(fmin(fmin(_00,_01),fmin(_02,_10)),fmin(fmin(_12,_20),fmin(_21,_22)));
-        if (val > vmin) return;
-        _00 = prevDoG[i-step-1]; _01 = prevDoG[i-step]; _02 = prevDoG[i-step+1];
-        _10 = prevDoG[i-1]; _12 = prevDoG[i+1];
-        _20 = prevDoG[i+step-1]; _21 = prevDoG[i+step]; _22 = prevDoG[i+step+1];
-        vmin = fmin(fmin(fmin(_00,_01),fmin(_02,_10)),fmin(fmin(_12,_20),fmin(_21,_22)));
-        if (val > vmin) return;
-        _00 = nextDoG[i-step-1]; _01 = nextDoG[i-step]; _02 = nextDoG[i-step+1];
-        _10 = nextDoG[i-1]; _12 = nextDoG[i+1];
-        _20 = nextDoG[i+step-1]; _21 = nextDoG[i+step]; _22 = nextDoG[i+step+1];
-        vmin = fmin(fmin(fmin(_00,_01),fmin(_02,_10)),fmin(fmin(_12,_20),fmin(_21,_22)));
-        if (val > vmin) return;
-        vmin = fmin(prevDoG[i], nextDoG[i]);
-        if (val > vmin) return;
-    }
-
-    // Calculate linear bit index: row-major order
-    uint bitIndex = y * params.width + x;
-
-    // Calculate chunk index and bit offset
-    // Each uint32 stores 32 bits (pixels)
-    uint chunkIndex = bitIndex >> 5;      // Divide by 32
-    uint bitOffset = bitIndex & 31;       // Modulo 32
-
-    // Set the bit using atomic OR
-    // This is safe because each pixel maps to exactly one bit
-    atomic_fetch_or_explicit(&extremaBitarray[chunkIndex], (1u << bitOffset), memory_order_relaxed);
-}
 
 // ============================================================================
 // Custom Gaussian Blur Kernels (OpenCV-inspired pattern)
@@ -204,22 +134,13 @@ kernel void gaussianBlurVertical(
     destination[y * params.rowStride + x] = sum;
 }
 
-// ============================================================================
-// Fused Gaussian Blur Kernel (Horizontal + Vertical in one pass)
-// ============================================================================
-// This kernel performs both horizontal and vertical blur passes using shared
-// threadgroup memory to avoid global memory round-trips. It processes 16×16
-// tiles with halo regions for the convolution.
-//
-// Performance benefit: Eliminates global memory write+read between passes
-// Complexity cost: Requires threadgroup coordination and halo loading
-
 #pragma METAL fp math_mode(safe)
-kernel void gaussianBlur(
-    const device float* source [[buffer(0)]],
-    device float* destination [[buffer(1)]],
-    constant GaussianBlurParams& params [[buffer(2)]],
-    constant float* gaussKernel [[buffer(3)]],
+kernel void gaussianBlurAndDoGFused(
+    const device float* currGauss [[buffer(0)]],
+    device float* nextGauss [[buffer(1)]],
+    device float* nextDoG [[buffer(2)]],
+    constant GaussianBlurParams& params [[buffer(3)]],
+    constant float* gaussKernel [[buffer(4)]],
     uint2 gid [[thread_position_in_grid]],
     uint2 tid [[thread_position_in_threadgroup]],
     uint2 tgSize [[threads_per_threadgroup]])
@@ -256,8 +177,8 @@ kernel void gaussianBlur(
         }
 
         // Perform horizontal blur exactly like gaussianBlurHorizontal
-        float centerPixel = source[srcY * params.rowStride + globalX];
-        float sum = gaussKernel[radius] * centerPixel;
+        float centerPixel = currGauss[srcY * params.rowStride + globalX];
+        float gauss = gaussKernel[radius] * centerPixel;
 
         // Symmetric pairs: m[j]*left + m[j]*right
         for (int j = 0; j < radius; j++) {
@@ -268,15 +189,15 @@ kernel void gaussianBlur(
             leftX = clamp(leftX, 0, params.width - 1);
             rightX = clamp(rightX, 0, params.width - 1);
 
-            float leftPixel = source[srcY * params.rowStride + leftX];
-            float rightPixel = source[srcY * params.rowStride + rightX];
+            float leftPixel = currGauss[srcY * params.rowStride + leftX];
+            float rightPixel = currGauss[srcY * params.rowStride + rightX];
             float weight = gaussKernel[j];
 
-            sum = sum + (weight * leftPixel + weight * rightPixel);
+            gauss = gauss + (weight * leftPixel + weight * rightPixel);
         }
 
         // Store in shared memory
-        sharedHoriz[py][localX] = sum;
+        sharedHoriz[py][localX] = gauss;
     }
 
     // Wait for all threads to finish horizontal blur
@@ -293,7 +214,7 @@ kernel void gaussianBlur(
 
     // Perform vertical blur exactly like gaussianBlurVertical
     float centerPixel = sharedHoriz[sharedY][localX];
-    float sum = gaussKernel[radius] * centerPixel;
+    float gauss = gaussKernel[radius] * centerPixel;
 
     // Symmetric pairs: m[j]*top + m[j]*bottom
     for (int j = 0; j < radius; j++) {
@@ -308,9 +229,129 @@ kernel void gaussianBlur(
         float bottomPixel = sharedHoriz[bottomY][localX];
         float weight = gaussKernel[j];
 
-        sum = sum + (weight * topPixel + weight * bottomPixel);
+        gauss = gauss + (weight * topPixel + weight * bottomPixel);
     }
 
     // Write final result to global memory
-    destination[globalY * params.rowStride + globalX] = sum;
+    int idx = globalY * params.rowStride + globalX;
+    nextGauss[idx] = gauss;
+    nextDoG[idx] = gauss - currGauss[idx];
+}
+
+#pragma METAL fp math_mode(safe)
+kernel void detectExtrema(
+    const device float* prevDoG [[buffer(0)]],   // DoG layer i-1
+    const device float* currDoG [[buffer(1)]],   // DoG layer i (center)
+    const device float* nextDoG [[buffer(2)]],   // DoG layer i+1
+    device atomic_uint* extremaBitarray [[buffer(3)]], // Bitarray output (1 bit per pixel, packed as uint32)
+    constant ExtremaParams& params [[buffer(5)]],
+    uint2 gid [[thread_position_in_grid]])
+{
+    int x = gid.x;
+    int y = gid.y;
+
+    // Check if this thread should process (not border, not out of bounds)
+    if (x < params.border || x >= params.width - params.border ||
+        y < params.border || y >= params.height - params.border) return;
+
+    // Read center pixel value
+    int step = params.rowStride;
+    int i = y * step + x;
+    float val = currDoG[i];
+
+    // Quick threshold rejection
+    if (fabs(val) <= params.threshold) return;
+    float _00,_01,_02;
+    float _10,    _12;
+    float _20,_21,_22;
+
+    if (val > 0) {
+        _00 = currDoG[i-step-1]; _01 = currDoG[i-step]; _02 = currDoG[i-step+1];
+        _10 = currDoG[i-1]; _12 = currDoG[i+1];
+        _20 = currDoG[i+step-1]; _21 = currDoG[i+step]; _22 = currDoG[i+step+1];
+        float vmax = fmax(fmax(fmax(_00,_01),fmax(_02,_10)),fmax(fmax(_12,_20),fmax(_21,_22)));
+        if (val < vmax) return;
+        _00 = prevDoG[i-step-1]; _01 = prevDoG[i-step]; _02 = prevDoG[i-step+1];
+        _10 = prevDoG[i-1]; _12 = prevDoG[i+1];
+        _20 = prevDoG[i+step-1]; _21 = prevDoG[i+step]; _22 = prevDoG[i+step+1];
+        vmax = fmax(fmax(fmax(_00,_01),fmax(_02,_10)),fmax(fmax(_12,_20),fmax(_21,_22)));
+        if (val < vmax) return;
+        _00 = nextDoG[i-step-1]; _01 = nextDoG[i-step]; _02 = nextDoG[i-step+1];
+        _10 = nextDoG[i-1]; _12 = nextDoG[i+1];
+        _20 = nextDoG[i+step-1]; _21 = nextDoG[i+step]; _22 = nextDoG[i+step+1];
+        vmax = fmax(fmax(fmax(_00,_01),fmax(_02,_10)),fmax(fmax(_12,_20),fmax(_21,_22)));
+        if (val < vmax) return;
+        vmax = fmax(prevDoG[i], nextDoG[i]);
+        if (val < vmax) return;
+    } else {
+        _00 = currDoG[i-step-1]; _01 = currDoG[i-step]; _02 = currDoG[i-step+1];
+        _10 = currDoG[i-1]; _12 = currDoG[i+1];
+        _20 = currDoG[i+step-1]; _21 = currDoG[i+step]; _22 = currDoG[i+step+1];
+        float vmin = fmin(fmin(fmin(_00,_01),fmin(_02,_10)),fmin(fmin(_12,_20),fmin(_21,_22)));
+        if (val > vmin) return;
+        _00 = prevDoG[i-step-1]; _01 = prevDoG[i-step]; _02 = prevDoG[i-step+1];
+        _10 = prevDoG[i-1]; _12 = prevDoG[i+1];
+        _20 = prevDoG[i+step-1]; _21 = prevDoG[i+step]; _22 = prevDoG[i+step+1];
+        vmin = fmin(fmin(fmin(_00,_01),fmin(_02,_10)),fmin(fmin(_12,_20),fmin(_21,_22)));
+        if (val > vmin) return;
+        _00 = nextDoG[i-step-1]; _01 = nextDoG[i-step]; _02 = nextDoG[i-step+1];
+        _10 = nextDoG[i-1]; _12 = nextDoG[i+1];
+        _20 = nextDoG[i+step-1]; _21 = nextDoG[i+step]; _22 = nextDoG[i+step+1];
+        vmin = fmin(fmin(fmin(_00,_01),fmin(_02,_10)),fmin(fmin(_12,_20),fmin(_21,_22)));
+        if (val > vmin) return;
+        vmin = fmin(prevDoG[i], nextDoG[i]);
+        if (val > vmin) return;
+    }
+
+    // Calculate linear bit index: row-major order
+    uint bitIndex = y * params.width + x;
+
+    // Calculate chunk index and bit offset
+    // Each uint32 stores 32 bits (pixels)
+    uint chunkIndex = bitIndex >> 5;      // Divide by 32
+    uint bitOffset = bitIndex & 31;       // Modulo 32
+
+    // Set the bit using atomic OR
+    // This is safe because each pixel maps to exactly one bit
+    atomic_fetch_or_explicit(&extremaBitarray[chunkIndex], (1u << bitOffset), memory_order_relaxed);
+}
+
+// ============================================================================
+// Nearest-Neighbor Downsample (2x)
+// ============================================================================
+// Implements OpenCV's cv::resize(..., cv::INTER_NEAREST) algorithm:
+//   sx = floor(dst_x * inv_scale_x) = floor(dst_x * 2.0)
+//   sy = floor(dst_y * inv_scale_y) = floor(dst_y * 2.0)
+//   dst[dst_y][dst_x] = src[sy][sx]
+//
+// This specialized kernel eliminates CPU/GPU sync bottleneck when preparing
+// octave base images (octave N+1 base = downsample octave N's gauss[nLevels-3])
+//
+#pragma METAL fp math_mode(safe)
+kernel void resizeNearestNeighbor2x(
+    const device float* src [[buffer(0)]],
+    device float* dst [[buffer(1)]],
+    constant ResizeParams& params [[buffer(2)]],
+    uint2 gid [[thread_position_in_grid]])
+{
+    int dstX = gid.x;
+    int dstY = gid.y;
+
+    // Bounds check
+    if (dstX >= params.dstWidth || dstY >= params.dstHeight) {
+        return;
+    }
+
+    // OpenCV INTER_NEAREST mapping: floor(dst_coord * inv_scale)
+    // For 2x downsample: inv_scale = 2.0
+    int srcX = dstX * 2;
+    int srcY = dstY * 2;
+
+    // Clamp to source bounds (OpenCV uses min(sx, width-1))
+    srcX = min(srcX, params.srcWidth - 1);
+    srcY = min(srcY, params.srcHeight - 1);
+
+    // Read from source and write to destination
+    float value = src[srcY * params.srcRowStride + srcX];
+    dst[dstY * params.dstRowStride + dstX] = value;
 }
