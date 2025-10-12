@@ -357,9 +357,9 @@ void findScaleSpaceExtremaMetalPipelined(
         // Initialize Metal pipelines
         id<MTLComputePipelineState> blurAndDoGPipeline = nil;
         id<MTLComputePipelineState> extremaPipeline = nil;
-        id<MTLComputePipelineState> fusedPipeline = nil;
+        id<MTLComputePipelineState> resizePipeline = nil;
 
-        if (!initializeMetalPipelines(device, blurAndDoGPipeline, extremaPipeline, fusedPipeline)) {
+        if (!initializeMetalPipelines(device, blurAndDoGPipeline, extremaPipeline, resizePipeline)) {
             return;
         }
 
@@ -428,6 +428,19 @@ void findScaleSpaceExtremaMetalPipelined(
         // ========================================================================
         // PIPELINE: Submit per-layer command buffers for all octaves
         // ========================================================================
+
+        // First, prepare octave 0's base on CPU (no dependency)
+        {
+            int octaveWidth = base.cols;
+            int octaveHeight = base.rows;
+            size_t rowBytes = octaveWidth * sizeof(float);
+            size_t alignedRowBytes = ((rowBytes + METAL_BUFFER_ALIGNMENT - 1) / METAL_BUFFER_ALIGNMENT) * METAL_BUFFER_ALIGNMENT;
+
+            std::vector<id<MTLBuffer>>& gaussBuffers = resources.octaveBuffers[0];
+            cv::Mat octaveBase = base.clone();
+            uploadOctaveBase(octaveBase, gaussBuffers[0], octaveWidth, octaveHeight, alignedRowBytes);
+        }
+
         for (int o = 0; o < nOctaves; o++) {
             int octaveWidth = base.cols >> o;
             int octaveHeight = base.rows >> o;
@@ -451,12 +464,6 @@ void findScaleSpaceExtremaMetalPipelined(
                 dog_pyr[dogIdx + i] = cv::Mat(octaveHeight, octaveWidth, CV_32F, dogBuffers[i].contents, alignedRowBytes);
             }
 
-            // Prepare octave base on CPU
-            cv::Mat octaveBase = prepareOctaveBase(base, resources, o, nLevels, octaveWidth, octaveHeight);
-
-            // Upload to GPU
-            uploadOctaveBase(octaveBase, gaussBuffers[0], octaveWidth, octaveHeight, alignedRowBytes);
-
             // Now submit per-layer command buffers
             // Layer 1: needs blur 0→1, 1→2, 2→3 + DoG 0,1,2 + extrema
             // Layer 2: needs blur 3→4 + DoG 3 + extrema
@@ -465,6 +472,44 @@ void findScaleSpaceExtremaMetalPipelined(
             for (int layer = 1; layer <= nOctaveLayers; layer++) {
                 id<MTLCommandBuffer> layerCmdBuf = [commandQueue commandBuffer];
                 layerCmdBuf.label = [NSString stringWithFormat:@"Octave %d Layer %d", o, layer];
+
+                // For octave 1+ layer 1: encode GPU resize at the start of the command buffer
+                // This creates dependency: octave N-1 layer 3 → resize → octave N layer 1 blurs
+                if (layer == 1 && o > 0) {
+                    int prevOctaveWidth = base.cols >> (o - 1);
+                    int prevOctaveHeight = base.rows >> (o - 1);
+                    size_t prevRowBytes = prevOctaveWidth * sizeof(float);
+                    size_t prevAlignedRowBytes = ((prevRowBytes + METAL_BUFFER_ALIGNMENT - 1) / METAL_BUFFER_ALIGNMENT) * METAL_BUFFER_ALIGNMENT;
+                    int prevRowStride = (int)(prevAlignedRowBytes / sizeof(float));
+
+                    std::vector<id<MTLBuffer>>& prevGaussBuffers = resources.octaveBuffers[o - 1];
+
+                    ResizeParams resizeParams;
+                    resizeParams.srcWidth = prevOctaveWidth;
+                    resizeParams.srcHeight = prevOctaveHeight;
+                    resizeParams.srcRowStride = prevRowStride;
+                    resizeParams.dstWidth = octaveWidth;
+                    resizeParams.dstHeight = octaveHeight;
+                    resizeParams.dstRowStride = rowStride;
+
+                    id<MTLBuffer> resizeParamsBuffer = [device newBufferWithBytes:&resizeParams
+                                                        length:sizeof(ResizeParams)
+                                                        options:MTLResourceStorageModeShared];
+
+                    id<MTLComputeCommandEncoder> resizeEncoder = [layerCmdBuf computeCommandEncoder];
+                    [resizeEncoder setComputePipelineState:resizePipeline];
+                    [resizeEncoder setBuffer:prevGaussBuffers[nLevels-3] offset:0 atIndex:0];  // src
+                    [resizeEncoder setBuffer:gaussBuffers[0] offset:0 atIndex:1];  // dst
+                    [resizeEncoder setBuffer:resizeParamsBuffer offset:0 atIndex:2];
+
+                    MTLSize resizeGridSize = MTLSizeMake(octaveWidth, octaveHeight, 1);
+                    MTLSize resizeThreadgroupSize = MTLSizeMake(16, 16, 1);
+
+                    [resizeEncoder dispatchThreads:resizeGridSize threadsPerThreadgroup:resizeThreadgroupSize];
+                    [resizeEncoder endEncoding];
+
+                    RELEASE_IF_MANUAL(resizeParamsBuffer);
+                }
 
                 // Determine which blurs this layer needs
                 // Layer 1: blur indices 1,2,3 (to get Gauss[1], Gauss[2], Gauss[3])
