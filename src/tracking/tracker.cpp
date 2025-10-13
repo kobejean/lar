@@ -214,6 +214,7 @@ namespace lar {
 
   // Private method to check gravity vector consistency and store angle difference
   bool Tracker::checkGravityVector(const cv::Mat& rvec, const cv::Mat& gvec, float angleTolerance) {
+    if (rvec.empty()) return false;
     // World gravity vector (pointing down in Y direction)
     cv::Mat worldGravity = (cv::Mat_<double>(3,1) << 0.0, -1.0, 0.0);
     
