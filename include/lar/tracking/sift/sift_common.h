@@ -65,7 +65,7 @@ struct SIFTConfig {
     static constexpr int DESCR_SIZE = DESCR_WIDTH * DESCR_WIDTH * DESCR_HIST_BINS;
 
     int computeNumOctaves(int baseWidth, int baseHeight) const {
-        return static_cast<int>(std::round(std::log(std::min(baseWidth, baseHeight)) / std::log(2.0) - 2.0)) - firstOctave();
+        return static_cast<int>(cvRound(std::log(std::min(baseWidth, baseHeight)) / std::log(2.0) - 2.0)) - firstOctave();
     }
 
     int pyramidLevels() const { return nOctaveLayers + 3; }

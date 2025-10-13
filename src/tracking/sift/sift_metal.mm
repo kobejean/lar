@@ -38,6 +38,8 @@ struct SIFTMetal::Impl {
     id<MTLDevice> device = nil;
     id<MTLCommandQueue> commandQueue = nil;
     id<MTLComputePipelineState> blurAndDoGPipeline = nil;
+    id<MTLComputePipelineState> blurHorizPipeline = nil;
+    id<MTLComputePipelineState> blurVertPipeline = nil;
     id<MTLComputePipelineState> extremaPipeline = nil;
     id<MTLComputePipelineState> resizePipeline = nil;
 
@@ -49,9 +51,17 @@ struct SIFTMetal::Impl {
     std::vector<std::vector<id<MTLBuffer>>> dogBuffers;
     std::vector<std::vector<id<MTLTexture>>> dogTextures;
 
-    // Pre-computed Gaussian kernels
+    // Staging buffer/texture for initial image upload
+    id<MTLBuffer> imageBuffer = nil;
+    id<MTLTexture> imageTexture = nil;
+
+    // Pre-computed Gaussian kernels (CPU side)
     std::vector<std::vector<float>> gaussianKernels;
     std::vector<double> sigmas;
+
+    // Pre-allocated kernel buffers (GPU side)
+    std::vector<id<MTLBuffer>> kernelSizeBuffers;
+    std::vector<id<MTLBuffer>> kernelDataBuffers;
 
     // Image dimensions
     int nOctaves = 0;
@@ -61,14 +71,43 @@ struct SIFTMetal::Impl {
 
     ~Impl() {
         @autoreleasepool {
-            releaseBuffersAndTextures();
+            for (auto& octave : octaveTextures) {
+                for (auto& tex : octave) RELEASE_IF_MANUAL(tex);
+            }
+            for (auto& octave : octaveBuffers) {
+                for (auto& buf : octave) RELEASE_IF_MANUAL(buf);
+            }
+            for (auto& octave : dogTextures) {
+                for (auto& tex : octave) RELEASE_IF_MANUAL(tex);
+            }
+            for (auto& octave : dogBuffers) {
+                for (auto& buf : octave) RELEASE_IF_MANUAL(buf);
+            }
+            for (auto& tex : tempTextures) RELEASE_IF_MANUAL(tex);
+            for (auto& buf : tempBuffers) RELEASE_IF_MANUAL(buf);
+            RELEASE_IF_MANUAL(imageTexture);
+            RELEASE_IF_MANUAL(imageBuffer);
+            for (auto& buf : kernelSizeBuffers) RELEASE_IF_MANUAL(buf);
+            for (auto& buf : kernelDataBuffers) RELEASE_IF_MANUAL(buf);
+            octaveTextures.clear();
+            octaveBuffers.clear();
+            dogTextures.clear();
+            dogBuffers.clear();
+            tempTextures.clear();
+            tempBuffers.clear();
+            kernelSizeBuffers.clear();
+            kernelDataBuffers.clear();
             RELEASE_IF_MANUAL(blurAndDoGPipeline);
+            RELEASE_IF_MANUAL(blurHorizPipeline);
+            RELEASE_IF_MANUAL(blurVertPipeline);
             RELEASE_IF_MANUAL(extremaPipeline);
             RELEASE_IF_MANUAL(resizePipeline);
             RELEASE_IF_MANUAL(commandQueue);
             RELEASE_IF_MANUAL(device);
 #if __has_feature(objc_arc)
             blurAndDoGPipeline = nil;
+            blurHorizPipeline = nil;
+            blurVertPipeline = nil;
             extremaPipeline = nil;
             resizePipeline = nil;
             commandQueue = nil;
@@ -77,28 +116,6 @@ struct SIFTMetal::Impl {
         }
     }
 
-    void releaseBuffersAndTextures() {
-        for (auto& octave : octaveTextures) {
-            for (auto& tex : octave) RELEASE_IF_MANUAL(tex);
-        }
-        for (auto& octave : octaveBuffers) {
-            for (auto& buf : octave) RELEASE_IF_MANUAL(buf);
-        }
-        for (auto& octave : dogTextures) {
-            for (auto& tex : octave) RELEASE_IF_MANUAL(tex);
-        }
-        for (auto& octave : dogBuffers) {
-            for (auto& buf : octave) RELEASE_IF_MANUAL(buf);
-        }
-        for (auto& tex : tempTextures) RELEASE_IF_MANUAL(tex);
-        for (auto& buf : tempBuffers) RELEASE_IF_MANUAL(buf);
-        octaveTextures.clear();
-        octaveBuffers.clear();
-        dogTextures.clear();
-        dogBuffers.clear();
-        tempTextures.clear();
-        tempBuffers.clear();
-    }
 };
 
 static id<MTLLibrary> loadMetalLibrary(id<MTLDevice> device, NSString* libraryName) {
@@ -213,13 +230,23 @@ static void computeGaussianKernels(
     int nOctaveLayers,
     double sigma,
     std::vector<std::vector<float>>& kernels,
-    std::vector<double>& sigmas)
+    std::vector<double>& sigmas,
+    bool enableUpsampling = false
+    )
 {
     kernels.resize(nLevels);
     sigmas.resize(nLevels);
 
     double k = std::pow(2.0, 1.0 / nOctaveLayers);
     sigmas[0] = sigma;
+
+    if (enableUpsampling) {
+        float sig_diff = std::sqrt(std::max((float)(sigma * sigma - SIFT_INIT_SIGMA * SIFT_INIT_SIGMA * 4), 0.01f));
+        kernels[0] = createGaussianKernel(sig_diff);
+    } else {
+        float sig_diff = std::sqrt(std::max((float)(sigma * sigma - SIFT_INIT_SIGMA * SIFT_INIT_SIGMA), 0.01f));
+        kernels[0] = createGaussianKernel(sig_diff);
+    }
 
     for (int i = 1; i < nLevels; i++) {
         double sig_prev = std::pow(k, (double)(i-1)) * sigma;
@@ -291,23 +318,6 @@ static void allocateOctaveResources(
     impl.tempTextures[octave] = [impl.tempBuffers[octave] newTextureWithDescriptor:tempDesc
                                                                                      offset:0
                                                                                 bytesPerRow:alignedRowBytes];
-}
-
-static void uploadOctaveBase(
-    const cv::Mat& octaveBase,
-    id<MTLBuffer> gaussBuffer,
-    int octaveWidth,
-    int octaveHeight,
-    size_t alignedRowBytes)
-{
-    float* gauss0Ptr = (float*)gaussBuffer.contents;
-    size_t alignedRowFloats = alignedRowBytes / sizeof(float);
-
-    for (int row = 0; row < octaveHeight; row++) {
-        memcpy(gauss0Ptr + row * alignedRowFloats,
-              octaveBase.ptr<float>(row),
-              octaveWidth * sizeof(float));
-    }
 }
 
 static void extractKeypointsAndDescriptors(
@@ -444,6 +454,32 @@ SIFTMetal::SIFTMetal(const SIFTConfig& config) : impl_(new Impl()), config_(conf
             throw std::runtime_error(errorMsg);
         }
 
+        // Create blur horizontal pipeline
+        id<MTLFunction> blurHorizFunc = [library newFunctionWithName:@"gaussianBlurHorizontal"];
+        if (!blurHorizFunc) {
+            throw std::runtime_error("Failed to find Metal function: gaussianBlurHorizontal");
+        }
+        impl_->blurHorizPipeline = [impl_->device newComputePipelineStateWithFunction:blurHorizFunc error:&error];
+        RELEASE_IF_MANUAL(blurHorizFunc);
+        if (!impl_->blurHorizPipeline) {
+            std::string errorMsg = "Failed to create blur horizontal pipeline: ";
+            if (error) errorMsg += [[error localizedDescription] UTF8String];
+            throw std::runtime_error(errorMsg);
+        }
+
+        // Create blur vertical pipeline
+        id<MTLFunction> blurVertFunc = [library newFunctionWithName:@"gaussianBlurVertical"];
+        if (!blurVertFunc) {
+            throw std::runtime_error("Failed to find Metal function: gaussianBlurVertical");
+        }
+        impl_->blurVertPipeline = [impl_->device newComputePipelineStateWithFunction:blurVertFunc error:&error];
+        RELEASE_IF_MANUAL(blurVertFunc);
+        if (!impl_->blurVertPipeline) {
+            std::string errorMsg = "Failed to create blur vertical pipeline: ";
+            if (error) errorMsg += [[error localizedDescription] UTF8String];
+            throw std::runtime_error(errorMsg);
+        }
+
         // Create extrema detection pipeline
         id<MTLFunction> extremaFunc = [library newFunctionWithName:@"detectExtrema"];
         if (!extremaFunc) {
@@ -470,28 +506,63 @@ SIFTMetal::SIFTMetal(const SIFTConfig& config) : impl_(new Impl()), config_(conf
             throw std::runtime_error(errorMsg);
         }
 
-        // Pre-compute dimensions and allocate resources if image size is specified
-        if (config_.imageSize.width > 0 && config_.imageSize.height > 0) {
-            impl_->nLevels = config_.pyramidLevels();
-            impl_->nOctaves = config_.computeNumOctaves(config_.imageSize.width, config_.imageSize.height);
+        // Pre-compute dimensions and allocate resources
+        impl_->nLevels = config_.pyramidLevels();
+        impl_->nOctaves = config_.computeNumOctaves(config_.imageSize.width, config_.imageSize.height);
 
-            // Pre-compute Gaussian kernels once
-            computeGaussianKernels(impl_->nLevels, config_.nOctaveLayers, config_.sigma,
-                                 impl_->gaussianKernels, impl_->sigmas);
+        // Pre-compute Gaussian kernels once
+        computeGaussianKernels(impl_->nLevels, config_.nOctaveLayers, config_.sigma,
+                                impl_->gaussianKernels, impl_->sigmas);
 
-            // Pre-allocate all octave buffers and textures
-            impl_->octaveBuffers.resize(impl_->nOctaves);
-            impl_->octaveTextures.resize(impl_->nOctaves);
-            impl_->dogBuffers.resize(impl_->nOctaves);
-            impl_->dogTextures.resize(impl_->nOctaves);
-            impl_->tempBuffers.resize(impl_->nOctaves);
-            impl_->tempTextures.resize(impl_->nOctaves);
+        // Pre-allocate kernel buffers for GPU (one set per pyramid level)
+        impl_->kernelSizeBuffers.resize(impl_->nLevels);
+        impl_->kernelDataBuffers.resize(impl_->nLevels);
+        for (int i = 0; i < impl_->nLevels; i++) {
+            int kernelSize = (int)impl_->gaussianKernels[i].size();
 
-            for (int o = 0; o < impl_->nOctaves; o++) {
-                int octaveWidth = config_.imageSize.width >> o;
-                int octaveHeight = config_.imageSize.height >> o;
-                allocateOctaveResources(impl_->device, *impl_, o, octaveWidth, octaveHeight, impl_->nLevels);
-            }
+            impl_->kernelSizeBuffers[i] = [impl_->device newBufferWithBytes:&kernelSize
+                                                                length:sizeof(int)
+                                                                options:MTLResourceStorageModeShared];
+
+            impl_->kernelDataBuffers[i] = [impl_->device newBufferWithBytes:impl_->gaussianKernels[i].data()
+                                                                length:impl_->gaussianKernels[i].size() * sizeof(float)
+                                                                options:MTLResourceStorageModeShared];
+        }
+
+        // Pre-allocate all octave buffers and textures
+        impl_->octaveBuffers.resize(impl_->nOctaves);
+        impl_->octaveTextures.resize(impl_->nOctaves);
+        impl_->dogBuffers.resize(impl_->nOctaves);
+        impl_->dogTextures.resize(impl_->nOctaves);
+        impl_->tempBuffers.resize(impl_->nOctaves);
+        impl_->tempTextures.resize(impl_->nOctaves);
+
+        for (int o = 0; o < impl_->nOctaves; o++) {
+            int octaveWidth = config_.imageSize.width >> o;
+            int octaveHeight = config_.imageSize.height >> o;
+            allocateOctaveResources(impl_->device, *impl_, o, octaveWidth, octaveHeight, impl_->nLevels);
+        }
+
+        // Allocate staging buffer/texture for octave 0 initial image upload
+        {
+            int baseWidth = config_.imageSize.width;
+            int baseHeight = config_.imageSize.height;
+            size_t rowBytes = baseWidth * sizeof(float);
+            size_t alignedRowBytes = ((rowBytes + METAL_BUFFER_ALIGNMENT - 1) / METAL_BUFFER_ALIGNMENT) * METAL_BUFFER_ALIGNMENT;
+            size_t bufferSize = alignedRowBytes * baseHeight;
+
+            impl_->imageBuffer = [impl_->device newBufferWithLength:bufferSize
+                                                options:MTLResourceStorageModeShared];
+
+            MTLTextureDescriptor* imageDesc = [MTLTextureDescriptor
+                texture2DDescriptorWithPixelFormat:MTLPixelFormatR32Float
+                width:baseWidth height:baseHeight mipmapped:NO];
+            imageDesc.storageMode = MTLStorageModeShared;
+            imageDesc.usage = MTLTextureUsageShaderRead | MTLTextureUsageShaderWrite;
+
+            impl_->imageTexture = [impl_->imageBuffer newTextureWithDescriptor:imageDesc
+                                                                        offset:0
+                                                                   bytesPerRow:alignedRowBytes];
         }
 
         impl_->initialized = true;
@@ -521,7 +592,7 @@ bool SIFTMetal::isAvailable() const {
     return impl_ && impl_->initialized && impl_->device && impl_->commandQueue;
 }
 
-bool SIFTMetal::detectAndCompute(const cv::Mat& base,
+bool SIFTMetal::detectAndCompute(const cv::Mat& img,
                                  std::vector<cv::KeyPoint>& keypoints,
                                  cv::OutputArray descriptors,
                                  int nOctaves)
@@ -533,8 +604,8 @@ bool SIFTMetal::detectAndCompute(const cv::Mat& base,
     @autoreleasepool {
         // Verify image dimensions match config (if pre-allocated)
         if (impl_->nOctaves > 0) {
-            if (base.cols != config_.imageSize.width || base.rows != config_.imageSize.height) {
-                std::cerr << "Error: Input image dimensions (" << base.cols << "x" << base.rows
+            if (img.cols != config_.imageSize.width || img.rows != config_.imageSize.height) {
+                std::cerr << "Error: Input image dimensions (" << img.cols << "x" << img.rows
                          << ") don't match SIFTConfig dimensions (" << config_.imageSize.width
                          << "x" << config_.imageSize.height << ")" << std::endl;
                 return false;
@@ -542,21 +613,15 @@ bool SIFTMetal::detectAndCompute(const cv::Mat& base,
             // Use pre-computed values from constructor
             nOctaves = impl_->nOctaves;
         }
+        cv::Mat base;
+        img.convertTo(base, CV_32F, SIFT_FIXPT_SCALE, 0);
 
         // Extract mutable Mat from OutputArray for internal processing
         cv::Mat descriptorsMat;
         int nLevels = impl_->nLevels > 0 ? impl_->nLevels : (config_.nOctaveLayers + 3);
         float threshold = 0.5f * config_.contrastThreshold / config_.nOctaveLayers * 255 * SIFT_FIXPT_SCALE;
 
-        // Use pre-computed Gaussian kernels if available, otherwise compute them
-        const std::vector<std::vector<float>>& gaussianKernels =
-            !impl_->gaussianKernels.empty() ? impl_->gaussianKernels :
-            [this, nLevels]() -> const std::vector<std::vector<float>>& {
-                static std::vector<std::vector<float>> tempKernels;
-                static std::vector<double> tempSigmas;
-                computeGaussianKernels(nLevels, config_.nOctaveLayers, config_.sigma, tempKernels, tempSigmas);
-                return tempKernels;
-            }();
+        const std::vector<std::vector<float>>& gaussianKernels = impl_->gaussianKernels;
 
         // Pre-allocate pyramid storage (internal to SIFTMetal)
         std::vector<cv::Mat> gauss_pyr(nOctaves * nLevels);
@@ -595,16 +660,22 @@ bool SIFTMetal::detectAndCompute(const cv::Mat& base,
         std::vector<id<MTLCommandBuffer>> allCommandBuffers;
         allCommandBuffers.reserve(totalLayers);
 
-        // Upload octave 0 base image
+        // Upload octave 0 image to staging buffer (CPU → staging buffer)
         {
             int octaveWidth = base.cols;
             int octaveHeight = base.rows;
             size_t rowBytes = octaveWidth * sizeof(float);
             size_t alignedRowBytes = ((rowBytes + METAL_BUFFER_ALIGNMENT - 1) / METAL_BUFFER_ALIGNMENT) * METAL_BUFFER_ALIGNMENT;
 
-            std::vector<id<MTLBuffer>>& gaussBuffers = impl_->octaveBuffers[0];
-            cv::Mat octaveBase = base.clone();
-            uploadOctaveBase(octaveBase, gaussBuffers[0], octaveWidth, octaveHeight, alignedRowBytes);
+            float* imagePtr = (float*)impl_->imageBuffer.contents;
+            // float* imagePtr = (float*)impl_->octaveBuffers[0][0].contents;
+            size_t alignedRowFloats = alignedRowBytes / sizeof(float);
+
+            for (int row = 0; row < octaveHeight; row++) {
+                memcpy(imagePtr + row * alignedRowFloats,
+                    base.ptr<float>(row),
+                    octaveWidth * sizeof(float));
+            }
         }
 
         // Submit per-layer command buffers for all octaves
@@ -637,20 +708,62 @@ bool SIFTMetal::detectAndCompute(const cv::Mat& base,
                 layerCmdBuf.label = [NSString stringWithFormat:@"Octave %d Layer %d", o, layer];
 
                 // For octave 1+ layer 1: encode GPU resize)
-                if (layer == 1 && o > 0) {
-                    std::vector<id<MTLTexture>>& prevGaussTextures = impl_->octaveTextures[o - 1];
+                if (layer == 1) {
                     std::vector<id<MTLTexture>>& gaussTextures = impl_->octaveTextures[o];
+                    id<MTLTexture> tempTexture = impl_->tempTextures[o];
+                    if (o > 0) {
+                        std::vector<id<MTLTexture>>& prevGaussTextures = impl_->octaveTextures[o - 1];
+                        id<MTLComputeCommandEncoder> resizeEncoder = [layerCmdBuf computeCommandEncoder];
+                        [resizeEncoder setComputePipelineState:impl_->resizePipeline];
+                        [resizeEncoder setTexture:prevGaussTextures[nLevels-3] atIndex:0];  // Source texture
+                        [resizeEncoder setTexture:gaussTextures[0] atIndex:1];              // Destination texture
 
-                    id<MTLComputeCommandEncoder> resizeEncoder = [layerCmdBuf computeCommandEncoder];
-                    [resizeEncoder setComputePipelineState:impl_->resizePipeline];
-                    [resizeEncoder setTexture:prevGaussTextures[nLevels-3] atIndex:0];  // Source texture
-                    [resizeEncoder setTexture:gaussTextures[0] atIndex:1];              // Destination texture
+                        MTLSize resizeGridSize = MTLSizeMake(octaveWidth, octaveHeight, 1);
+                        MTLSize resizeThreadgroupSize = MTLSizeMake(16, 16, 1);
 
-                    MTLSize resizeGridSize = MTLSizeMake(octaveWidth, octaveHeight, 1);
-                    MTLSize resizeThreadgroupSize = MTLSizeMake(16, 16, 1);
+                        [resizeEncoder dispatchThreads:resizeGridSize threadsPerThreadgroup:resizeThreadgroupSize];
+                        [resizeEncoder endEncoding];
+                    } else {
+                        if (config_.enableUpsampling) {
+                            // sig_diff = std::sqrt(std::max(sigma * sigma - SIFT_INIT_SIGMA * SIFT_INIT_SIGMA * 4, 0.01f));
+                            
+                            // cv::Mat dbl;
+                            // resize(gray_fpt, dbl, cv::Size(gray_fpt.cols*2, gray_fpt.rows*2), 0, 0, cv::INTER_LINEAR);
+                            // cv::Mat result;
+                            // cv::GaussianBlur(dbl, result, cv::Size(), sig_diff, sig_diff);
 
-                    [resizeEncoder dispatchThreads:resizeGridSize threadsPerThreadgroup:resizeThreadgroupSize];
-                    [resizeEncoder endEncoding];
+                        } else {
+                            // GPU pipeline: imageTexture → tempTexture → gaussTextures[0]
+                            // This ensures CPU upload to imageBuffer is isolated from GPU processing
+
+                            // Horizontal gaussian blur (staging → temp)
+                            id<MTLComputeCommandEncoder> blurHorizEncoder = [layerCmdBuf computeCommandEncoder];
+
+                            [blurHorizEncoder setComputePipelineState:impl_->blurHorizPipeline];
+                            [blurHorizEncoder setTexture:impl_->imageTexture atIndex:0];  // Read from staging texture
+                            [blurHorizEncoder setTexture:impl_->tempTextures[o] atIndex:1];
+                            [blurHorizEncoder setBuffer:impl_->kernelSizeBuffers[0] offset:0 atIndex:0];
+                            [blurHorizEncoder setBuffer:impl_->kernelDataBuffers[0] offset:0 atIndex:1];
+
+                            MTLSize gridSize = MTLSizeMake(octaveWidth, octaveHeight, 1);
+                            MTLSize threadgroupSize = MTLSizeMake(16, 16, 1);
+
+                            [blurHorizEncoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
+                            [blurHorizEncoder endEncoding];
+
+                            // Vertical gaussian blur (temp → gaussTextures[0])
+                            id<MTLComputeCommandEncoder> blurVertEncoder = [layerCmdBuf computeCommandEncoder];
+
+                            [blurVertEncoder setComputePipelineState:impl_->blurVertPipeline];
+                            [blurVertEncoder setTexture:impl_->tempTextures[o] atIndex:0];
+                            [blurVertEncoder setTexture:gaussTextures[0] atIndex:1];  // Write to octave buffer
+                            [blurVertEncoder setBuffer:impl_->kernelSizeBuffers[0] offset:0 atIndex:0];
+                            [blurVertEncoder setBuffer:impl_->kernelDataBuffers[0] offset:0 atIndex:1];
+
+                            [blurVertEncoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
+                            [blurVertEncoder endEncoding];
+                        }
+                    }
                 }
 
                 // Encode blur + DoG operations
@@ -658,16 +771,6 @@ bool SIFTMetal::detectAndCompute(const cv::Mat& base,
                 int blurEnd = (layer == 1) ? 4 : (layer + 3);
 
                 for (int i = blurStart; i < blurEnd && i < nLevels; i++) {
-                    int kernelSize = (int)gaussianKernels[i].size();
-
-                    id<MTLBuffer> kernelSizeBuffer = [impl_->device newBufferWithBytes:&kernelSize
-                                                        length:sizeof(int)
-                                                        options:MTLResourceStorageModeShared];
-
-                    id<MTLBuffer> kernelBuffer = [impl_->device newBufferWithBytes:gaussianKernels[i].data()
-                                                        length:gaussianKernels[i].size() * sizeof(float)
-                                                        options:MTLResourceStorageModeShared];
-
                     // Get texture views for this octave
                     std::vector<id<MTLTexture>>& gaussTextures = impl_->octaveTextures[o];
                     std::vector<id<MTLTexture>>& dogTextures = impl_->dogTextures[o];
@@ -678,17 +781,14 @@ bool SIFTMetal::detectAndCompute(const cv::Mat& base,
                     [encoder setTexture:gaussTextures[i-1] atIndex:0];  // Previous Gaussian texture
                     [encoder setTexture:gaussTextures[i] atIndex:1];    // Output Gaussian texture
                     [encoder setTexture:dogTextures[i-1] atIndex:2];    // Output DoG texture
-                    [encoder setBuffer:kernelSizeBuffer offset:0 atIndex:0]; // Kernel size (int)
-                    [encoder setBuffer:kernelBuffer offset:0 atIndex:1]; // Kernel weights
+                    [encoder setBuffer:impl_->kernelSizeBuffers[i] offset:0 atIndex:0]; // Pre-allocated kernel size
+                    [encoder setBuffer:impl_->kernelDataBuffers[i] offset:0 atIndex:1]; // Pre-allocated kernel data
 
                     MTLSize gridSize = MTLSizeMake(octaveWidth, octaveHeight, 1);
                     MTLSize threadgroupSize = MTLSizeMake(16, 16, 1);
 
                     [encoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
                     [encoder endEncoding];
-
-                    RELEASE_IF_MANUAL(kernelSizeBuffer);
-                    RELEASE_IF_MANUAL(kernelBuffer);
                 }
 
                 // Encode extrema detection

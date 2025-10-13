@@ -46,7 +46,7 @@ kernel void gaussianBlurHorizontal(
     int radius = kernelSize / 2;
 
     float centerPixel = currGauss.read(uint2(x, y)).r;
-    float sum = gaussKernel[radius] * centerPixel;
+    float gauss = gaussKernel[radius] * centerPixel;
 
     for (int j = 0; j < radius; j++) {
         int leftX = int(x) - radius + j;
@@ -60,10 +60,45 @@ kernel void gaussianBlurHorizontal(
         float rightPixel = currGauss.read(uint2(rightX, y)).r;
         float weight = gaussKernel[j];
 
-        sum = sum + (weight * leftPixel + weight * rightPixel);
+        gauss = gauss + (weight * leftPixel + weight * rightPixel);
     }
 
-    nextGauss.write(sum, uint2(x, y));
+    nextGauss.write(gauss, uint2(x, y));
+}
+
+
+#pragma METAL fp math_mode(safe)
+kernel void gaussianBlurVertical(
+    texture2d<float, access::read> currGauss [[texture(0)]],
+    texture2d<float, access::write> nextGauss [[texture(1)]],
+    constant int& kernelSize [[buffer(0)]],
+    constant float* gaussKernel [[buffer(1)]],
+    uint2 gid [[thread_position_in_grid]])
+{
+    uint x = gid.x;
+    uint y = gid.y;
+
+    if (x >= currGauss.get_width() || y >= currGauss.get_height()) return;
+
+    int radius = kernelSize / 2;
+    float centerPixel = currGauss.read(uint2(x, y)).r;
+    float gauss = gaussKernel[radius] * centerPixel;
+
+    for (int j = 0; j < radius; j++) {
+        int topY = int(y) - radius + j;
+        int bottomY = int(y) + radius - j;
+
+        topY = clamp(topY, 0, int(currGauss.get_height()) - 1);
+        bottomY = clamp(bottomY, 0, int(currGauss.get_height()) - 1);
+
+        float topPixel = currGauss.read(uint2(x, topY)).r;
+        float bottomPixel = currGauss.read(uint2(x, bottomY)).r;
+        float weight = gaussKernel[j];
+
+        gauss += weight * topPixel + weight * bottomPixel;
+    }
+
+    nextGauss.write(gauss, uint2(x, y));
 }
 
 #pragma METAL fp math_mode(safe)
@@ -82,7 +117,7 @@ kernel void gaussianBlurVerticalAndDoG(
 
     int radius = kernelSize / 2;
     float centerPixel = currGauss.read(uint2(x, y)).r;
-    float sum = gaussKernel[radius] * centerPixel;
+    float gauss = gaussKernel[radius] * centerPixel;
 
     for (int j = 0; j < radius; j++) {
         int topY = int(y) - radius + j;
@@ -95,10 +130,12 @@ kernel void gaussianBlurVerticalAndDoG(
         float bottomPixel = currGauss.read(uint2(x, bottomY)).r;
         float weight = gaussKernel[j];
 
-        sum = sum + (weight * topPixel + weight * bottomPixel);
+        gauss += weight * topPixel + weight * bottomPixel;
     }
 
-    nextGauss.write(sum, uint2(x, y));
+    float currVal = currGauss.read(uint2(x, y)).r;
+    nextGauss.write(gauss, uint2(x, y));
+    nextDoG.write(gauss - currVal, uint2(x, y));
 }
 
 #pragma METAL fp math_mode(safe)

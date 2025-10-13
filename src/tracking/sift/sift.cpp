@@ -468,15 +468,14 @@ void SIFT::detectAndCompute(cv::InputArray _image, cv::InputArray _mask,
     if (!mask.empty() && mask.type() != CV_8UC1)
         CV_Error(cv::Error::StsBadArg, "mask has incorrect type (!=CV_8UC1)");
 
-    int firstOctave = 0;
+    int firstOctave = config_.firstOctave();
+    int nOctaves = config_.computeNumOctaves(image.cols, image.rows);
 
+    #ifdef LAR_USE_METAL_SIFT
+    metalSift_->detectAndCompute(image, keypoints, _descriptors, nOctaves);
+    #else
     cv::Mat base = createInitialImage(image, firstOctave < 0, (float)config_.sigma);
     std::vector<cv::Mat> gpyr;
-    int nOctaves = cvRound(std::log((double)std::min(base.cols, base.rows)) / std::log(2.) - 2) - firstOctave;
-
-#ifdef LAR_USE_METAL_SIFT
-    metalSift_->detectAndCompute(base, keypoints, _descriptors, nOctaves);
-#else
     // CPU+SIMD path: separate Gaussian pyramid, DoG pyramid, and extrema detection
     buildGaussianPyramid(base, gpyr, nOctaves);
     std::vector<cv::Mat> dogpyr;
