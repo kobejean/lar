@@ -1,7 +1,4 @@
-// Shared utilities for SIFT implementations
-// Contains coordinate space conversions and helper functions used across CPU, SIMD, and Metal variants
 #include "lar/tracking/sift/sift_common.h"
-#include "lar/tracking/sift/sift_constants.h"
 #include <opencv2/imgproc.hpp>
 #include <opencv2/core/hal/hal.hpp>
 #include <opencv2/core/hal/intrin.hpp>
@@ -32,14 +29,7 @@ private:
 
 static thread_local AlignedBuffer tls_buffer_common;
 
-namespace sift_common {
-
-// ============================================================================
-// Gaussian Kernel Utilities
-// ============================================================================
-
 std::vector<float> createGaussianKernel(double sigma) {
-    // Use OpenCV's getGaussianKernel for bit-exact compatibility
     int ksize = cvRound(sigma * 3) * 2 + 1;
     cv::Mat kernel = cv::getGaussianKernel(ksize, sigma, CV_32F);
 
@@ -49,10 +39,6 @@ std::vector<float> createGaussianKernel(double sigma) {
     }
     return result;
 }
-
-// ============================================================================
-// SIFT Descriptor Computation
-// ============================================================================
 
 void calcSIFTDescriptor(const cv::Mat& img, cv::Point2f ptf, float ori, float scl,
                         int d, int n, cv::Mat& dstMat, int row) {
@@ -182,10 +168,6 @@ void calcSIFTDescriptor(const cv::Mat& img, cv::Point2f ptf, float ori, float sc
             dst[k] = cv::saturate_cast<uchar>(rawDst[k]*nrm2);
     }
 }
-
-// ============================================================================
-// Keypoint Refinement Helpers
-// ============================================================================
 
 bool adjustLocalExtrema(const std::vector<cv::Mat>& dog_pyr, cv::KeyPoint& kpt, int octv,
                         int& layer, int& r, int& c, int nOctaveLayers,
@@ -353,5 +335,4 @@ float calcOrientationHist(const cv::Mat& img, cv::Point pt, int radius,
     return maxval;
 }
 
-} // namespace sift_common
 } // namespace lar

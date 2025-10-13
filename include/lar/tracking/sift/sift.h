@@ -5,12 +5,12 @@
 #include <opencv2/features2d.hpp>
 #include <vector>
 #include <memory>
-#include "lar/tracking/sift/sift_config.h"
+#include "lar/tracking/sift/sift_common.h"
 
-// Forward declaration for MetalSIFT (only when Metal is enabled)
+// Forward declaration for SIFTMetal (only when Metal is enabled)
 #ifdef LAR_USE_METAL_SIFT
 namespace lar {
-    class MetalSIFT;
+    class SIFTMetal;
 }
 #endif
 
@@ -21,7 +21,7 @@ public:
     SIFT(const SIFTConfig& config);
     ~SIFT();
 
-    // Delete copy operations (MetalSIFT is not copyable)
+    // Delete copy operations (SIFTMetal is not copyable)
     SIFT(const SIFT&) = delete;
     SIFT& operator=(const SIFT&) = delete;
 
@@ -48,19 +48,9 @@ private:
     SIFTConfig config_;
 
 #ifdef LAR_USE_METAL_SIFT
-    std::unique_ptr<MetalSIFT> metalSift_;
+    std::unique_ptr<SIFTMetal> metalSift_;
 #endif
 };
-
-float calcOrientationHist(const cv::Mat& img, cv::Point pt, int radius,
-                          float sigma, float* hist, int n);
-
-bool adjustLocalExtrema(const std::vector<cv::Mat>& dog_pyr, cv::KeyPoint& kpt, int octv,
-                        int& layer, int& r, int& c, int nOctaveLayers,
-                        float contrastThreshold, float edgeThreshold, float sigma);
-
-void calcSIFTDescriptor(const cv::Mat& img, cv::Point2f ptf, float ori, float scl,
-                        int d, int n, cv::Mat& dstMat, int row);
 
 } // namespace lar
 

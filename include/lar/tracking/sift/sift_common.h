@@ -3,12 +3,73 @@
 #ifndef LAR_TRACKING_SIFT_COMMON_H
 #define LAR_TRACKING_SIFT_COMMON_H
 
-#include "lar/tracking/sift/sift_config.h"
 #include <opencv2/core.hpp>
 #include <vector>
 
 namespace lar {
-namespace sift_common {
+
+// SIFT algorithm constants
+// These values are based on the original SIFT paper (Lowe 2004)
+// and are shared between CPU and Metal GPU implementations
+
+// Descriptor parameters
+constexpr int SIFT_DESCR_WIDTH = 4;
+constexpr int SIFT_DESCR_HIST_BINS = 8;
+constexpr float SIFT_INIT_SIGMA = 0.5f;
+
+// Image border for extrema detection
+constexpr int SIFT_IMG_BORDER = 5;
+
+// Keypoint refinement
+constexpr int SIFT_MAX_INTERP_STEPS = 5;
+
+// Orientation histogram parameters
+constexpr int SIFT_ORI_HIST_BINS = 36;
+constexpr float SIFT_ORI_SIG_FCTR = 1.5f;
+constexpr float SIFT_ORI_RADIUS = 4.5f;
+constexpr float SIFT_ORI_PEAK_RATIO = 0.8f;
+
+// Descriptor computation parameters
+constexpr float SIFT_DESCR_SCL_FCTR = 3.f;
+constexpr float SIFT_DESCR_MAG_THR = 0.2f;
+constexpr float SIFT_INT_DESCR_FCTR = 512.f;
+
+// Fixed-point scale factor (1 = floating-point, higher values for fixed-point arithmetic)
+constexpr int SIFT_FIXPT_SCALE = 1;
+
+struct SIFTConfig {
+    cv::Size imageSize = cv::Size(0, 0);
+    int nOctaveLayers = 3;
+    double sigma = 1.6;
+    bool enableUpsampling = false;
+    double contrastThreshold = 0.02;
+    double edgeThreshold = 10.0;
+    int descriptorType = CV_8U;
+
+    SIFTConfig() = default;
+
+    explicit SIFTConfig(cv::Size size)
+        : imageSize(size)
+        , nOctaveLayers(3)
+        , sigma(1.6)
+        , enableUpsampling(false)
+        , contrastThreshold(0.04)
+        , edgeThreshold(10.0)
+        , descriptorType(CV_8U)
+    {}
+
+    int firstOctave() const { return enableUpsampling ? -1 : 0; }
+
+    static constexpr int DESCR_WIDTH = 4;
+    static constexpr int DESCR_HIST_BINS = 8;
+    static constexpr int DESCR_SIZE = DESCR_WIDTH * DESCR_WIDTH * DESCR_HIST_BINS;
+
+    int computeNumOctaves(int baseWidth, int baseHeight) const {
+        return static_cast<int>(std::round(std::log(std::min(baseWidth, baseHeight)) / std::log(2.0) - 2.0)) - firstOctave();
+    }
+
+    int pyramidLevels() const { return nOctaveLayers + 3; }
+};
 
 inline cv::Point2f toFullResolution(cv::Point2f pt, int octave, int firstOctave) {
     float scale = 1.0f / (1 << (octave - firstOctave));
@@ -59,7 +120,6 @@ float calcOrientationHist(
     int n
 );
 
-} // namespace sift_common
 } // namespace lar
 
 #endif // LAR_TRACKING_SIFT_COMMON_H

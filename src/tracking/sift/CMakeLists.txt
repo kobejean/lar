@@ -3,9 +3,7 @@
 
 set(SIFT_HEADER_LIST
   "${PROJECT_SOURCE_DIR}/include/lar/tracking/sift/sift.h"
-  "${PROJECT_SOURCE_DIR}/include/lar/tracking/sift/sift_config.h"
   "${PROJECT_SOURCE_DIR}/include/lar/tracking/sift/sift_common.h"
-  "${PROJECT_SOURCE_DIR}/include/lar/tracking/sift/sift_constants.h"
 )
 
 set(SIFT_SOURCES
@@ -15,9 +13,7 @@ set(SIFT_SOURCES
 
 # Add Metal implementation on Apple platforms if enabled
 if(LAR_USE_METAL_SIFT AND APPLE)
-  # Add Metal SIFT header and consolidated implementation (RAII-based)
-  list(APPEND SIFT_HEADER_LIST "${PROJECT_SOURCE_DIR}/include/lar/tracking/sift/metal_sift.h")
-  list(APPEND SIFT_SOURCES metal_sift.mm)
+  list(APPEND SIFT_SOURCES sift_metal.mm)
   message(STATUS "Metal-accelerated SIFT enabled")
 endif()
 
@@ -45,7 +41,6 @@ if(LAR_USE_METAL_SIFT AND APPLE)
 
     # Compile Metal shader library
     set(METAL_SHADER_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/metal/sift.metal")
-    set(METAL_CONSTANTS_HEADER "${CMAKE_CURRENT_SOURCE_DIR}/metal/sift_constants.metal")
     set(METAL_AIR_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/sift.air")
     set(METAL_LIB_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/sift.metallib")
 

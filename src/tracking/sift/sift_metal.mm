@@ -15,11 +15,9 @@
 #include <thread>
 #include <stdexcept>
 
-#include "lar/tracking/sift/metal_sift.h"
+#include "sift_metal.h"
 #include "lar/tracking/sift/sift_common.h"
-#include "lar/tracking/sift/sift_constants.h"
 
-// Helper macro for conditional release
 #if !__has_feature(objc_arc)
     #define RELEASE_IF_MANUAL(obj) [obj release]
 #else
@@ -30,57 +28,20 @@
 
 namespace lar {
 
-// ============================================================================
-// Metal Shader Parameter Structures
-// ============================================================================
-
-struct GaussianBlurParams {
-    int width;
-    int height;
-    int rowStride;
-    int kernelSize;
-};
-
-struct KeypointCandidate {
-    int x;
-    int y;
-    int octave;
-    int layer;
-    float value;
-};
-
 struct ExtremaParams {
-    int width;
-    int height;
-    int rowStride;
     float threshold;
     int border;
-    int octave;
-    int layer;
 };
 
-struct ResizeParams {
-    int srcWidth;
-    int srcHeight;
-    int srcRowStride;
-    int dstWidth;
-    int dstHeight;
-    int dstRowStride;
-};
-
-// ============================================================================
-// MetalSIFT Implementation (pImpl idiom)
-// ============================================================================
-
-struct MetalSIFT::Impl {
-    // Metal resources (owned by this instance, RAII)
+struct SIFTMetal::Impl {
+    // Metal resources
     id<MTLDevice> device = nil;
     id<MTLCommandQueue> commandQueue = nil;
     id<MTLComputePipelineState> blurAndDoGPipeline = nil;
     id<MTLComputePipelineState> extremaPipeline = nil;
     id<MTLComputePipelineState> resizePipeline = nil;
 
-    // Pre-allocated GPU buffers/textures (allocated once in constructor)
+    // Pre-allocated GPU buffers/textures
     std::vector<std::vector<id<MTLBuffer>>> octaveBuffers;
     std::vector<std::vector<id<MTLTexture>>> octaveTextures;
     std::vector<id<MTLBuffer>> tempBuffers;
@@ -88,17 +49,16 @@ struct MetalSIFT::Impl {
     std::vector<std::vector<id<MTLBuffer>>> dogBuffers;
     std::vector<std::vector<id<MTLTexture>>> dogTextures;
 
-    // Pre-computed Gaussian kernels (computed once in constructor)
+    // Pre-computed Gaussian kernels
     std::vector<std::vector<float>> gaussianKernels;
     std::vector<double> sigmas;
 
-    // Image dimensions (immutable after construction)
+    // Image dimensions
     int nOctaves = 0;
     int nLevels = 0;
 
     bool initialized = false;
 
-    // Destructor - releases all Metal resources
     ~Impl() {
         @autoreleasepool {
             releaseBuffersAndTextures();
@@ -119,31 +79,19 @@ struct MetalSIFT::Impl {
 
     void releaseBuffersAndTextures() {
         for (auto& octave : octaveTextures) {
-            for (auto& tex : octave) {
-                RELEASE_IF_MANUAL(tex);
-            }
+            for (auto& tex : octave) RELEASE_IF_MANUAL(tex);
         }
         for (auto& octave : octaveBuffers) {
-            for (auto& buf : octave) {
-                RELEASE_IF_MANUAL(buf);
-            }
+            for (auto& buf : octave) RELEASE_IF_MANUAL(buf);
         }
         for (auto& octave : dogTextures) {
-            for (auto& tex : octave) {
-                RELEASE_IF_MANUAL(tex);
-            }
+            for (auto& tex : octave) RELEASE_IF_MANUAL(tex);
         }
         for (auto& octave : dogBuffers) {
-            for (auto& buf : octave) {
-                RELEASE_IF_MANUAL(buf);
-            }
+            for (auto& buf : octave) RELEASE_IF_MANUAL(buf);
         }
-        for (auto& tex : tempTextures) {
-            RELEASE_IF_MANUAL(tex);
-        }
-        for (auto& buf : tempBuffers) {
-            RELEASE_IF_MANUAL(buf);
-        }
+        for (auto& tex : tempTextures) RELEASE_IF_MANUAL(tex);
+        for (auto& buf : tempBuffers) RELEASE_IF_MANUAL(buf);
         octaveTextures.clear();
         octaveBuffers.clear();
         dogTextures.clear();
@@ -153,11 +101,6 @@ struct MetalSIFT::Impl {
     }
 };
 
-// ============================================================================
-// Helper Functions
-// ============================================================================
-
-// Load Metal shader library with comprehensive fallback locations
 static id<MTLLibrary> loadMetalLibrary(id<MTLDevice> device, NSString* libraryName) {
     @autoreleasepool {
         NSError* error = nil;
@@ -265,20 +208,6 @@ static id<MTLLibrary> loadMetalLibrary(id<MTLDevice> device, NSString* libraryNa
     }
 }
 
-// Create 1D Gaussian kernel using OpenCV's bit-exact implementation
-static std::vector<float> createGaussianKernel(double sigma) {
-    int ksize = cvRound(sigma * 8 + 1) | 1;
-    cv::Mat kernelMat = cv::getGaussianKernel(ksize, sigma, CV_32F);
-
-    std::vector<float> kernel(ksize);
-    for (int i = 0; i < ksize; i++) {
-        kernel[i] = kernelMat.at<float>(i);
-    }
-
-    return kernel;
-}
-
-// Compute Gaussian kernels for all pyramid levels
 static void computeGaussianKernels(
     int nLevels,
     int nOctaveLayers,
@@ -300,10 +229,9 @@ static void computeGaussianKernels(
     }
 }
 
-// Allocate Metal buffers and textures for an octave
 static void allocateOctaveResources(
     id<MTLDevice> device,
-    MetalSIFT::Impl& impl,
+    SIFTMetal::Impl& impl,
     int octave,
     int octaveWidth,
     int octaveHeight,
@@ -365,7 +293,6 @@ static void allocateOctaveResources(
                                                                                 bytesPerRow:alignedRowBytes];
 }
 
-// Upload octave base image to GPU
 static void uploadOctaveBase(
     const cv::Mat& octaveBase,
     id<MTLBuffer> gaussBuffer,
@@ -383,7 +310,6 @@ static void uploadOctaveBase(
     }
 }
 
-// Extract keypoints from bitarray and compute descriptors incrementally
 static void extractKeypointsAndDescriptors(
     uint32_t* bitarray,
     int octave,
@@ -419,7 +345,7 @@ static void extractKeypointsAndDescriptors(
                 cv::KeyPoint kpt;
                 int keypoint_layer = layer;
 
-                if (!sift_common::adjustLocalExtrema(dog_pyr, kpt, octave, keypoint_layer, r, c_pos,
+                if (!adjustLocalExtrema(dog_pyr, kpt, octave, keypoint_layer, r, c_pos,
                                     nOctaveLayers, contrastThreshold, edgeThreshold, sigma)) {
                     continue;
                 }
@@ -430,7 +356,7 @@ static void extractKeypointsAndDescriptors(
                 float scl_octv = kpt.size * 0.5f / (1 << octave);
 
                 int gaussIdx = octave * (nOctaveLayers + 3) + keypoint_layer;
-                float omax = sift_common::calcOrientationHist(gauss_pyr[gaussIdx],
+                float omax = calcOrientationHist(gauss_pyr[gaussIdx],
                                                 cv::Point(c_pos, r),
                                                 cvRound(SIFT_ORI_RADIUS * scl_octv),
                                                 SIFT_ORI_SIG_FCTR * scl_octv,
@@ -465,7 +391,7 @@ static void extractKeypointsAndDescriptors(
                         if (std::abs(angle - 360.f) < FLT_EPSILON)
                             angle = 0.f;
 
-                        sift_common::calcSIFTDescriptor(img, ptf, angle,
+                        calcSIFTDescriptor(img, ptf, angle,
                                          scl, SIFT_DESCR_WIDTH, SIFT_DESCR_HIST_BINS,
                                          localDescriptors, count);
 
@@ -482,11 +408,7 @@ static void extractKeypointsAndDescriptors(
     }
 }
 
-// ============================================================================
-// MetalSIFT Public Interface Implementation
-// ============================================================================
-
-MetalSIFT::MetalSIFT(const SIFTConfig& config) : impl_(new Impl()), config_(config)
+SIFTMetal::SIFTMetal(const SIFTConfig& config) : impl_(new Impl()), config_(config)
 {
     @autoreleasepool {
         // Initialize Metal device
@@ -576,16 +498,16 @@ MetalSIFT::MetalSIFT(const SIFTConfig& config) : impl_(new Impl()), config_(conf
     }
 }
 
-MetalSIFT::~MetalSIFT() {
+SIFTMetal::~SIFTMetal() {
     delete impl_;
 }
 
-MetalSIFT::MetalSIFT(MetalSIFT&& other) noexcept : impl_(other.impl_), config_(other.config_)
+SIFTMetal::SIFTMetal(SIFTMetal&& other) noexcept : impl_(other.impl_), config_(other.config_)
 {
     other.impl_ = nullptr;
 }
 
-MetalSIFT& MetalSIFT::operator=(MetalSIFT&& other) noexcept {
+SIFTMetal& SIFTMetal::operator=(SIFTMetal&& other) noexcept {
     if (this != &other) {
         delete impl_;
         impl_ = other.impl_;
@@ -595,11 +517,11 @@ MetalSIFT& MetalSIFT::operator=(MetalSIFT&& other) noexcept {
     return *this;
 }
 
-bool MetalSIFT::isAvailable() const {
+bool SIFTMetal::isAvailable() const {
     return impl_ && impl_->initialized && impl_->device && impl_->commandQueue;
 }
 
-bool MetalSIFT::detectAndCompute(const cv::Mat& base,
+bool SIFTMetal::detectAndCompute(const cv::Mat& base,
                                  std::vector<cv::KeyPoint>& keypoints,
                                  cv::OutputArray descriptors,
                                  int nOctaves)
@@ -636,7 +558,7 @@ bool MetalSIFT::detectAndCompute(const cv::Mat& base,
                 return tempKernels;
             }();
 
-        // Pre-allocate pyramid storage (internal to MetalSIFT)
+        // Pre-allocate pyramid storage (internal to SIFTMetal)
         std::vector<cv::Mat> gauss_pyr(nOctaves * nLevels);
         std::vector<cv::Mat> dog_pyr(nOctaves * (config_.nOctaveLayers + 2));
 
@@ -665,7 +587,6 @@ bool MetalSIFT::detectAndCompute(const cv::Mat& base,
 
         // Producer-consumer synchronization
         auto keypointsMutex = std::make_shared<std::mutex>();
-        auto descriptorsMutex = std::make_shared<std::mutex>();
         int totalLayers = nOctaves * config_.nOctaveLayers;
         auto allKeypoints = std::make_shared<std::vector<std::vector<cv::KeyPoint>>>(totalLayers);
         auto allDescriptors = std::make_shared<std::vector<cv::Mat>>(totalLayers);
@@ -715,42 +636,21 @@ bool MetalSIFT::detectAndCompute(const cv::Mat& base,
                 id<MTLCommandBuffer> layerCmdBuf = [impl_->commandQueue commandBuffer];
                 layerCmdBuf.label = [NSString stringWithFormat:@"Octave %d Layer %d", o, layer];
 
-                // For octave 1+ layer 1: encode GPU resize (texture-based)
+                // For octave 1+ layer 1: encode GPU resize)
                 if (layer == 1 && o > 0) {
-                    int prevOctaveWidth = base.cols >> (o - 1);
-                    int prevOctaveHeight = base.rows >> (o - 1);
-                    size_t prevRowBytes = prevOctaveWidth * sizeof(float);
-                    size_t prevAlignedRowBytes = ((prevRowBytes + METAL_BUFFER_ALIGNMENT - 1) / METAL_BUFFER_ALIGNMENT) * METAL_BUFFER_ALIGNMENT;
-                    int prevRowStride = (int)(prevAlignedRowBytes / sizeof(float));
-
                     std::vector<id<MTLTexture>>& prevGaussTextures = impl_->octaveTextures[o - 1];
                     std::vector<id<MTLTexture>>& gaussTextures = impl_->octaveTextures[o];
 
-                    ResizeParams resizeParams;
-                    resizeParams.srcWidth = prevOctaveWidth;
-                    resizeParams.srcHeight = prevOctaveHeight;
-                    resizeParams.srcRowStride = prevRowStride;
-                    resizeParams.dstWidth = octaveWidth;
-                    resizeParams.dstHeight = octaveHeight;
-                    resizeParams.dstRowStride = rowStride;
-
-                    id<MTLBuffer> resizeParamsBuffer = [impl_->device newBufferWithBytes:&resizeParams
-                                                        length:sizeof(ResizeParams)
-                                                        options:MTLResourceStorageModeShared];
-
                     id<MTLComputeCommandEncoder> resizeEncoder = [layerCmdBuf computeCommandEncoder];
                     [resizeEncoder setComputePipelineState:impl_->resizePipeline];
-                    [resizeEncoder setTexture:prevGaussTextures[nLevels-3] atIndex:0];  // ✅ Texture!
-                    [resizeEncoder setTexture:gaussTextures[0] atIndex:1];              // ✅ Texture!
-                    [resizeEncoder setBuffer:resizeParamsBuffer offset:0 atIndex:0];    // Buffer for params
+                    [resizeEncoder setTexture:prevGaussTextures[nLevels-3] atIndex:0];  // Source texture
+                    [resizeEncoder setTexture:gaussTextures[0] atIndex:1];              // Destination texture
 
                     MTLSize resizeGridSize = MTLSizeMake(octaveWidth, octaveHeight, 1);
                     MTLSize resizeThreadgroupSize = MTLSizeMake(16, 16, 1);
 
                     [resizeEncoder dispatchThreads:resizeGridSize threadsPerThreadgroup:resizeThreadgroupSize];
                     [resizeEncoder endEncoding];
-
-                    RELEASE_IF_MANUAL(resizeParamsBuffer);
                 }
 
                 // Encode blur + DoG operations
@@ -758,14 +658,10 @@ bool MetalSIFT::detectAndCompute(const cv::Mat& base,
                 int blurEnd = (layer == 1) ? 4 : (layer + 3);
 
                 for (int i = blurStart; i < blurEnd && i < nLevels; i++) {
-                    GaussianBlurParams params;
-                    params.width = octaveWidth;
-                    params.height = octaveHeight;
-                    params.rowStride = rowStride;
-                    params.kernelSize = (int)gaussianKernels[i].size();
+                    int kernelSize = (int)gaussianKernels[i].size();
 
-                    id<MTLBuffer> paramsBuffer = [impl_->device newBufferWithBytes:&params
-                                                        length:sizeof(GaussianBlurParams)
+                    id<MTLBuffer> kernelSizeBuffer = [impl_->device newBufferWithBytes:&kernelSize
+                                                        length:sizeof(int)
                                                         options:MTLResourceStorageModeShared];
 
                     id<MTLBuffer> kernelBuffer = [impl_->device newBufferWithBytes:gaussianKernels[i].data()
@@ -782,8 +678,8 @@ bool MetalSIFT::detectAndCompute(const cv::Mat& base,
                     [encoder setTexture:gaussTextures[i-1] atIndex:0];  // Previous Gaussian texture
                     [encoder setTexture:gaussTextures[i] atIndex:1];    // Output Gaussian texture
                     [encoder setTexture:dogTextures[i-1] atIndex:2];    // Output DoG texture
-                    [encoder setBuffer:paramsBuffer offset:0 atIndex:0]; // Parameters buffer
-                    [encoder setBuffer:kernelBuffer offset:0 atIndex:1]; // Kernel buffer
+                    [encoder setBuffer:kernelSizeBuffer offset:0 atIndex:0]; // Kernel size (int)
+                    [encoder setBuffer:kernelBuffer offset:0 atIndex:1]; // Kernel weights
 
                     MTLSize gridSize = MTLSizeMake(octaveWidth, octaveHeight, 1);
                     MTLSize threadgroupSize = MTLSizeMake(16, 16, 1);
@@ -791,19 +687,14 @@ bool MetalSIFT::detectAndCompute(const cv::Mat& base,
                     [encoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
                     [encoder endEncoding];
 
-                    RELEASE_IF_MANUAL(paramsBuffer);
+                    RELEASE_IF_MANUAL(kernelSizeBuffer);
                     RELEASE_IF_MANUAL(kernelBuffer);
                 }
 
                 // Encode extrema detection
                 ExtremaParams params;
-                params.width = octaveWidth;
-                params.height = octaveHeight;
-                params.rowStride = rowStride;
                 params.threshold = threshold;
                 params.border = SIFT_IMG_BORDER;
-                params.octave = o;
-                params.layer = layer;
 
                 id<MTLBuffer> paramsBuffer = [impl_->device newBufferWithBytes:&params
                                                                     length:sizeof(ExtremaParams)
@@ -859,10 +750,6 @@ bool MetalSIFT::detectAndCompute(const cv::Mat& base,
                     {
                         std::lock_guard<std::mutex> lock(*keypointsMutex);
                         (*allKeypoints)[layerIndex] = localKeypoints;
-                    }
-
-                    {
-                        std::lock_guard<std::mutex> lock(*descriptorsMutex);
                         (*allDescriptors)[layerIndex] = localDescriptors;
                     }
 

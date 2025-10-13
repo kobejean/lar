@@ -13,28 +13,28 @@ typedef struct objc_object *id;
 
 #include <opencv2/core.hpp>
 #include <vector>
-#include "lar/tracking/sift/sift_config.h"
+#include "lar/tracking/sift/sift_common.h"
 
 namespace lar {
 
 // Forward declarations
-class MetalSIFT;
+class SIFTMetal;
 
 /// Metal-accelerated SIFT processor using GPU compute pipelines
 /// Implements full SIFT pipeline: Gaussian pyramid, DoG pyramid, extrema detection, and descriptors
 /// Resources are owned by this instance (RAII), enabling safe multi-threading
-class MetalSIFT {
+class SIFTMetal {
 public:
-    MetalSIFT(const SIFTConfig& config);
-    ~MetalSIFT();
+    SIFTMetal(const SIFTConfig& config);
+    ~SIFTMetal();
 
     // Delete copy operations (Metal resources shouldn't be copied)
-    MetalSIFT(const MetalSIFT&) = delete;
-    MetalSIFT& operator=(const MetalSIFT&) = delete;
+    SIFTMetal(const SIFTMetal&) = delete;
+    SIFTMetal& operator=(const SIFTMetal&) = delete;
 
     // Allow move operations for flexibility
-    MetalSIFT(MetalSIFT&& other) noexcept;
-    MetalSIFT& operator=(MetalSIFT&& other) noexcept;
+    SIFTMetal(SIFTMetal&& other) noexcept;
+    SIFTMetal& operator=(SIFTMetal&& other) noexcept;
 
     bool detectAndCompute(const cv::Mat& base,
                          std::vector<cv::KeyPoint>& keypoints,
