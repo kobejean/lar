@@ -7,20 +7,9 @@
 #include <iostream>
 #include <chrono>
 
-// Only use pipelined Metal implementation (best performance)
-#define LAR_USE_METAL_SIFT_PIPELINED 1
-
-#ifdef LAR_USE_METAL_SIFT_PIPELINED
-// Forward declaration of pipelined Metal implementation (defined in sift_metal_pipelined.mm)
-namespace lar {
-    void findScaleSpaceExtremaMetalPipelined(const cv::Mat& base,
-                                             std::vector<cv::Mat>& gauss_pyr,
-                                             std::vector<cv::KeyPoint>& keypoints,
-                                             cv::Mat& descriptors,
-                                             int descriptorType,
-                                             int nOctaves, int nOctaveLayers, float threshold,
-                                             double contrastThreshold, double edgeThreshold, double sigma);
-}
+// Include MetalSIFT header when Metal is enabled
+#ifdef LAR_USE_METAL_SIFT
+#include "lar/tracking/sift/metal_sift.h"
 #endif
 
 // SIMD Helper macros for cleaner code
@@ -828,7 +817,54 @@ SIFT::SIFT(int nfeatures, int nOctaveLayers, double contrastThreshold,
     , contrastThreshold_(contrastThreshold)
     , edgeThreshold_(edgeThreshold)
     , sigma_(sigma)
-    , descriptorType_(descriptorType) {
+    , descriptorType_(descriptorType)
+#ifdef LAR_USE_METAL_SIFT
+    , metalSift_(nullptr)
+#endif
+{
+#ifdef LAR_USE_METAL_SIFT
+    // Try to initialize Metal SIFT processor (RAII)
+    // If Metal is not available, will fall back to CPU path
+    try {
+        metalSift_ = std::make_unique<MetalSIFT>(nOctaveLayers, contrastThreshold,
+                                                  edgeThreshold, sigma, descriptorType);
+        std::cout << "Metal SIFT initialized successfully" << std::endl;
+    } catch (const std::exception& e) {
+        std::cerr << "Failed to initialize Metal SIFT: " << e.what() << std::endl;
+        std::cerr << "Falling back to CPU implementation" << std::endl;
+        metalSift_ = nullptr;
+    }
+#endif
+}
+
+SIFT::~SIFT() = default;
+
+SIFT::SIFT(SIFT&& other) noexcept
+    : nfeatures_(other.nfeatures_)
+    , nOctaveLayers_(other.nOctaveLayers_)
+    , contrastThreshold_(other.contrastThreshold_)
+    , edgeThreshold_(other.edgeThreshold_)
+    , sigma_(other.sigma_)
+    , descriptorType_(other.descriptorType_)
+#ifdef LAR_USE_METAL_SIFT
+    , metalSift_(std::move(other.metalSift_))
+#endif
+{
+}
+
+SIFT& SIFT::operator=(SIFT&& other) noexcept {
+    if (this != &other) {
+        nfeatures_ = other.nfeatures_;
+        nOctaveLayers_ = other.nOctaveLayers_;
+        contrastThreshold_ = other.contrastThreshold_;
+        edgeThreshold_ = other.edgeThreshold_;
+        sigma_ = other.sigma_;
+        descriptorType_ = other.descriptorType_;
+#ifdef LAR_USE_METAL_SIFT
+        metalSift_ = std::move(other.metalSift_);
+#endif
+    }
+    return *this;
 }
 
 cv::Ptr<SIFT> SIFT::create(int nfeatures, int nOctaveLayers, double contrastThreshold,
@@ -939,20 +975,26 @@ void SIFT::detectAndCompute(cv::InputArray _image, cv::InputArray _mask,
     std::vector<cv::Mat> gpyr;
     int nOctaves = cvRound(std::log((double)std::min(base.cols, base.rows)) / std::log(2.) - 2) - firstOctave;
 
-#ifdef LAR_USE_METAL_SIFT_PIPELINED
-    // Use pipelined Metal kernel for maximum GPU parallelism (all octaves in parallel)
-    // Descriptors are computed incrementally in the pipeline
-    const int threshold = cvFloor(0.5 * contrastThreshold_ / nOctaveLayers_ * 255 * SIFT_FIXPT_SCALE);
-    cv::Mat metalDescriptors;  // Will be populated by pipelined extraction
-    findScaleSpaceExtremaMetalPipelined(base, gpyr, keypoints, metalDescriptors, descriptorType_,
-        nOctaves, nOctaveLayers_, (float)threshold, contrastThreshold_, edgeThreshold_, sigma_);
-#else
-    // CPU+SIMD path: separate Gaussian pyramid, DoG pyramid, and extrema detection
-    buildGaussianPyramid(base, gpyr, nOctaves);
-    std::vector<cv::Mat> dogpyr;
-    buildDoGPyramid(gpyr, dogpyr);
-    findScaleSpaceExtrema(gpyr, dogpyr, keypoints);
+    cv::Mat metalDescriptors;  // Will be populated by Metal extraction (if used)
+    bool usedMetal = false;
+
+#ifdef LAR_USE_METAL_SIFT
+    // Try Metal path first (each SIFT instance has its own MetalSIFT processor)
+    if (metalSift_ && metalSift_->isAvailable()) {
+        usedMetal = metalSift_->detectAndCompute(base, gpyr, keypoints, metalDescriptors, nOctaves);
+        if (!usedMetal) {
+            std::cerr << "Metal SIFT processing failed, falling back to CPU" << std::endl;
+        }
+    }
 #endif
+
+    if (!usedMetal) {
+        // CPU+SIMD path: separate Gaussian pyramid, DoG pyramid, and extrema detection
+        buildGaussianPyramid(base, gpyr, nOctaves);
+        std::vector<cv::Mat> dogpyr;
+        buildDoGPyramid(gpyr, dogpyr);
+        findScaleSpaceExtrema(gpyr, dogpyr, keypoints);
+    }
 
     if( nfeatures_ > 0 ) {
         cv::KeyPointsFilter::retainBest(keypoints, nfeatures_);
@@ -969,41 +1011,39 @@ void SIFT::detectAndCompute(cv::InputArray _image, cv::InputArray _mask,
     }
 
     if (_descriptors.needed()) {
-#ifdef LAR_USE_METAL_SIFT_PIPELINED
-        // Descriptors already computed incrementally in Metal pipeline
-        // Just copy the pre-computed descriptors to the output
-        if (!metalDescriptors.empty()) {
+        if (usedMetal && !metalDescriptors.empty()) {
+            // Descriptors already computed by Metal
             metalDescriptors.copyTo(_descriptors);
-        } else {
-            // No keypoints found, create empty descriptor matrix
-            _descriptors.create(0, descriptorSize(), descriptorType_);
+        } else if (_descriptors.needed()) {
+            // CPU path: compute descriptors for all keypoints
+            int dsize = descriptorSize();
+            _descriptors.create((int)keypoints.size(), dsize, descriptorType_);
+
+            if (keypoints.empty()) {
+                // No keypoints found, descriptor matrix already created with 0 rows
+                return;
+            }
+
+            cv::Mat descriptors = _descriptors.getMat();
+            static const int d = SIFT_DESCR_WIDTH, n = SIFT_DESCR_HIST_BINS;
+
+            for (size_t i = 0; i < keypoints.size(); i++) {
+                cv::KeyPoint kpt = keypoints[i];
+                int octave, layer;
+                float scale;
+                unpackOctave(kpt, octave, layer, scale);
+
+                float size = kpt.size*scale;
+                cv::Point2f ptf(kpt.pt.x*scale, kpt.pt.y*scale);
+                const cv::Mat& img = gpyr[(octave - firstOctave)*(nOctaveLayers_ + 3) + layer];
+
+                float angle = 360.f - kpt.angle;
+                if (std::abs(angle - 360.f) < FLT_EPSILON)
+                    angle = 0.f;
+
+                calcSIFTDescriptor(img, ptf, angle, size*0.5f, d, n, descriptors, i);
+            }
         }
-
-#else
-        // CPU path: compute descriptors for all keypoints
-        int dsize = descriptorSize();
-        _descriptors.create((int)keypoints.size(), dsize, descriptorType_);
-        cv::Mat descriptors = _descriptors.getMat();
-
-        static const int d = SIFT_DESCR_WIDTH, n = SIFT_DESCR_HIST_BINS;
-
-        for (size_t i = 0; i < keypoints.size(); i++) {
-            cv::KeyPoint kpt = keypoints[i];
-            int octave, layer;
-            float scale;
-            unpackOctave(kpt, octave, layer, scale);
-
-            float size = kpt.size*scale;
-            cv::Point2f ptf(kpt.pt.x*scale, kpt.pt.y*scale);
-            const cv::Mat& img = gpyr[(octave - firstOctave)*(nOctaveLayers_ + 3) + layer];
-
-            float angle = 360.f - kpt.angle;
-            if (std::abs(angle - 360.f) < FLT_EPSILON)
-                angle = 0.f;
-
-            calcSIFTDescriptor(img, ptf, angle, size*0.5f, d, n, descriptors, i);
-        }
-#endif
     }
 
 }

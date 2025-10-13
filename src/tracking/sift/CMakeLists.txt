@@ -15,7 +15,9 @@ set(SIFT_SOURCES
 
 # Add Metal implementation on Apple platforms if enabled
 if(LAR_USE_METAL_SIFT AND APPLE)
-  list(APPEND SIFT_SOURCES sift_metal_common.mm sift_metal_pipelined.mm)
+  # Add Metal SIFT header and consolidated implementation (RAII-based)
+  list(APPEND SIFT_HEADER_LIST "${PROJECT_SOURCE_DIR}/include/lar/tracking/sift/metal_sift.h")
+  list(APPEND SIFT_SOURCES metal_sift.mm)
   message(STATUS "Metal-accelerated SIFT enabled")
 endif()
 

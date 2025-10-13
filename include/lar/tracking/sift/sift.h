@@ -4,6 +4,14 @@
 #include <opencv2/core.hpp>
 #include <opencv2/features2d.hpp>
 #include <vector>
+#include <memory>
+
+// Forward declaration for MetalSIFT (only when Metal is enabled)
+#ifdef LAR_USE_METAL_SIFT
+namespace lar {
+    class MetalSIFT;
+}
+#endif
 
 namespace lar {
 
@@ -12,6 +20,16 @@ public:
     SIFT(int nfeatures = 0, int nOctaveLayers = 3,
          double contrastThreshold = 0.04, double edgeThreshold = 10,
          double sigma = 1.6, int descriptorType = CV_32F);
+
+    ~SIFT();
+
+    // Delete copy operations (MetalSIFT is not copyable)
+    SIFT(const SIFT&) = delete;
+    SIFT& operator=(const SIFT&) = delete;
+
+    // Allow move operations
+    SIFT(SIFT&& other) noexcept;
+    SIFT& operator=(SIFT&& other) noexcept;
 
     static cv::Ptr<SIFT> create(int nfeatures = 0, int nOctaveLayers = 3,
                                  double contrastThreshold = 0.04, double edgeThreshold = 10,
@@ -29,7 +47,7 @@ public:
 private:
     void buildGaussianPyramid(const cv::Mat& base, std::vector<cv::Mat>& pyr, int nOctaves) const;
     void buildDoGPyramid(const std::vector<cv::Mat>& pyr, std::vector<cv::Mat>& dogpyr) const;
-    void findScaleSpaceExtrema(const std::vector<cv::Mat>& gauss_pyr, 
+    void findScaleSpaceExtrema(const std::vector<cv::Mat>& gauss_pyr,
                                const std::vector<cv::Mat>& dog_pyr,
                                std::vector<cv::KeyPoint>& keypoints) const;
 
@@ -39,6 +57,12 @@ private:
     double edgeThreshold_;
     double sigma_;
     int descriptorType_;
+
+#ifdef LAR_USE_METAL_SIFT
+    // Metal-accelerated SIFT processor (owned by this instance, RAII)
+    // Each SIFT instance has its own Metal resources for thread-safety
+    std::unique_ptr<MetalSIFT> metalSift_;
+#endif
 };
 
 // Helper functions for SIFT keypoint refinement and orientation
