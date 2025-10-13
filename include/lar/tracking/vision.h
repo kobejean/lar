@@ -13,9 +13,9 @@ namespace lar {
       cv::FlannBasedMatcher flann_matcher;
       cv::BFMatcher bf_matcher;
 
-      /// Constructor with image dimensions for Metal SIFT optimization
-      /// @param imageSize Expected input image dimensions (width, height)
-      Vision(cv::Size imageSize);
+      /// Constructor with optional image dimensions for Metal SIFT optimization
+      /// @param imageSize Expected input image dimensions (default: 1920x1440, typical ARKit resolution)
+      Vision(cv::Size imageSize = cv::Size(1920, 1440));
 
       // Delete copy operations (SIFT is not copyable)
       Vision(const Vision&) = delete;
@@ -24,6 +24,10 @@ namespace lar {
       // Allow move operations
       Vision(Vision&&) = default;
       Vision& operator=(Vision&&) = default;
+
+      /// Reconfigure detector with new image dimensions
+      /// @param imageSize New expected input image dimensions (width, height)
+      void configureImageSize(cv::Size imageSize);
 
       void extractFeatures(cv::InputArray image, cv::InputArray mask, std::vector<cv::KeyPoint> &kpts, cv::Mat &desc);
       std::vector<cv::DMatch> match(const cv::Mat &desc1, const cv::Mat &desc2,

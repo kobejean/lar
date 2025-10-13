@@ -15,13 +15,20 @@ protected:
 };
 
 TEST_F(SIFTTest, CreateInstance) {
-    auto sift = lar::SIFT::create(0, 3, 0.04, 10, 1.6, CV_32F);
-    EXPECT_TRUE(sift != nullptr);
-    
+    lar::SiftConfig config(test_image.size());
+    config.nfeatures = 0;
+    config.nOctaveLayers = 3;
+    config.contrastThreshold = 0.04;
+    config.edgeThreshold = 10;
+    config.sigma = 1.6;
+    config.descriptorType = CV_32F;
+
+    lar::SIFT sift(config);
+
     // Test basic properties
-    EXPECT_EQ(sift->descriptorSize(), 128);
-    EXPECT_EQ(sift->descriptorType(), CV_32F);
-    EXPECT_EQ(sift->defaultNorm(), cv::NORM_L2);
+    EXPECT_EQ(sift.descriptorSize(), 128);
+    EXPECT_EQ(sift.descriptorType(), CV_32F);
+    EXPECT_EQ(sift.defaultNorm(), cv::NORM_L2);
 }
 
 TEST_F(SIFTTest, ComputeDescriptors) {

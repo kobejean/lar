@@ -20,6 +20,10 @@ namespace lar {
     usac_params.threshold=8.0;
   }
 
+  void Tracker::configureImageSize(cv::Size imageSize) {
+    vision.configureImageSize(imageSize);
+  }
+
   bool Tracker::localize(cv::InputArray image, const Frame &frame, double query_x, double query_z, double query_diameter, Eigen::Matrix4d &result_transform, const Eigen::Matrix4d &initial_guess, bool use_initial_guess) {
     Eigen::Matrix3f frameIntrinsics = frame.intrinsics.cast<float>().transpose(); // transpose so that the order of data matches opencv
     cv::Mat intrinsics(3, 3, CV_32FC1, frameIntrinsics.data());

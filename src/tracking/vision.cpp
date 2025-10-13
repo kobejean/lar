@@ -25,6 +25,16 @@ namespace lar {
     bf_matcher = cv::BFMatcher(cv::NORM_L2, false);
   }
 
+  void Vision::configureImageSize(cv::Size imageSize) {
+    // Recreate SIFT detector with new image dimensions
+    SiftConfig config(imageSize);
+    config.contrastThreshold = 0.02;  // Custom: lower than default 0.04
+    config.descriptorType = CV_8U;     // Custom: uint8 instead of float32
+
+    detector = cv::makePtr<SIFT>(config);
+    std::cout << "Vision reconfigured for image size: " << imageSize.width << "x" << imageSize.height << std::endl;
+  }
+
   void Vision::extractFeatures(cv::InputArray image, cv::InputArray mask, std::vector<cv::KeyPoint>& kpts, cv::Mat& desc) {
     auto start_extract = std::chrono::high_resolution_clock::now();
 

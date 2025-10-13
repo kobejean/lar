@@ -150,6 +150,11 @@ public:
      */
     const Tracker& getBaseTracker() const { return *base_tracker_; }
 
+    /**
+     * Access underlying tracker for configuration (non-const)
+     */
+    Tracker& getBaseTracker() { return *base_tracker_; }
+
 
 };
 
