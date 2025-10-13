@@ -10,9 +10,14 @@ namespace lar {
   const float RATIO_TEST_THRESHOLD = 0.99f;
   const float MAX_DISTANCE_THRESHOLD = 210.0f;
 
-  Vision::Vision() {
-    detector = SIFT::create(0, 3, 0.02, 10, 1.6, CV_8U);
-    // detector = cv::SIFT::create(0, 3, 0.02, 10, 1.6, CV_8U);
+  Vision::Vision(cv::Size imageSize) {
+    // Create SIFT config with custom parameters
+    SiftConfig config(imageSize);
+    config.contrastThreshold = 0.02;  // Custom: lower than default 0.04
+    config.descriptorType = CV_8U;     // Custom: uint8 instead of float32
+
+    // Create SIFT detector using cv::Ptr for proper destruction order
+    detector = cv::makePtr<SIFT>(config);
 
     cv::Ptr<cv::flann::IndexParams> indexParams = cv::makePtr<cv::flann::KDTreeIndexParams>(3);
     cv::Ptr<cv::flann::SearchParams> searchParams = cv::makePtr<cv::flann::SearchParams>(32);

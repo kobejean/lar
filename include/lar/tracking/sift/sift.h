@@ -5,6 +5,7 @@
 #include <opencv2/features2d.hpp>
 #include <vector>
 #include <memory>
+#include "lar/tracking/sift/sift_config.h"
 
 // Forward declaration for MetalSIFT (only when Metal is enabled)
 #ifdef LAR_USE_METAL_SIFT
@@ -17,9 +18,9 @@ namespace lar {
 
 class SIFT {
 public:
-    SIFT(int nfeatures = 0, int nOctaveLayers = 3,
-         double contrastThreshold = 0.04, double edgeThreshold = 10,
-         double sigma = 1.6, int descriptorType = CV_32F);
+    /// Constructor using SiftConfig
+    /// @param config SIFT configuration parameters (must include imageWidth/imageHeight for Metal optimization)
+    SIFT(const SiftConfig& config);
 
     ~SIFT();
 
@@ -30,10 +31,6 @@ public:
     // Allow move operations
     SIFT(SIFT&& other) noexcept;
     SIFT& operator=(SIFT&& other) noexcept;
-
-    static cv::Ptr<SIFT> create(int nfeatures = 0, int nOctaveLayers = 3,
-                                 double contrastThreshold = 0.04, double edgeThreshold = 10,
-                                 double sigma = 1.6, int descriptorType = CV_32F);
 
     void detectAndCompute(cv::InputArray image, cv::InputArray mask,
                          std::vector<cv::KeyPoint>& keypoints,

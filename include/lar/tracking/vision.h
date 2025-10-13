@@ -3,17 +3,27 @@
 
 #include "sift/sift.h"
 #include <opencv2/features2d.hpp>
+#include <opencv2/core/types.hpp>
 
 namespace lar {
 
   class Vision {
     public:
-      // cv::Ptr<cv::Feature2D> detector;
       cv::Ptr<SIFT> detector;
       cv::FlannBasedMatcher flann_matcher;
       cv::BFMatcher bf_matcher;
 
-      Vision();
+      /// Constructor with image dimensions for Metal SIFT optimization
+      /// @param imageSize Expected input image dimensions (width, height)
+      Vision(cv::Size imageSize);
+
+      // Delete copy operations (SIFT is not copyable)
+      Vision(const Vision&) = delete;
+      Vision& operator=(const Vision&) = delete;
+
+      // Allow move operations
+      Vision(Vision&&) = default;
+      Vision& operator=(Vision&&) = default;
 
       void extractFeatures(cv::InputArray image, cv::InputArray mask, std::vector<cv::KeyPoint> &kpts, cv::Mat &desc);
       std::vector<cv::DMatch> match(const cv::Mat &desc1, const cv::Mat &desc2,

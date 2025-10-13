@@ -19,7 +19,8 @@ namespace lar {
   // then use those localizations as initial pose for bundle adjustment
   // data->frames contains original ARKit data, we want to use the relative transforms between consecutive poses as odometry measurements
   ColmapRefiner::ColmapRefiner(std::shared_ptr<Mapper::Data> data) :
-    data(data), tracker(data->map), bundle_adjustment(data), global_alignment(data) {
+    data(data), tracker(data->map, cv::Size(1920, 1440)), bundle_adjustment(data), global_alignment(data) {
+    // Note: Using typical ARKit image size (1920x1440). Tracker will verify dimensions on first localize() call.
   }
 
   void ColmapRefiner::process() {

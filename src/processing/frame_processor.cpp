@@ -12,7 +12,9 @@
 
 namespace lar {
 
-  FrameProcessor::FrameProcessor(std::shared_ptr<Mapper::Data> data) : data(data) {
+  FrameProcessor::FrameProcessor(std::shared_ptr<Mapper::Data> data)
+    : data(data), vision(cv::Size(1920, 1440)) {
+    // Note: Using typical ARKit image size (1920x1440)
   }
 
   void FrameProcessor::process(Frame& frame) {

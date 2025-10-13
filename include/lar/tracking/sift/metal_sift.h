@@ -13,6 +13,7 @@ typedef struct objc_object *id;
 
 #include <opencv2/core.hpp>
 #include <vector>
+#include "lar/tracking/sift/sift_config.h"
 
 namespace lar {
 
@@ -24,18 +25,11 @@ class MetalSIFT;
 /// Resources are owned by this instance (RAII), enabling safe multi-threading
 class MetalSIFT {
 public:
-    /// Constructor - initializes Metal device, command queue, and compute pipelines
-    /// @param nOctaveLayers Number of layers per octave (typically 3)
-    /// @param contrastThreshold Contrast threshold for keypoint filtering
-    /// @param edgeThreshold Edge response threshold
-    /// @param sigma Base sigma for Gaussian blur
+    /// Constructor using SiftConfig
+    /// @param config SIFT configuration parameters (must include imageWidth/imageHeight for pre-allocation)
     /// @param descriptorType CV_32F or CV_8U
     /// @throws std::runtime_error if Metal initialization fails
-    MetalSIFT(int nOctaveLayers = 3,
-              double contrastThreshold = 0.04,
-              double edgeThreshold = 10.0,
-              double sigma = 1.6,
-              int descriptorType = CV_32F);
+    MetalSIFT(const SiftConfig& config, int descriptorType = CV_32F);
 
     /// Destructor - automatically releases all Metal resources (RAII)
     ~MetalSIFT();
@@ -51,15 +45,13 @@ public:
     /// Process image through full Metal SIFT pipeline
     /// Performs Gaussian pyramid, DoG pyramid, extrema detection, and descriptor computation
     /// @param base Input image (already preprocessed to correct scale)
-    /// @param gauss_pyr Output Gaussian pyramid (will be resized and populated)
     /// @param keypoints Output detected keypoints with orientations
-    /// @param descriptors Output SIFT descriptors
+    /// @param descriptors Output SIFT descriptors (OutputArray for OpenCV compatibility)
     /// @param nOctaves Number of octaves to process
     /// @return true if processing succeeded, false if Metal processing failed
     bool detectAndCompute(const cv::Mat& base,
-                         std::vector<cv::Mat>& gauss_pyr,
                          std::vector<cv::KeyPoint>& keypoints,
-                         cv::Mat& descriptors,
+                         cv::OutputArray descriptors,
                          int nOctaves);
 
     /// Check if Metal processing is available and initialized
@@ -71,6 +63,7 @@ public:
 
 private:
     // SIFT configuration parameters
+    SiftConfig config_;
     int nOctaveLayers_;
     double contrastThreshold_;
     double edgeThreshold_;

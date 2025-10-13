@@ -42,8 +42,8 @@ int main(int argc, const char* argv[]){
     num_threads = std::stoi(argv[1]);
   }
 
-  string localize = "./input/aizu-park-4-ext/";
-  // string localize = "./input/aizu-park-sunny/";
+  // string localize = "./input/aizu-park-4-ext/";
+  string localize = "./input/aizu-park-sunny/";
 
   std::cout << "=== Multithreaded Localization Test ===" << std::endl;
   std::cout << "Using " << num_threads << " threads" << std::endl;
@@ -94,8 +94,17 @@ int main(int argc, const char* argv[]){
 
   // Worker function - each thread creates its own Tracker instance
   auto worker = [&]() {
+    // Get image size from first valid image
+    cv::Size imageSize(1920, 1440); // Default ARKit size
+    for (const auto& data : frame_data) {
+      if (!data.image.empty()) {
+        imageSize = data.image.size();
+        break;
+      }
+    }
+
     // Create thread-local tracker (Tracker is NOT thread-safe, has mutable state)
-    lar::Tracker tracker(map);
+    lar::Tracker tracker(map, imageSize);
 
     while (true) {
       int index = next_frame_index.fetch_add(1);
@@ -135,6 +144,7 @@ int main(int argc, const char* argv[]){
                   << (success ? "✓ SUCCESS" : "✗ FAILED") << std::endl;
       }
     }
+
   };
 
   // Run multithreaded localization

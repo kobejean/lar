@@ -12,6 +12,7 @@
 #include <vector>
 #include <mutex>
 #include <atomic>
+#include <thread>
 #include <stdexcept>
 
 #include "lar/tracking/sift/metal_sift.h"
@@ -79,7 +80,7 @@ struct MetalSIFT::Impl {
     id<MTLComputePipelineState> extremaPipeline = nil;
     id<MTLComputePipelineState> resizePipeline = nil;
 
-    // Cached GPU buffers/textures (reused across frames if dimensions match)
+    // Pre-allocated GPU buffers/textures (allocated once in constructor)
     std::vector<std::vector<id<MTLBuffer>>> octaveBuffers;
     std::vector<std::vector<id<MTLTexture>>> octaveTextures;
     std::vector<id<MTLBuffer>> tempBuffers;
@@ -87,36 +88,33 @@ struct MetalSIFT::Impl {
     std::vector<std::vector<id<MTLBuffer>>> dogBuffers;
     std::vector<std::vector<id<MTLTexture>>> dogTextures;
 
-    // Cached dimensions for buffer reuse
-    int cachedBaseWidth = 0;
-    int cachedBaseHeight = 0;
-    int cachedNOctaves = 0;
-    int cachedNLevels = 0;
+    // Pre-computed Gaussian kernels (computed once in constructor)
+    std::vector<std::vector<float>> gaussianKernels;
+    std::vector<double> sigmas;
+
+    // Image dimensions (immutable after construction)
+    int nOctaves = 0;
+    int nLevels = 0;
 
     bool initialized = false;
 
     // Destructor - releases all Metal resources
     ~Impl() {
-        releaseBuffersAndTextures();
-        RELEASE_IF_MANUAL(blurAndDoGPipeline);
-        RELEASE_IF_MANUAL(extremaPipeline);
-        RELEASE_IF_MANUAL(resizePipeline);
-        RELEASE_IF_MANUAL(commandQueue);
-        RELEASE_IF_MANUAL(device);
+        @autoreleasepool {
+            releaseBuffersAndTextures();
+            RELEASE_IF_MANUAL(blurAndDoGPipeline);
+            RELEASE_IF_MANUAL(extremaPipeline);
+            RELEASE_IF_MANUAL(resizePipeline);
+            RELEASE_IF_MANUAL(commandQueue);
+            RELEASE_IF_MANUAL(device);
 #if __has_feature(objc_arc)
-        blurAndDoGPipeline = nil;
-        extremaPipeline = nil;
-        resizePipeline = nil;
-        commandQueue = nil;
-        device = nil;
+            blurAndDoGPipeline = nil;
+            extremaPipeline = nil;
+            resizePipeline = nil;
+            commandQueue = nil;
+            device = nil;
 #endif
-    }
-
-    bool needsReallocation(int baseWidth, int baseHeight, int nOctaves, int nLevels) {
-        return cachedBaseWidth != baseWidth ||
-               cachedBaseHeight != baseHeight ||
-               cachedNOctaves != nOctaves ||
-               cachedNLevels != nLevels;
+        }
     }
 
     void releaseBuffersAndTextures() {
@@ -404,10 +402,6 @@ static void extractKeypointsAndDescriptors(
     int descriptorType)
 {
     int count = 0;
-
-    // Pre-allocate local descriptor matrix
-    const int SIFT_DESCR_WIDTH = 4;
-    const int SIFT_DESCR_HIST_BINS = 8;
     const int descriptorSize = SIFT_DESCR_WIDTH * SIFT_DESCR_WIDTH * SIFT_DESCR_HIST_BINS;
     int maxKeypoints = octaveWidth * octaveWidth;  // Upper bound estimate
     cv::Mat localDescriptors(maxKeypoints, descriptorSize, descriptorType);
@@ -492,16 +486,13 @@ static void extractKeypointsAndDescriptors(
 // MetalSIFT Public Interface Implementation
 // ============================================================================
 
-MetalSIFT::MetalSIFT(int nOctaveLayers,
-                     double contrastThreshold,
-                     double edgeThreshold,
-                     double sigma,
-                     int descriptorType)
+MetalSIFT::MetalSIFT(const SiftConfig& config, int descriptorType)
     : impl_(new Impl())
-    , nOctaveLayers_(nOctaveLayers)
-    , contrastThreshold_(contrastThreshold)
-    , edgeThreshold_(edgeThreshold)
-    , sigma_(sigma)
+    , config_(config)
+    , nOctaveLayers_(config.nOctaveLayers)
+    , contrastThreshold_(config.contrastThreshold)
+    , edgeThreshold_(config.edgeThreshold)
+    , sigma_(config.sigma)
     , descriptorType_(descriptorType)
 {
     @autoreleasepool {
@@ -564,6 +555,30 @@ MetalSIFT::MetalSIFT(int nOctaveLayers,
             throw std::runtime_error(errorMsg);
         }
 
+        // Pre-compute dimensions and allocate resources if image size is specified
+        if (config_.imageSize.width > 0 && config_.imageSize.height > 0) {
+            impl_->nLevels = config_.pyramidLevels();
+            impl_->nOctaves = config_.computeNumOctaves(config_.imageSize.width, config_.imageSize.height);
+
+            // Pre-compute Gaussian kernels once
+            computeGaussianKernels(impl_->nLevels, config_.nOctaveLayers, config_.sigma,
+                                 impl_->gaussianKernels, impl_->sigmas);
+
+            // Pre-allocate all octave buffers and textures
+            impl_->octaveBuffers.resize(impl_->nOctaves);
+            impl_->octaveTextures.resize(impl_->nOctaves);
+            impl_->dogBuffers.resize(impl_->nOctaves);
+            impl_->dogTextures.resize(impl_->nOctaves);
+            impl_->tempBuffers.resize(impl_->nOctaves);
+            impl_->tempTextures.resize(impl_->nOctaves);
+
+            for (int o = 0; o < impl_->nOctaves; o++) {
+                int octaveWidth = config_.imageSize.width >> o;
+                int octaveHeight = config_.imageSize.height >> o;
+                allocateOctaveResources(impl_->device, *impl_, o, octaveWidth, octaveHeight, impl_->nLevels);
+            }
+        }
+
         impl_->initialized = true;
     }
 }
@@ -574,6 +589,7 @@ MetalSIFT::~MetalSIFT() {
 
 MetalSIFT::MetalSIFT(MetalSIFT&& other) noexcept
     : impl_(other.impl_)
+    , config_(other.config_)
     , nOctaveLayers_(other.nOctaveLayers_)
     , contrastThreshold_(other.contrastThreshold_)
     , edgeThreshold_(other.edgeThreshold_)
@@ -587,6 +603,7 @@ MetalSIFT& MetalSIFT::operator=(MetalSIFT&& other) noexcept {
     if (this != &other) {
         delete impl_;
         impl_ = other.impl_;
+        config_ = other.config_;
         nOctaveLayers_ = other.nOctaveLayers_;
         contrastThreshold_ = other.contrastThreshold_;
         edgeThreshold_ = other.edgeThreshold_;
@@ -602,9 +619,8 @@ bool MetalSIFT::isAvailable() const {
 }
 
 bool MetalSIFT::detectAndCompute(const cv::Mat& base,
-                                 std::vector<cv::Mat>& gauss_pyr,
                                  std::vector<cv::KeyPoint>& keypoints,
-                                 cv::Mat& descriptors,
+                                 cv::OutputArray descriptors,
                                  int nOctaves)
 {
     if (!isAvailable()) {
@@ -612,39 +628,36 @@ bool MetalSIFT::detectAndCompute(const cv::Mat& base,
     }
 
     @autoreleasepool {
-        int nLevels = nOctaveLayers_ + 3;
-        float threshold = 0.5f * contrastThreshold_ / nOctaveLayers_ * 255 * SIFT_FIXPT_SCALE;
-
-        // Reallocate buffers only if dimensions changed
-        if (impl_->needsReallocation(base.cols, base.rows, nOctaves, nLevels)) {
-            impl_->releaseBuffersAndTextures();
-            impl_->octaveBuffers.resize(nOctaves);
-            impl_->octaveTextures.resize(nOctaves);
-            impl_->dogBuffers.resize(nOctaves);
-            impl_->dogTextures.resize(nOctaves);
-            impl_->tempBuffers.resize(nOctaves);
-            impl_->tempTextures.resize(nOctaves);
-
-            for (int o = 0; o < nOctaves; o++) {
-                int octaveWidth = base.cols >> o;
-                int octaveHeight = base.rows >> o;
-                allocateOctaveResources(impl_->device, *impl_, o, octaveWidth, octaveHeight, nLevels);
+        // Verify image dimensions match config (if pre-allocated)
+        if (impl_->nOctaves > 0) {
+            if (base.cols != config_.imageSize.width || base.rows != config_.imageSize.height) {
+                std::cerr << "Error: Input image dimensions (" << base.cols << "x" << base.rows
+                         << ") don't match SiftConfig dimensions (" << config_.imageSize.width
+                         << "x" << config_.imageSize.height << ")" << std::endl;
+                return false;
             }
-
-            impl_->cachedBaseWidth = base.cols;
-            impl_->cachedBaseHeight = base.rows;
-            impl_->cachedNOctaves = nOctaves;
-            impl_->cachedNLevels = nLevels;
+            // Use pre-computed values from constructor
+            nOctaves = impl_->nOctaves;
         }
 
-        // Pre-compute Gaussian kernels
-        std::vector<std::vector<float>> gaussianKernels;
-        std::vector<double> sigmas;
-        computeGaussianKernels(nLevels, nOctaveLayers_, sigma_, gaussianKernels, sigmas);
+        // Extract mutable Mat from OutputArray for internal processing
+        cv::Mat descriptorsMat;
+        int nLevels = impl_->nLevels > 0 ? impl_->nLevels : (nOctaveLayers_ + 3);
+        float threshold = 0.5f * contrastThreshold_ / nOctaveLayers_ * 255 * SIFT_FIXPT_SCALE;
 
-        // Pre-allocate pyramid storage
+        // Use pre-computed Gaussian kernels if available, otherwise compute them
+        const std::vector<std::vector<float>>& gaussianKernels =
+            !impl_->gaussianKernels.empty() ? impl_->gaussianKernels :
+            [this, nLevels]() -> const std::vector<std::vector<float>>& {
+                static std::vector<std::vector<float>> tempKernels;
+                static std::vector<double> tempSigmas;
+                computeGaussianKernels(nLevels, nOctaveLayers_, sigma_, tempKernels, tempSigmas);
+                return tempKernels;
+            }();
+
+        // Pre-allocate pyramid storage (internal to MetalSIFT)
+        std::vector<cv::Mat> gauss_pyr(nOctaves * nLevels);
         std::vector<cv::Mat> dog_pyr(nOctaves * (nOctaveLayers_ + 2));
-        gauss_pyr.resize(nOctaves * nLevels);
 
         // Allocate extrema bitarray buffers for each layer
         std::vector<id<MTLBuffer>> layerExtremaBitarrays;
@@ -721,7 +734,7 @@ bool MetalSIFT::detectAndCompute(const cv::Mat& base,
                 id<MTLCommandBuffer> layerCmdBuf = [impl_->commandQueue commandBuffer];
                 layerCmdBuf.label = [NSString stringWithFormat:@"Octave %d Layer %d", o, layer];
 
-                // For octave 1+ layer 1: encode GPU resize
+                // For octave 1+ layer 1: encode GPU resize (texture-based)
                 if (layer == 1 && o > 0) {
                     int prevOctaveWidth = base.cols >> (o - 1);
                     int prevOctaveHeight = base.rows >> (o - 1);
@@ -729,7 +742,8 @@ bool MetalSIFT::detectAndCompute(const cv::Mat& base,
                     size_t prevAlignedRowBytes = ((prevRowBytes + METAL_BUFFER_ALIGNMENT - 1) / METAL_BUFFER_ALIGNMENT) * METAL_BUFFER_ALIGNMENT;
                     int prevRowStride = (int)(prevAlignedRowBytes / sizeof(float));
 
-                    std::vector<id<MTLBuffer>>& prevGaussBuffers = impl_->octaveBuffers[o - 1];
+                    std::vector<id<MTLTexture>>& prevGaussTextures = impl_->octaveTextures[o - 1];
+                    std::vector<id<MTLTexture>>& gaussTextures = impl_->octaveTextures[o];
 
                     ResizeParams resizeParams;
                     resizeParams.srcWidth = prevOctaveWidth;
@@ -745,9 +759,9 @@ bool MetalSIFT::detectAndCompute(const cv::Mat& base,
 
                     id<MTLComputeCommandEncoder> resizeEncoder = [layerCmdBuf computeCommandEncoder];
                     [resizeEncoder setComputePipelineState:impl_->resizePipeline];
-                    [resizeEncoder setBuffer:prevGaussBuffers[nLevels-3] offset:0 atIndex:0];
-                    [resizeEncoder setBuffer:gaussBuffers[0] offset:0 atIndex:1];
-                    [resizeEncoder setBuffer:resizeParamsBuffer offset:0 atIndex:2];
+                    [resizeEncoder setTexture:prevGaussTextures[nLevels-3] atIndex:0];  // ✅ Texture!
+                    [resizeEncoder setTexture:gaussTextures[0] atIndex:1];              // ✅ Texture!
+                    [resizeEncoder setBuffer:resizeParamsBuffer offset:0 atIndex:0];    // Buffer for params
 
                     MTLSize resizeGridSize = MTLSizeMake(octaveWidth, octaveHeight, 1);
                     MTLSize resizeThreadgroupSize = MTLSizeMake(16, 16, 1);
@@ -777,14 +791,18 @@ bool MetalSIFT::detectAndCompute(const cv::Mat& base,
                                                         length:gaussianKernels[i].size() * sizeof(float)
                                                         options:MTLResourceStorageModeShared];
 
+                    // Get texture views for this octave
+                    std::vector<id<MTLTexture>>& gaussTextures = impl_->octaveTextures[o];
+                    std::vector<id<MTLTexture>>& dogTextures = impl_->dogTextures[o];
+
                     id<MTLComputeCommandEncoder> encoder = [layerCmdBuf computeCommandEncoder];
 
                     [encoder setComputePipelineState:impl_->blurAndDoGPipeline];
-                    [encoder setBuffer:gaussBuffers[i-1] offset:0 atIndex:0];
-                    [encoder setBuffer:gaussBuffers[i] offset:0 atIndex:1];
-                    [encoder setBuffer:dogBuffers[i-1] offset:0 atIndex:2];
-                    [encoder setBuffer:paramsBuffer offset:0 atIndex:3];
-                    [encoder setBuffer:kernelBuffer offset:0 atIndex:4];
+                    [encoder setTexture:gaussTextures[i-1] atIndex:0];  // Previous Gaussian texture
+                    [encoder setTexture:gaussTextures[i] atIndex:1];    // Output Gaussian texture
+                    [encoder setTexture:dogTextures[i-1] atIndex:2];    // Output DoG texture
+                    [encoder setBuffer:paramsBuffer offset:0 atIndex:0]; // Parameters buffer
+                    [encoder setBuffer:kernelBuffer offset:0 atIndex:1]; // Kernel buffer
 
                     MTLSize gridSize = MTLSizeMake(octaveWidth, octaveHeight, 1);
                     MTLSize threadgroupSize = MTLSizeMake(16, 16, 1);
@@ -810,16 +828,19 @@ bool MetalSIFT::detectAndCompute(const cv::Mat& base,
                                                                     length:sizeof(ExtremaParams)
                                                                     options:MTLResourceStorageModeShared];
 
+                // Get DoG texture views for this octave
+                std::vector<id<MTLTexture>>& dogTextures = impl_->dogTextures[o];
+
                 id<MTLComputeCommandEncoder> encoder = [layerCmdBuf computeCommandEncoder];
 
                 [encoder setComputePipelineState:impl_->extremaPipeline];
-                [encoder setBuffer:dogBuffers[layer-1] offset:0 atIndex:0];
-                [encoder setBuffer:dogBuffers[layer] offset:0 atIndex:1];
-                [encoder setBuffer:dogBuffers[layer+1] offset:0 atIndex:2];
+                [encoder setTexture:dogTextures[layer-1] atIndex:0];  // DoG layer below
+                [encoder setTexture:dogTextures[layer] atIndex:1];    // DoG center layer
+                [encoder setTexture:dogTextures[layer+1] atIndex:2];  // DoG layer above
 
                 int layerIndex = o * nOctaveLayers_ + (layer - 1);
-                [encoder setBuffer:layerExtremaBitarrays[layerIndex] offset:0 atIndex:3];
-                [encoder setBuffer:paramsBuffer offset:0 atIndex:5];
+                [encoder setBuffer:layerExtremaBitarrays[layerIndex] offset:0 atIndex:0];  // Output bitarray
+                [encoder setBuffer:paramsBuffer offset:0 atIndex:1];  // Parameters
 
                 MTLSize gridSize = MTLSizeMake(octaveWidth, octaveHeight, 1);
                 MTLSize threadgroupSize = MTLSizeMake(16, 16, 1);
@@ -895,7 +916,15 @@ bool MetalSIFT::detectAndCompute(const cv::Mat& base,
         }
 
         if (!nonEmptyDescriptors.empty()) {
-            cv::vconcat(nonEmptyDescriptors, descriptors);
+            cv::vconcat(nonEmptyDescriptors, descriptorsMat);
+        }
+
+        // Assign result to OutputArray
+        if (!descriptorsMat.empty()) {
+            descriptorsMat.copyTo(descriptors);
+        } else if (descriptors.needed()) {
+            // Create empty descriptor matrix using shared constants
+            descriptors.create(0, SIFT_DESCR_WIDTH * SIFT_DESCR_WIDTH * SIFT_DESCR_HIST_BINS, descriptorType_);
         }
 
         // Cleanup extrema bitarray buffers
