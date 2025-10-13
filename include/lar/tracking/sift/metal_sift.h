@@ -25,11 +25,11 @@ class MetalSIFT;
 /// Resources are owned by this instance (RAII), enabling safe multi-threading
 class MetalSIFT {
 public:
-    /// Constructor using SiftConfig
+    /// Constructor using SIFTConfig
     /// @param config SIFT configuration parameters (must include imageWidth/imageHeight for pre-allocation)
     /// @param descriptorType CV_32F or CV_8U
     /// @throws std::runtime_error if Metal initialization fails
-    MetalSIFT(const SiftConfig& config, int descriptorType = CV_32F);
+    MetalSIFT(const SIFTConfig& config, int descriptorType = CV_32F);
 
     /// Destructor - automatically releases all Metal resources (RAII)
     ~MetalSIFT();
@@ -63,7 +63,7 @@ public:
 
 private:
     // SIFT configuration parameters
-    SiftConfig config_;
+    SIFTConfig config_;
     int nOctaveLayers_;
     double contrastThreshold_;
     double edgeThreshold_;

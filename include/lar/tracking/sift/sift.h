@@ -18,9 +18,9 @@ namespace lar {
 
 class SIFT {
 public:
-    /// Constructor using SiftConfig
+    /// Constructor using SIFTConfig
     /// @param config SIFT configuration parameters (must include imageWidth/imageHeight for Metal optimization)
-    SIFT(const SiftConfig& config);
+    SIFT(const SIFTConfig& config);
 
     ~SIFT();
 
@@ -48,7 +48,6 @@ private:
                                const std::vector<cv::Mat>& dog_pyr,
                                std::vector<cv::KeyPoint>& keypoints) const;
 
-    int nfeatures_;
     int nOctaveLayers_;
     double contrastThreshold_;
     double edgeThreshold_;

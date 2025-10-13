@@ -486,7 +486,7 @@ static void extractKeypointsAndDescriptors(
 // MetalSIFT Public Interface Implementation
 // ============================================================================
 
-MetalSIFT::MetalSIFT(const SiftConfig& config, int descriptorType)
+MetalSIFT::MetalSIFT(const SIFTConfig& config, int descriptorType)
     : impl_(new Impl())
     , config_(config)
     , nOctaveLayers_(config.nOctaveLayers)
@@ -632,7 +632,7 @@ bool MetalSIFT::detectAndCompute(const cv::Mat& base,
         if (impl_->nOctaves > 0) {
             if (base.cols != config_.imageSize.width || base.rows != config_.imageSize.height) {
                 std::cerr << "Error: Input image dimensions (" << base.cols << "x" << base.rows
-                         << ") don't match SiftConfig dimensions (" << config_.imageSize.width
+                         << ") don't match SIFTConfig dimensions (" << config_.imageSize.width
                          << "x" << config_.imageSize.height << ")" << std::endl;
                 return false;
             }

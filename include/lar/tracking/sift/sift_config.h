@@ -11,7 +11,7 @@ namespace lar {
 
 /// Configuration parameters for SIFT algorithm
 /// Controls scale space construction, keypoint detection, and descriptor computation
-struct SiftConfig {
+struct SIFTConfig {
     // Image dimensions (required for buffer pre-allocation)
     cv::Size imageSize = cv::Size(0, 0);  ///< Expected input image dimensions (width, height)
 
@@ -26,23 +26,21 @@ struct SiftConfig {
     double contrastThreshold = 0.04;  ///< Contrast threshold for keypoint filtering
     double edgeThreshold = 10.0;      ///< Edge response threshold (ratio of principal curvatures)
 
-    // Feature parameters
-    int nfeatures = 0;                ///< Maximum number of features to retain (0 = no limit)
+    // Descriptor parameters
     int descriptorType = 5;           ///< Descriptor type: CV_32F (5) or CV_8U (0)
 
     /// Default constructor
-    SiftConfig() = default;
+    SIFTConfig() = default;
 
     /// Convenience constructor with image size and sensible defaults
     /// @param size Expected input image dimensions
-    explicit SiftConfig(cv::Size size)
+    explicit SIFTConfig(cv::Size size)
         : imageSize(size)
         , nOctaveLayers(3)
         , sigma(1.6)
         , enableUpsampling(false)
         , contrastThreshold(0.04)
         , edgeThreshold(10.0)
-        , nfeatures(0)
         , descriptorType(5)  // CV_32F
     {}
 

@@ -810,9 +810,8 @@ void calcSIFTDescriptor(const cv::Mat& img, cv::Point2f ptf, float ori, float sc
 }
 
 // SIFT Implementation
-SIFT::SIFT(const SiftConfig& config)
-    : nfeatures_(config.nfeatures)
-    , nOctaveLayers_(config.nOctaveLayers)
+SIFT::SIFT(const SIFTConfig& config)
+    : nOctaveLayers_(config.nOctaveLayers)
     , contrastThreshold_(config.contrastThreshold)
     , edgeThreshold_(config.edgeThreshold)
     , sigma_(config.sigma)
@@ -829,8 +828,7 @@ SIFT::SIFT(const SiftConfig& config)
 SIFT::~SIFT() = default;
 
 SIFT::SIFT(SIFT&& other) noexcept
-    : nfeatures_(other.nfeatures_)
-    , nOctaveLayers_(other.nOctaveLayers_)
+    : nOctaveLayers_(other.nOctaveLayers_)
     , contrastThreshold_(other.contrastThreshold_)
     , edgeThreshold_(other.edgeThreshold_)
     , sigma_(other.sigma_)
@@ -843,7 +841,6 @@ SIFT::SIFT(SIFT&& other) noexcept
 
 SIFT& SIFT::operator=(SIFT&& other) noexcept {
     if (this != &other) {
-        nfeatures_ = other.nfeatures_;
         nOctaveLayers_ = other.nOctaveLayers_;
         contrastThreshold_ = other.contrastThreshold_;
         edgeThreshold_ = other.edgeThreshold_;

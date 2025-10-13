@@ -12,7 +12,7 @@ namespace lar {
 
   Vision::Vision(cv::Size imageSize) {
     // Create SIFT config with custom parameters
-    SiftConfig config(imageSize);
+    SIFTConfig config(imageSize);
     config.contrastThreshold = 0.02;  // Custom: lower than default 0.04
     config.descriptorType = CV_8U;     // Custom: uint8 instead of float32
 
@@ -27,7 +27,7 @@ namespace lar {
 
   void Vision::configureImageSize(cv::Size imageSize) {
     // Recreate SIFT detector with new image dimensions
-    SiftConfig config(imageSize);
+    SIFTConfig config(imageSize);
     config.contrastThreshold = 0.02;  // Custom: lower than default 0.04
     config.descriptorType = CV_8U;     // Custom: uint8 instead of float32
 
