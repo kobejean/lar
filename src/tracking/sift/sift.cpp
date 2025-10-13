@@ -811,28 +811,20 @@ void calcSIFTDescriptor(const cv::Mat& img, cv::Point2f ptf, float ori, float sc
 
 // SIFT Implementation
 SIFT::SIFT(const SIFTConfig& config)
-    : nOctaveLayers_(config.nOctaveLayers)
-    , contrastThreshold_(config.contrastThreshold)
-    , edgeThreshold_(config.edgeThreshold)
-    , sigma_(config.sigma)
-    , descriptorType_(config.descriptorType)
+    : config_(config)
 #ifdef LAR_USE_METAL_SIFT
     , metalSift_(nullptr)
 #endif
 {
 #ifdef LAR_USE_METAL_SIFT
-    metalSift_ = std::make_unique<MetalSIFT>(config, config.descriptorType);
+    metalSift_ = std::make_unique<MetalSIFT>(config);
 #endif
 }
 
 SIFT::~SIFT() = default;
 
 SIFT::SIFT(SIFT&& other) noexcept
-    : nOctaveLayers_(other.nOctaveLayers_)
-    , contrastThreshold_(other.contrastThreshold_)
-    , edgeThreshold_(other.edgeThreshold_)
-    , sigma_(other.sigma_)
-    , descriptorType_(other.descriptorType_)
+    : config_(other.config_)
 #ifdef LAR_USE_METAL_SIFT
     , metalSift_(std::move(other.metalSift_))
 #endif
@@ -841,11 +833,7 @@ SIFT::SIFT(SIFT&& other) noexcept
 
 SIFT& SIFT::operator=(SIFT&& other) noexcept {
     if (this != &other) {
-        nOctaveLayers_ = other.nOctaveLayers_;
-        contrastThreshold_ = other.contrastThreshold_;
-        edgeThreshold_ = other.edgeThreshold_;
-        sigma_ = other.sigma_;
-        descriptorType_ = other.descriptorType_;
+        config_ = other.config_;
 #ifdef LAR_USE_METAL_SIFT
         metalSift_ = std::move(other.metalSift_);
 #endif
@@ -858,7 +846,7 @@ int SIFT::descriptorSize() const {
 }
 
 int SIFT::descriptorType() const {
-    return descriptorType_;
+    return config_.descriptorType;
 }
 
 int SIFT::defaultNorm() const {
@@ -866,27 +854,27 @@ int SIFT::defaultNorm() const {
 }
 
 void SIFT::buildGaussianPyramid(const cv::Mat& base, std::vector<cv::Mat>& pyr, int nOctaves) const {
-    std::vector<double> sig(nOctaveLayers_ + 3);
-    pyr.resize(nOctaves*(nOctaveLayers_ + 3));
+    std::vector<double> sig(config_.nOctaveLayers + 3);
+    pyr.resize(nOctaves*(config_.nOctaveLayers + 3));
 
-    sig[0] = sigma_;
-    double k = std::pow(2., 1. / nOctaveLayers_);
-    for (int i = 1; i < nOctaveLayers_ + 3; i++) {
-        double sig_prev = std::pow(k, (double)(i-1))*sigma_;
+    sig[0] = config_.sigma;
+    double k = std::pow(2., 1. / config_.nOctaveLayers);
+    for (int i = 1; i < config_.nOctaveLayers + 3; i++) {
+        double sig_prev = std::pow(k, (double)(i-1))*config_.sigma;
         double sig_total = sig_prev*k;
         sig[i] = std::sqrt(sig_total*sig_total - sig_prev*sig_prev);
     }
 
     for (int o = 0; o < nOctaves; o++) {
-        for (int i = 0; i < nOctaveLayers_ + 3; i++) {
-            cv::Mat& dst = pyr[o*(nOctaveLayers_ + 3) + i];
+        for (int i = 0; i < config_.nOctaveLayers + 3; i++) {
+            cv::Mat& dst = pyr[o*(config_.nOctaveLayers + 3) + i];
             if (o == 0 && i == 0) {
                 dst = base;
             } else if (i == 0) {
-                const cv::Mat& src = pyr[(o-1)*(nOctaveLayers_ + 3) + nOctaveLayers_];
+                const cv::Mat& src = pyr[(o-1)*(config_.nOctaveLayers + 3) + config_.nOctaveLayers];
                 cv::resize(src, dst, cv::Size(src.cols/2, src.rows/2), 0, 0, cv::INTER_NEAREST);
             } else {
-                const cv::Mat& src = pyr[o*(nOctaveLayers_ + 3) + i-1];
+                const cv::Mat& src = pyr[o*(config_.nOctaveLayers + 3) + i-1];
                 cv::GaussianBlur(src, dst, cv::Size(), sig[i], sig[i]);
             }
         }
@@ -894,16 +882,16 @@ void SIFT::buildGaussianPyramid(const cv::Mat& base, std::vector<cv::Mat>& pyr, 
 }
 
 void SIFT::buildDoGPyramid(const std::vector<cv::Mat>& gpyr, std::vector<cv::Mat>& dogpyr) const {
-    int nOctaves = (int)gpyr.size()/(nOctaveLayers_ + 3);
-    dogpyr.resize(nOctaves*(nOctaveLayers_ + 2));
+    int nOctaves = (int)gpyr.size()/(config_.nOctaveLayers + 3);
+    dogpyr.resize(nOctaves*(config_.nOctaveLayers + 2));
 
     // CPU+SIMD path (OpenCV subtract with hardware acceleration)
     // Note: Pipelined Metal implementation builds DoG pyramids internally
     for (int o = 0; o < nOctaves; o++) {
-        for (int i = 0; i < nOctaveLayers_ + 2; i++) {
-            const cv::Mat& src1 = gpyr[o*(nOctaveLayers_ + 3) + i];
-            const cv::Mat& src2 = gpyr[o*(nOctaveLayers_ + 3) + i + 1];
-            cv::Mat& dst = dogpyr[o*(nOctaveLayers_ + 2) + i];
+        for (int i = 0; i < config_.nOctaveLayers + 2; i++) {
+            const cv::Mat& src1 = gpyr[o*(config_.nOctaveLayers + 3) + i];
+            const cv::Mat& src2 = gpyr[o*(config_.nOctaveLayers + 3) + i + 1];
+            cv::Mat& dst = dogpyr[o*(config_.nOctaveLayers + 2) + i];
             cv::subtract(src2, src1, dst, cv::noArray(), CV_32F);
         }
     }
@@ -912,23 +900,23 @@ void SIFT::buildDoGPyramid(const std::vector<cv::Mat>& gpyr, std::vector<cv::Mat
 void SIFT::findScaleSpaceExtrema(const std::vector<cv::Mat>& gauss_pyr,
                                   const std::vector<cv::Mat>& dog_pyr,
                                   std::vector<cv::KeyPoint>& keypoints) const {
-    const int nOctaves = (int)gauss_pyr.size()/(nOctaveLayers_ + 3);
-    const int threshold = cvFloor(0.5 * contrastThreshold_ / nOctaveLayers_ * 255 * SIFT_FIXPT_SCALE);
+    const int nOctaves = (int)gauss_pyr.size()/(config_.nOctaveLayers + 3);
+    const int threshold = cvFloor(0.5 * config_.contrastThreshold / config_.nOctaveLayers * 255 * SIFT_FIXPT_SCALE);
 
     keypoints.clear();
 
     // CPU+SIMD path (per-layer processing with OpenCV intrinsics)
     // Note: Pipelined Metal implementation performs extrema detection internally
     for (int o = 0; o < nOctaves; o++) {
-        for (int i = 1; i <= nOctaveLayers_; i++) {
-            const int idx = o*(nOctaveLayers_+2)+i;
+        for (int i = 1; i <= config_.nOctaveLayers; i++) {
+            const int idx = o*(config_.nOctaveLayers+2)+i;
             const cv::Mat& img = dog_pyr[idx];
             const int step = (int)img.step1();
             const int rows = img.rows, cols = img.cols;
 
             findScaleSpaceExtremaInLayer(o, i, threshold, idx, step, cols,
-                                        nOctaveLayers_, contrastThreshold_,
-                                        edgeThreshold_, sigma_,
+                                        config_.nOctaveLayers, config_.contrastThreshold,
+                                        config_.edgeThreshold, config_.sigma,
                                         gauss_pyr, dog_pyr, keypoints,
                                         cv::Range(SIFT_IMG_BORDER, rows-SIFT_IMG_BORDER));
         }
@@ -949,7 +937,7 @@ void SIFT::detectAndCompute(cv::InputArray _image, cv::InputArray _mask,
 
     int firstOctave = 0;
 
-    cv::Mat base = createInitialImage(image, firstOctave < 0, (float)sigma_);
+    cv::Mat base = createInitialImage(image, firstOctave < 0, (float)config_.sigma);
     std::vector<cv::Mat> gpyr;
     int nOctaves = cvRound(std::log((double)std::min(base.cols, base.rows)) / std::log(2.) - 2) - firstOctave;
 
@@ -992,7 +980,7 @@ void SIFT::detectAndCompute(cv::InputArray _image, cv::InputArray _mask,
 
             float size = kpt.size*scale;
             cv::Point2f ptf(kpt.pt.x*scale, kpt.pt.y*scale);
-            const cv::Mat& img = gpyr[(octave - firstOctave)*(nOctaveLayers_ + 3) + layer];
+            const cv::Mat& img = gpyr[(octave - firstOctave)*(config_.nOctaveLayers + 3) + layer];
 
             float angle = 360.f - kpt.angle;
             if (std::abs(angle - 360.f) < FLT_EPSILON)

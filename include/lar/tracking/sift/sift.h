@@ -18,10 +18,7 @@ namespace lar {
 
 class SIFT {
 public:
-    /// Constructor using SIFTConfig
-    /// @param config SIFT configuration parameters (must include imageWidth/imageHeight for Metal optimization)
     SIFT(const SIFTConfig& config);
-
     ~SIFT();
 
     // Delete copy operations (MetalSIFT is not copyable)
@@ -48,21 +45,13 @@ private:
                                const std::vector<cv::Mat>& dog_pyr,
                                std::vector<cv::KeyPoint>& keypoints) const;
 
-    int nOctaveLayers_;
-    double contrastThreshold_;
-    double edgeThreshold_;
-    double sigma_;
-    int descriptorType_;
+    SIFTConfig config_;
 
 #ifdef LAR_USE_METAL_SIFT
-    // Metal-accelerated SIFT processor (owned by this instance, RAII)
-    // Each SIFT instance has its own Metal resources for thread-safety
     std::unique_ptr<MetalSIFT> metalSift_;
 #endif
 };
 
-// Helper functions for SIFT keypoint refinement and orientation
-// These are exposed for use by Metal-accelerated implementation
 float calcOrientationHist(const cv::Mat& img, cv::Point pt, int radius,
                           float sigma, float* hist, int n);
 

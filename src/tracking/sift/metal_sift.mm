@@ -486,14 +486,7 @@ static void extractKeypointsAndDescriptors(
 // MetalSIFT Public Interface Implementation
 // ============================================================================
 
-MetalSIFT::MetalSIFT(const SIFTConfig& config, int descriptorType)
-    : impl_(new Impl())
-    , config_(config)
-    , nOctaveLayers_(config.nOctaveLayers)
-    , contrastThreshold_(config.contrastThreshold)
-    , edgeThreshold_(config.edgeThreshold)
-    , sigma_(config.sigma)
-    , descriptorType_(descriptorType)
+MetalSIFT::MetalSIFT(const SIFTConfig& config) : impl_(new Impl()), config_(config)
 {
     @autoreleasepool {
         // Initialize Metal device
@@ -587,14 +580,7 @@ MetalSIFT::~MetalSIFT() {
     delete impl_;
 }
 
-MetalSIFT::MetalSIFT(MetalSIFT&& other) noexcept
-    : impl_(other.impl_)
-    , config_(other.config_)
-    , nOctaveLayers_(other.nOctaveLayers_)
-    , contrastThreshold_(other.contrastThreshold_)
-    , edgeThreshold_(other.edgeThreshold_)
-    , sigma_(other.sigma_)
-    , descriptorType_(other.descriptorType_)
+MetalSIFT::MetalSIFT(MetalSIFT&& other) noexcept : impl_(other.impl_), config_(other.config_)
 {
     other.impl_ = nullptr;
 }
@@ -604,11 +590,6 @@ MetalSIFT& MetalSIFT::operator=(MetalSIFT&& other) noexcept {
         delete impl_;
         impl_ = other.impl_;
         config_ = other.config_;
-        nOctaveLayers_ = other.nOctaveLayers_;
-        contrastThreshold_ = other.contrastThreshold_;
-        edgeThreshold_ = other.edgeThreshold_;
-        sigma_ = other.sigma_;
-        descriptorType_ = other.descriptorType_;
         other.impl_ = nullptr;
     }
     return *this;
@@ -642,8 +623,8 @@ bool MetalSIFT::detectAndCompute(const cv::Mat& base,
 
         // Extract mutable Mat from OutputArray for internal processing
         cv::Mat descriptorsMat;
-        int nLevels = impl_->nLevels > 0 ? impl_->nLevels : (nOctaveLayers_ + 3);
-        float threshold = 0.5f * contrastThreshold_ / nOctaveLayers_ * 255 * SIFT_FIXPT_SCALE;
+        int nLevels = impl_->nLevels > 0 ? impl_->nLevels : (config_.nOctaveLayers + 3);
+        float threshold = 0.5f * config_.contrastThreshold / config_.nOctaveLayers * 255 * SIFT_FIXPT_SCALE;
 
         // Use pre-computed Gaussian kernels if available, otherwise compute them
         const std::vector<std::vector<float>>& gaussianKernels =
@@ -651,19 +632,19 @@ bool MetalSIFT::detectAndCompute(const cv::Mat& base,
             [this, nLevels]() -> const std::vector<std::vector<float>>& {
                 static std::vector<std::vector<float>> tempKernels;
                 static std::vector<double> tempSigmas;
-                computeGaussianKernels(nLevels, nOctaveLayers_, sigma_, tempKernels, tempSigmas);
+                computeGaussianKernels(nLevels, config_.nOctaveLayers, config_.sigma, tempKernels, tempSigmas);
                 return tempKernels;
             }();
 
         // Pre-allocate pyramid storage (internal to MetalSIFT)
         std::vector<cv::Mat> gauss_pyr(nOctaves * nLevels);
-        std::vector<cv::Mat> dog_pyr(nOctaves * (nOctaveLayers_ + 2));
+        std::vector<cv::Mat> dog_pyr(nOctaves * (config_.nOctaveLayers + 2));
 
         // Allocate extrema bitarray buffers for each layer
         std::vector<id<MTLBuffer>> layerExtremaBitarrays;
         std::vector<uint32_t> layerExtremaBitarraySizes;
-        layerExtremaBitarrays.reserve(nOctaves * nOctaveLayers_);
-        layerExtremaBitarraySizes.reserve(nOctaves * nOctaveLayers_);
+        layerExtremaBitarrays.reserve(nOctaves * config_.nOctaveLayers);
+        layerExtremaBitarraySizes.reserve(nOctaves * config_.nOctaveLayers);
 
         for (int o = 0; o < nOctaves; o++) {
             int octaveWidth = base.cols >> o;
@@ -671,7 +652,7 @@ bool MetalSIFT::detectAndCompute(const cv::Mat& base,
             uint32_t octavePixels = octaveWidth * octaveHeight;
             uint32_t extremaBitarraySize = ((octavePixels + 31) / 32) * sizeof(uint32_t);
 
-            for (int layer = 1; layer <= nOctaveLayers_; layer++) {
+            for (int layer = 1; layer <= config_.nOctaveLayers; layer++) {
                 id<MTLBuffer> buffer = [impl_->device newBufferWithLength:extremaBitarraySize
                                                            options:MTLResourceStorageModeShared];
                 memset(buffer.contents, 0, extremaBitarraySize);
@@ -685,7 +666,7 @@ bool MetalSIFT::detectAndCompute(const cv::Mat& base,
         // Producer-consumer synchronization
         auto keypointsMutex = std::make_shared<std::mutex>();
         auto descriptorsMutex = std::make_shared<std::mutex>();
-        int totalLayers = nOctaves * nOctaveLayers_;
+        int totalLayers = nOctaves * config_.nOctaveLayers;
         auto allKeypoints = std::make_shared<std::vector<std::vector<cv::KeyPoint>>>(totalLayers);
         auto allDescriptors = std::make_shared<std::vector<cv::Mat>>(totalLayers);
         auto completedLayers = std::make_shared<std::atomic<int>>(0);
@@ -730,7 +711,7 @@ bool MetalSIFT::detectAndCompute(const cv::Mat& base,
             }
 
             // Submit per-layer command buffers
-            for (int layer = 1; layer <= nOctaveLayers_; layer++) {
+            for (int layer = 1; layer <= config_.nOctaveLayers; layer++) {
                 id<MTLCommandBuffer> layerCmdBuf = [impl_->commandQueue commandBuffer];
                 layerCmdBuf.label = [NSString stringWithFormat:@"Octave %d Layer %d", o, layer];
 
@@ -838,7 +819,7 @@ bool MetalSIFT::detectAndCompute(const cv::Mat& base,
                 [encoder setTexture:dogTextures[layer] atIndex:1];    // DoG center layer
                 [encoder setTexture:dogTextures[layer+1] atIndex:2];  // DoG layer above
 
-                int layerIndex = o * nOctaveLayers_ + (layer - 1);
+                int layerIndex = o * config_.nOctaveLayers + (layer - 1);
                 [encoder setBuffer:layerExtremaBitarrays[layerIndex] offset:0 atIndex:0];  // Output bitarray
                 [encoder setBuffer:paramsBuffer offset:0 atIndex:1];  // Parameters
 
@@ -864,15 +845,15 @@ bool MetalSIFT::detectAndCompute(const cv::Mat& base,
                         layerExtremaBitarraySizes[layerIndex],
                         octaveWidth,
                         layer,
-                        nOctaveLayers_,
-                        (float)contrastThreshold_,
-                        (float)edgeThreshold_,
-                        (float)sigma_,
+                        config_.nOctaveLayers,
+                        (float)config_.contrastThreshold,
+                        (float)config_.edgeThreshold,
+                        (float)config_.sigma,
                         gauss_pyr,
                         dog_pyr,
                         localKeypoints,
                         localDescriptors,
-                        descriptorType_
+                        config_.descriptorType
                     );
 
                     {
@@ -924,7 +905,7 @@ bool MetalSIFT::detectAndCompute(const cv::Mat& base,
             descriptorsMat.copyTo(descriptors);
         } else if (descriptors.needed()) {
             // Create empty descriptor matrix using shared constants
-            descriptors.create(0, SIFT_DESCR_WIDTH * SIFT_DESCR_WIDTH * SIFT_DESCR_HIST_BINS, descriptorType_);
+            descriptors.create(0, SIFT_DESCR_WIDTH * SIFT_DESCR_WIDTH * SIFT_DESCR_HIST_BINS, config_.descriptorType);
         }
 
         // Cleanup extrema bitarray buffers
