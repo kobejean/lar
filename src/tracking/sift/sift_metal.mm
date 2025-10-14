@@ -72,10 +72,6 @@ struct SIFTMetal::Impl {
     std::vector<cv::Mat> gauss_pyr;
     std::vector<cv::Mat> dog_pyr;
 
-    // Image dimensions
-    int nOctaves = 0;
-    int nLevels = 0;
-
     bool initialized = false;
 
     ~Impl() {
@@ -446,6 +442,234 @@ static void computeDescriptors(
     }
 }
 
+// Metal command encoding member methods - now have access to impl_ and config_
+void SIFTMetal::encodeResizeCommand(
+    id cmdBuf,
+    id sourceTexture,
+    id destTexture)
+{
+    id<MTLTexture> destTex = (id<MTLTexture>)destTexture;
+    int octaveWidth = (int)destTex.width;
+    int octaveHeight = (int)destTex.height;
+
+    id<MTLComputeCommandEncoder> resizeEncoder = [(id<MTLCommandBuffer>)cmdBuf computeCommandEncoder];
+    [resizeEncoder setComputePipelineState:impl_->resizePipeline];
+    [resizeEncoder setTexture:(id<MTLTexture>)sourceTexture atIndex:0];
+    [resizeEncoder setTexture:destTex atIndex:1];
+
+    MTLSize resizeGridSize = MTLSizeMake(octaveWidth, octaveHeight, 1);
+    MTLSize resizeThreadgroupSize = MTLSizeMake(16, 16, 1);
+
+    [resizeEncoder dispatchThreads:resizeGridSize threadsPerThreadgroup:resizeThreadgroupSize];
+    [resizeEncoder endEncoding];
+}
+
+void SIFTMetal::encodeInitialBlurCommand(
+    id cmdBuf,
+    id imageTexture,
+    id tempTexture,
+    id destTexture,
+    int level)
+{
+    id<MTLTexture> destTex = (id<MTLTexture>)destTexture;
+    int octaveWidth = (int)destTex.width;
+    int octaveHeight = (int)destTex.height;
+
+    MTLSize gridSize = MTLSizeMake(octaveWidth, octaveHeight, 1);
+    MTLSize threadgroupSize = MTLSizeMake(16, 16, 1);
+
+    // Horizontal gaussian blur (staging → temp)
+    id<MTLComputeCommandEncoder> blurHorizEncoder = [(id<MTLCommandBuffer>)cmdBuf computeCommandEncoder];
+    [blurHorizEncoder setComputePipelineState:impl_->blurHorizPipeline];
+    [blurHorizEncoder setTexture:(id<MTLTexture>)imageTexture atIndex:0];
+    [blurHorizEncoder setTexture:(id<MTLTexture>)tempTexture atIndex:1];
+    [blurHorizEncoder setBuffer:impl_->kernelSizeBuffers[level] offset:0 atIndex:0];
+    [blurHorizEncoder setBuffer:impl_->kernelDataBuffers[level] offset:0 atIndex:1];
+    [blurHorizEncoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
+    [blurHorizEncoder endEncoding];
+
+    // Vertical gaussian blur (temp → destTexture)
+    id<MTLComputeCommandEncoder> blurVertEncoder = [(id<MTLCommandBuffer>)cmdBuf computeCommandEncoder];
+    [blurVertEncoder setComputePipelineState:impl_->blurVertPipeline];
+    [blurVertEncoder setTexture:(id<MTLTexture>)tempTexture atIndex:0];
+    [blurVertEncoder setTexture:destTex atIndex:1];
+    [blurVertEncoder setBuffer:impl_->kernelSizeBuffers[level] offset:0 atIndex:0];
+    [blurVertEncoder setBuffer:impl_->kernelDataBuffers[level] offset:0 atIndex:1];
+    [blurVertEncoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
+    [blurVertEncoder endEncoding];
+}
+
+void SIFTMetal::encodeBlurAndDoGCommand(
+    id cmdBuf,
+    id prevGaussTexture,
+    id gaussTexture,
+    id dogTexture,
+    int level)
+{
+    id<MTLTexture> gaussTex = (id<MTLTexture>)gaussTexture;
+    int octaveWidth = (int)gaussTex.width;
+    int octaveHeight = (int)gaussTex.height;
+
+    id<MTLComputeCommandEncoder> encoder = [(id<MTLCommandBuffer>)cmdBuf computeCommandEncoder];
+    [encoder setComputePipelineState:impl_->blurAndDoGPipeline];
+    [encoder setTexture:(id<MTLTexture>)prevGaussTexture atIndex:0];
+    [encoder setTexture:gaussTex atIndex:1];
+    [encoder setTexture:(id<MTLTexture>)dogTexture atIndex:2];
+    [encoder setBuffer:impl_->kernelSizeBuffers[level] offset:0 atIndex:0];
+    [encoder setBuffer:impl_->kernelDataBuffers[level] offset:0 atIndex:1];
+
+    MTLSize gridSize = MTLSizeMake(octaveWidth, octaveHeight, 1);
+    MTLSize threadgroupSize = MTLSizeMake(16, 16, 1);
+
+    [encoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
+    [encoder endEncoding];
+}
+
+void SIFTMetal::encodeExtremaDetectionCommand(
+    id cmdBuf,
+    id dogTextureBelow,
+    id dogTextureCenter,
+    id dogTextureAbove,
+    id extremaBitarray)
+{
+    id<MTLTexture> centerTex = (id<MTLTexture>)dogTextureCenter;
+    int octaveWidth = (int)centerTex.width;
+    int octaveHeight = (int)centerTex.height;
+
+    ExtremaParams params;
+    params.threshold = config_.threshold;
+    params.border = SIFT_IMG_BORDER;
+
+    id<MTLBuffer> paramsBuffer = [impl_->device newBufferWithBytes:&params
+                                                            length:sizeof(ExtremaParams)
+                                                           options:MTLResourceStorageModeShared];
+
+    id<MTLComputeCommandEncoder> encoder = [(id<MTLCommandBuffer>)cmdBuf computeCommandEncoder];
+    [encoder setComputePipelineState:impl_->extremaPipeline];
+    [encoder setTexture:(id<MTLTexture>)dogTextureBelow atIndex:0];
+    [encoder setTexture:centerTex atIndex:1];
+    [encoder setTexture:(id<MTLTexture>)dogTextureAbove atIndex:2];
+    [encoder setBuffer:(id<MTLBuffer>)extremaBitarray offset:0 atIndex:0];
+    [encoder setBuffer:paramsBuffer offset:0 atIndex:1];
+
+    MTLSize gridSize = MTLSizeMake(octaveWidth, octaveHeight, 1);
+    MTLSize threadgroupSize = MTLSizeMake(16, 16, 1);
+
+    [encoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
+    [encoder endEncoding];
+
+    RELEASE_IF_MANUAL(paramsBuffer);
+}
+
+// Octave construction member methods - simplified signatures with access to impl_ and config_
+
+void SIFTMetal::encodeStandardOctaveConstruction(
+    id cmdBuf,
+    int octave)
+{
+    // STRATEGY: Interleaved blur+extrema detection (original SIFT approach)
+    // - Build Gaussian levels in batches per layer
+    // - Detect extrema immediately after each layer's DoG is ready
+    // - Good for: Memory efficiency, early termination possibilities
+
+    std::vector<id<MTLTexture>>& gaussTextures = impl_->octaveTextures[octave];
+    std::vector<id<MTLTexture>>& dogTextures = impl_->dogTextures[octave];
+
+    // Process each layer in the octave
+    for (int layer = 1; layer <= config_.nOctaveLayers; layer++) {
+        // Step 1: Initialize first Gaussian level (layer 0)
+        if (layer == 1) {
+            if (octave > 0) {
+                // For octaves 1+, downsample from previous octave's third-to-last level
+                std::vector<id<MTLTexture>>& prevGaussTextures = impl_->octaveTextures[octave - 1];
+                encodeResizeCommand(cmdBuf,
+                                  prevGaussTextures[config_.nOctaveLayers], gaussTextures[0]);
+            } else {
+                // For octave 0, apply initial blur to uploaded image
+                if (config_.enableUpsampling) {
+                    // TODO: add support for enableUpsampling
+                    // Would require upsample + stronger initial blur
+                } else {
+                    // Standard: Blur uploaded image to first sigma level
+                    encodeInitialBlurCommand(cmdBuf,
+                                           impl_->imageTexture, impl_->tempTextures[octave], gaussTextures[0],
+                                           0);
+                }
+            }
+        }
+
+        // Step 2: Build Gaussian pyramid levels and compute DoG
+        // For each layer, we process a batch of blur+DoG operations
+        int blurStart = (layer == 1) ? 1 : (layer + 2);
+        int blurEnd = (layer == 1) ? 4 : (layer + 3);
+
+        for (int i = blurStart; i < blurEnd && i < config_.nLevels; i++) {
+            encodeBlurAndDoGCommand(cmdBuf,
+                                  gaussTextures[i-1], gaussTextures[i], dogTextures[i-1],
+                                  i);
+        }
+
+        // Step 3: Detect extrema in this layer's DoG scale space
+        int layerIndex = octave * config_.nOctaveLayers + (layer - 1);
+        encodeExtremaDetectionCommand(cmdBuf,
+                                    dogTextures[layer-1], dogTextures[layer], dogTextures[layer+1],
+                                    impl_->extremaBitarrays[layerIndex]);
+    }
+}
+
+void SIFTMetal::encodeBatchedOctaveConstruction(
+    id cmdBuf,
+    int octave)
+{
+    // STRATEGY: Fully batched pyramid construction
+    // - Build ALL Gaussian levels and DoG images first
+    // - Then detect extrema across all layers
+    // - Good for: GPU throughput optimization, better parallelism
+
+    std::vector<id<MTLTexture>>& gaussTextures = impl_->octaveTextures[octave];
+    std::vector<id<MTLTexture>>& dogTextures = impl_->dogTextures[octave];
+
+    // ========== PHASE 1: Build complete Gaussian pyramid + DoG ==========
+
+    // Step 1: Initialize first Gaussian level (layer 0)
+    if (octave > 0) {
+        // For octaves 1+, downsample from previous octave's third-to-last level
+        std::vector<id<MTLTexture>>& prevGaussTextures = impl_->octaveTextures[octave - 1];
+        encodeResizeCommand(cmdBuf,
+                          prevGaussTextures[config_.nOctaveLayers], gaussTextures[0]);
+    } else {
+        // For octave 0, apply initial blur to uploaded image
+        if (config_.enableUpsampling) {
+            // TODO: add support for enableUpsampling
+            // Would require upsample + stronger initial blur
+        } else {
+            // Standard: Blur uploaded image to first sigma level
+            encodeInitialBlurCommand(cmdBuf,
+                                   impl_->imageTexture, impl_->tempTextures[octave], gaussTextures[0],
+                                   0);
+        }
+    }
+
+    // Step 2: Build ALL Gaussian levels and compute ALL DoG images
+    // This creates the complete scale-space pyramid for the octave
+    for (int i = 1; i < config_.nLevels; i++) {
+        encodeBlurAndDoGCommand(cmdBuf,
+                              gaussTextures[i-1], gaussTextures[i], dogTextures[i-1],
+                              i);
+    }
+
+    // ========== PHASE 2: Detect extrema across all layers ==========
+
+    // Now that the complete DoG pyramid is built, detect extrema in each layer
+    // Each layer needs access to DoG[layer-1], DoG[layer], and DoG[layer+1]
+    for (int layer = 1; layer <= config_.nOctaveLayers; layer++) {
+        int layerIndex = octave * config_.nOctaveLayers + (layer - 1);
+        encodeExtremaDetectionCommand(cmdBuf,
+                                    dogTextures[layer-1], dogTextures[layer], dogTextures[layer+1],
+                                    impl_->extremaBitarrays[layerIndex]);
+    }
+}
+
 SIFTMetal::SIFTMetal(const SIFTConfig& config) : impl_(new Impl()), config_(config)
 {
     @autoreleasepool {
@@ -547,18 +771,14 @@ SIFTMetal::SIFTMetal(const SIFTConfig& config) : impl_(new Impl()), config_(conf
             throw std::runtime_error(errorMsg);
         }
 
-        // Pre-compute dimensions and allocate resources
-        impl_->nLevels = config_.pyramidLevels();
-        impl_->nOctaves = config_.computeNumOctaves(config_.imageSize.width, config_.imageSize.height);
-
         // Pre-compute Gaussian kernels once
-        computeGaussianKernels(impl_->nLevels, config_.nOctaveLayers, config_.sigma,
+        computeGaussianKernels(config_.nLevels, config_.nOctaveLayers, config_.sigma,
                                 impl_->gaussianKernels, impl_->sigmas, config_.enableUpsampling);
 
         // Pre-allocate kernel buffers for GPU (one set per pyramid level)
-        impl_->kernelSizeBuffers.resize(impl_->nLevels);
-        impl_->kernelDataBuffers.resize(impl_->nLevels);
-        for (int i = 0; i < impl_->nLevels; i++) {
+        impl_->kernelSizeBuffers.resize(config_.nLevels);
+        impl_->kernelDataBuffers.resize(config_.nLevels);
+        for (int i = 0; i < config_.nLevels; i++) {
             int kernelSize = (int)impl_->gaussianKernels[i].size();
 
             impl_->kernelSizeBuffers[i] = [impl_->device newBufferWithBytes:&kernelSize
@@ -571,23 +791,23 @@ SIFTMetal::SIFTMetal(const SIFTConfig& config) : impl_(new Impl()), config_(conf
         }
 
         // Pre-allocate all octave buffers and textures
-        impl_->octaveBuffers.resize(impl_->nOctaves);
-        impl_->octaveTextures.resize(impl_->nOctaves);
-        impl_->dogBuffers.resize(impl_->nOctaves);
-        impl_->dogTextures.resize(impl_->nOctaves);
-        impl_->tempBuffers.resize(impl_->nOctaves);
-        impl_->tempTextures.resize(impl_->nOctaves);
+        impl_->octaveBuffers.resize(config_.nOctaves);
+        impl_->octaveTextures.resize(config_.nOctaves);
+        impl_->dogBuffers.resize(config_.nOctaves);
+        impl_->dogTextures.resize(config_.nOctaves);
+        impl_->tempBuffers.resize(config_.nOctaves);
+        impl_->tempTextures.resize(config_.nOctaves);
 
-        for (int o = 0; o < impl_->nOctaves; o++) {
+        for (int o = 0; o < config_.nOctaves; o++) {
             int octaveWidth = config_.imageSize.width >> o;
             int octaveHeight = config_.imageSize.height >> o;
-            allocateOctaveResources(impl_->device, *impl_, o, octaveWidth, octaveHeight, impl_->nLevels);
+            allocateOctaveResources(impl_->device, *impl_, o, octaveWidth, octaveHeight, config.nLevels);
         }
 
         // Allocate staging buffer/texture for octave 0 initial image upload
         {
-            int baseWidth = config_.imageSize.width;
-            int baseHeight = config_.imageSize.height;
+            int baseWidth = config.imageSize.width;
+            int baseHeight = config.imageSize.height;
             size_t rowBytes = baseWidth * sizeof(float);
             size_t alignedRowBytes = ((rowBytes + METAL_BUFFER_ALIGNMENT - 1) / METAL_BUFFER_ALIGNMENT) * METAL_BUFFER_ALIGNMENT;
             size_t bufferSize = alignedRowBytes * baseHeight;
@@ -607,16 +827,16 @@ SIFTMetal::SIFTMetal(const SIFTConfig& config) : impl_(new Impl()), config_(conf
         }
 
         // Pre-allocate extrema bitarray buffers (one per layer across all octaves)
-        impl_->extremaBitarrays.reserve(impl_->nOctaves * config_.nOctaveLayers);
-        impl_->extremaBitarraySizes.reserve(impl_->nOctaves * config_.nOctaveLayers);
+        impl_->extremaBitarrays.reserve(config.nOctaves * config.nOctaveLayers);
+        impl_->extremaBitarraySizes.reserve(config.nOctaves * config.nOctaveLayers);
 
-        for (int o = 0; o < impl_->nOctaves; o++) {
-            int octaveWidth = config_.imageSize.width >> o;
-            int octaveHeight = config_.imageSize.height >> o;
+        for (int o = 0; o < config.nOctaves; o++) {
+            int octaveWidth = config.imageSize.width >> o;
+            int octaveHeight = config.imageSize.height >> o;
             uint32_t octavePixels = octaveWidth * octaveHeight;
             uint32_t extremaBitarraySize = ((octavePixels + 31) / 32) * sizeof(uint32_t);
 
-            for (int layer = 1; layer <= config_.nOctaveLayers; layer++) {
+            for (int layer = 1; layer <= config.nOctaveLayers; layer++) {
                 id<MTLBuffer> buffer = [impl_->device newBufferWithLength:extremaBitarraySize
                                                                   options:MTLResourceStorageModeShared];
                 impl_->extremaBitarrays.push_back(buffer);
@@ -625,27 +845,27 @@ SIFTMetal::SIFTMetal(const SIFTConfig& config) : impl_(new Impl()), config_(conf
         }
 
         // Pre-allocate cv::Mat wrappers for GPU buffers (reused across frames)
-        impl_->gauss_pyr.resize(impl_->nOctaves * impl_->nLevels);
-        impl_->dog_pyr.resize(impl_->nOctaves * (impl_->nLevels - 1));
+        impl_->gauss_pyr.resize(config.nOctaves * config.nLevels);
+        impl_->dog_pyr.resize(config.nOctaves * (config.nLevels - 1));
 
-        for (int o = 0; o < impl_->nOctaves; o++) {
-            int octaveWidth = config_.imageSize.width >> o;
-            int octaveHeight = config_.imageSize.height >> o;
+        for (int o = 0; o < config.nOctaves; o++) {
+            int octaveWidth = config.imageSize.width >> o;
+            int octaveHeight = config.imageSize.height >> o;
             size_t rowBytes = octaveWidth * sizeof(float);
             size_t alignedRowBytes = ((rowBytes + METAL_BUFFER_ALIGNMENT - 1) / METAL_BUFFER_ALIGNMENT) * METAL_BUFFER_ALIGNMENT;
 
-            int gaussIdx = o * impl_->nLevels;
-            int dogIdx = o * (impl_->nLevels - 1);
+            int gaussIdx = o * config.nLevels;
+            int dogIdx = o * (config.nLevels - 1);
 
             std::vector<id<MTLBuffer>>& gaussBuffers = impl_->octaveBuffers[o];
             std::vector<id<MTLBuffer>>& dogBuffers = impl_->dogBuffers[o];
 
             // Create cv::Mat wrappers pointing to GPU buffers
-            for (int i = 0; i < impl_->nLevels; i++) {
+            for (int i = 0; i < config.nLevels; i++) {
                 impl_->gauss_pyr[gaussIdx + i] = cv::Mat(octaveHeight, octaveWidth, CV_32F, gaussBuffers[i].contents, alignedRowBytes);
             }
 
-            for (int i = 0; i < impl_->nLevels - 1; i++) {
+            for (int i = 0; i < config.nLevels - 1; i++) {
                 impl_->dog_pyr[dogIdx + i] = cv::Mat(octaveHeight, octaveWidth, CV_32F, dogBuffers[i].contents, alignedRowBytes);
             }
         }
@@ -679,8 +899,7 @@ bool SIFTMetal::isAvailable() const {
 
 bool SIFTMetal::detectAndCompute(const cv::Mat& img,
                                  std::vector<cv::KeyPoint>& keypoints,
-                                 cv::OutputArray descriptors,
-                                 int nOctaves)
+                                 cv::OutputArray descriptors)
 {
     if (!isAvailable()) {
         return false;
@@ -694,18 +913,11 @@ bool SIFTMetal::detectAndCompute(const cv::Mat& img,
                         << "x" << config_.imageSize.height << ")" << std::endl;
             return false;
         }
-        // Use pre-computed values from constructor
-        nOctaves = impl_->nOctaves;
         cv::Mat base;
         img.convertTo(base, CV_32F, SIFT_FIXPT_SCALE, 0);
 
         // Extract mutable Mat from OutputArray for internal processing
         cv::Mat descriptorsMat;
-        int nLevels = impl_->nLevels;
-        // float threshold = 0.5f * config_.contrastThreshold / config_.nOctaveLayers * 255 * SIFT_FIXPT_SCALE;
-        int threshold = cvFloor(0.5 * config_.contrastThreshold / config_.nOctaveLayers * 255 * SIFT_FIXPT_SCALE);
-
-        const std::vector<std::vector<float>>& gaussianKernels = impl_->gaussianKernels;
 
         // Reference pre-allocated cv::Mat wrappers (reused across frames)
         std::vector<cv::Mat>& gauss_pyr = impl_->gauss_pyr;
@@ -740,160 +952,12 @@ bool SIFTMetal::detectAndCompute(const cv::Mat& img,
         cmdBuf.label = @"SIFT Feature Detection";
 
         // Encode all GPU work into single command buffer
-        for (int o = 0; o < nOctaves; o++) {
-            int octaveWidth = base.cols >> o;
-            int octaveHeight = base.rows >> o;
-
-            int gaussIdx = o * nLevels;
-            int dogIdx = o * (nLevels - 1);
-
-
-            // Encode GPU work for all layers in this octave
-            for (int layer = 1; layer <= config_.nOctaveLayers; layer++) {
-                // For octave 1+ layer 1: encode GPU resize
-                if (layer == 1) {
-                    std::vector<id<MTLTexture>>& gaussTextures = impl_->octaveTextures[o];
-                    id<MTLTexture> tempTexture = impl_->tempTextures[o];
-                    if (o > 0) {
-                        std::vector<id<MTLTexture>>& prevGaussTextures = impl_->octaveTextures[o - 1];
-                        id<MTLComputeCommandEncoder> resizeEncoder = [cmdBuf computeCommandEncoder];
-                        [resizeEncoder setComputePipelineState:impl_->resizePipeline];
-                        [resizeEncoder setTexture:prevGaussTextures[nLevels-3] atIndex:0];  // Source texture
-                        [resizeEncoder setTexture:gaussTextures[0] atIndex:1];              // Destination texture
-
-                        MTLSize resizeGridSize = MTLSizeMake(octaveWidth, octaveHeight, 1);
-                        MTLSize resizeThreadgroupSize = MTLSizeMake(16, 16, 1);
-
-                        [resizeEncoder dispatchThreads:resizeGridSize threadsPerThreadgroup:resizeThreadgroupSize];
-                        [resizeEncoder endEncoding];
-                    } else {
-                        if (config_.enableUpsampling) { // this is not used yet
-                            // TODO: add support for enableUpsampling
-                            // sig_diff = std::sqrt(std::max(sigma * sigma - SIFT_INIT_SIGMA * SIFT_INIT_SIGMA * 4, 0.01f));
-                            
-                            // cv::Mat dbl;
-                            // resize(gray_fpt, dbl, cv::Size(gray_fpt.cols*2, gray_fpt.rows*2), 0, 0, cv::INTER_LINEAR);
-                            // cv::Mat result;
-                            // cv::GaussianBlur(dbl, result, cv::Size(), sig_diff, sig_diff);
-
-                        } else {
-                            // GPU pipeline: imageTexture → tempTexture → gaussTextures[0]
-                            // This ensures CPU upload to imageBuffer is isolated from GPU processing
-
-                            // Horizontal gaussian blur (staging → temp)
-                            id<MTLComputeCommandEncoder> blurHorizEncoder = [cmdBuf computeCommandEncoder];
-
-                            [blurHorizEncoder setComputePipelineState:impl_->blurHorizPipeline];
-                            [blurHorizEncoder setTexture:impl_->imageTexture atIndex:0];  // Read from staging texture
-                            [blurHorizEncoder setTexture:impl_->tempTextures[o] atIndex:1];
-                            [blurHorizEncoder setBuffer:impl_->kernelSizeBuffers[0] offset:0 atIndex:0];
-                            [blurHorizEncoder setBuffer:impl_->kernelDataBuffers[0] offset:0 atIndex:1];
-
-                            MTLSize gridSize = MTLSizeMake(octaveWidth, octaveHeight, 1);
-                            MTLSize threadgroupSize = MTLSizeMake(16, 16, 1);
-
-                            [blurHorizEncoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
-                            [blurHorizEncoder endEncoding];
-
-                            // Vertical gaussian blur (temp → gaussTextures[0])
-                            id<MTLComputeCommandEncoder> blurVertEncoder = [cmdBuf computeCommandEncoder];
-
-                            [blurVertEncoder setComputePipelineState:impl_->blurVertPipeline];
-                            [blurVertEncoder setTexture:impl_->tempTextures[o] atIndex:0];
-                            [blurVertEncoder setTexture:gaussTextures[0] atIndex:1];  // Write to octave buffer
-                            [blurVertEncoder setBuffer:impl_->kernelSizeBuffers[0] offset:0 atIndex:0];
-                            [blurVertEncoder setBuffer:impl_->kernelDataBuffers[0] offset:0 atIndex:1];
-
-                            [blurVertEncoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
-                            [blurVertEncoder endEncoding];
-                        }
-                    }
-                }
-
-                // Encode blur + DoG operations
-                int blurStart = (layer == 1) ? 1 : (layer + 2);
-                int blurEnd = (layer == 1) ? 4 : (layer + 3);
-
-                for (int i = blurStart; i < blurEnd && i < nLevels; i++) {
-                    // Get texture views for this octave
-                    std::vector<id<MTLTexture>>& gaussTextures = impl_->octaveTextures[o];
-                    std::vector<id<MTLTexture>>& dogTextures = impl_->dogTextures[o];
-                    id<MTLTexture>& tempTexture = impl_->tempTextures[o];
-
-                    id<MTLComputeCommandEncoder> encoder = [cmdBuf computeCommandEncoder];
-
-                    [encoder setComputePipelineState:impl_->blurAndDoGPipeline];
-                    [encoder setTexture:gaussTextures[i-1] atIndex:0];  // Previous Gaussian texture
-                    [encoder setTexture:gaussTextures[i] atIndex:1];    // Output Gaussian texture
-                    [encoder setTexture:dogTextures[i-1] atIndex:2];    // Output DoG texture
-                    [encoder setBuffer:impl_->kernelSizeBuffers[i] offset:0 atIndex:0]; // Pre-allocated kernel size
-                    [encoder setBuffer:impl_->kernelDataBuffers[i] offset:0 atIndex:1]; // Pre-allocated kernel data
-
-                    MTLSize gridSize = MTLSizeMake(octaveWidth, octaveHeight, 1);
-                    MTLSize threadgroupSize = MTLSizeMake(16, 16, 1);
-
-                    [encoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
-                    [encoder endEncoding];
-                    // id<MTLComputeCommandEncoder> blurHorizEncoder = [cmdBuf computeCommandEncoder];
-
-                    // [blurHorizEncoder setComputePipelineState:impl_->blurHorizPipeline];
-                    // [blurHorizEncoder setTexture:gaussTextures[i-1] atIndex:0];  // Read from staging texture
-                    // [blurHorizEncoder setTexture:tempTexture atIndex:1];
-                    // [blurHorizEncoder setBuffer:impl_->kernelSizeBuffers[i] offset:0 atIndex:0];
-                    // [blurHorizEncoder setBuffer:impl_->kernelDataBuffers[i] offset:0 atIndex:1];
-
-                    // MTLSize gridSize = MTLSizeMake(octaveWidth, octaveHeight, 1);
-                    // MTLSize threadgroupSize = MTLSizeMake(16, 16, 1);
-
-                    // [blurHorizEncoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
-                    // [blurHorizEncoder endEncoding];
-
-                    // // Vertical gaussian blur + DoG (temp → gaussTextures[i], DoG = gaussTextures[i] - gaussTextures[i-1])
-                    // id<MTLComputeCommandEncoder> blurVertAndDoGEncoder = [cmdBuf computeCommandEncoder];
-
-                    // [blurVertAndDoGEncoder setComputePipelineState:impl_->blurVertAndDoGPipeline];
-                    // [blurVertAndDoGEncoder setTexture:gaussTextures[i-1] atIndex:0];  // Previous fully-blurred Gaussian (for DoG)
-                    // [blurVertAndDoGEncoder setTexture:tempTexture atIndex:1];  // Horizontally-blurred temp (for vertical blur)
-                    // [blurVertAndDoGEncoder setTexture:gaussTextures[i] atIndex:2];  // Output: next Gaussian level
-                    // [blurVertAndDoGEncoder setTexture:dogTextures[i-1] atIndex:3];  // Output: DoG
-                    // [blurVertAndDoGEncoder setBuffer:impl_->kernelSizeBuffers[i] offset:0 atIndex:0];
-                    // [blurVertAndDoGEncoder setBuffer:impl_->kernelDataBuffers[i] offset:0 atIndex:1];
-
-                    // [blurVertAndDoGEncoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
-                    // [blurVertAndDoGEncoder endEncoding];
-                }
-
-                // Encode extrema detection
-                ExtremaParams params;
-                params.threshold = threshold;
-                params.border = SIFT_IMG_BORDER;
-
-                id<MTLBuffer> paramsBuffer = [impl_->device newBufferWithBytes:&params
-                                                                    length:sizeof(ExtremaParams)
-                                                                    options:MTLResourceStorageModeShared];
-
-                // Get DoG texture views for this octave
-                std::vector<id<MTLTexture>>& dogTextures = impl_->dogTextures[o];
-
-                id<MTLComputeCommandEncoder> encoder = [cmdBuf computeCommandEncoder];
-
-                [encoder setComputePipelineState:impl_->extremaPipeline];
-                [encoder setTexture:dogTextures[layer-1] atIndex:0];  // DoG layer below
-                [encoder setTexture:dogTextures[layer] atIndex:1];    // DoG center layer
-                [encoder setTexture:dogTextures[layer+1] atIndex:2];  // DoG layer above
-
-                int layerIndex = o * config_.nOctaveLayers + (layer - 1);
-                [encoder setBuffer:impl_->extremaBitarrays[layerIndex] offset:0 atIndex:0];  // Pre-allocated extrema bitarray
-                [encoder setBuffer:paramsBuffer offset:0 atIndex:1];  // Parameters
-
-                MTLSize gridSize = MTLSizeMake(octaveWidth, octaveHeight, 1);
-                MTLSize threadgroupSize = MTLSizeMake(16, 16, 1);
-
-                [encoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
-                [encoder endEncoding];
-
-                RELEASE_IF_MANUAL(paramsBuffer);
-            }
+        for (int o = 0; o < config_.nOctaves; o++) {
+            // Use batched SIFT octave construction strategy
+            // This function call can be easily replaced with alternative strategies:
+            // - encodeStandardOctaveConstruction: Interleaved blur+extrema (original)
+            // - encodeBatchedOctaveConstruction: All blurs first, then all extrema (optimized)
+            encodeBatchedOctaveConstruction(cmdBuf, o);
         }
 
         // Commit and wait for GPU work to complete
@@ -905,7 +969,7 @@ bool SIFTMetal::detectAndCompute(const cv::Mat& img,
         // Pass 2: Compute descriptors with exact pre-allocation
 
         // Pass 1: Extract all keypoints
-        for (int o = 0; o < nOctaves; o++) {
+        for (int o = 0; o < config_.nOctaves; o++) {
             int octaveWidth = base.cols >> o;
 
             for (int layer = 1; layer <= config_.nOctaveLayers; layer++) {
@@ -938,7 +1002,7 @@ bool SIFTMetal::detectAndCompute(const cv::Mat& img,
 
             // Compute descriptors in octave groups for better cache locality
             int descriptorRow = 0;
-            for (int o = 0; o < nOctaves; o++) {
+            for (int o = 0; o < config_.nOctaves; o++) {
                 // Find keypoints belonging to this octave
                 std::vector<cv::KeyPoint> octaveKeypoints;
                 for (const auto& kpt : keypoints) {

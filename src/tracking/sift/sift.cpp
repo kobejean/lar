@@ -439,7 +439,6 @@ void SIFT::findScaleSpaceExtrema(const std::vector<cv::Mat>& gauss_pyr,
                                   const std::vector<cv::Mat>& dog_pyr,
                                   std::vector<cv::KeyPoint>& keypoints) const {
     const int nOctaves = (int)gauss_pyr.size()/(config_.nOctaveLayers + 3);
-    const int threshold = cvFloor(0.5 * config_.contrastThreshold / config_.nOctaveLayers * 255 * SIFT_FIXPT_SCALE);
 
     keypoints.clear();
 
@@ -450,7 +449,7 @@ void SIFT::findScaleSpaceExtrema(const std::vector<cv::Mat>& gauss_pyr,
             const int step = (int)img.step1();
             const int rows = img.rows, cols = img.cols;
 
-            findScaleSpaceExtremaInLayer(o, i, threshold, idx, step, cols,
+            findScaleSpaceExtremaInLayer(o, i, config_.threshold, idx, step, cols,
                                         config_.nOctaveLayers, config_.contrastThreshold,
                                         config_.edgeThreshold, config_.sigma,
                                         gauss_pyr, dog_pyr, keypoints,
@@ -471,11 +470,11 @@ void SIFT::detectAndCompute(cv::InputArray _image, cv::InputArray _mask,
     if (!mask.empty() && mask.type() != CV_8UC1)
         CV_Error(cv::Error::StsBadArg, "mask has incorrect type (!=CV_8UC1)");
 
-    int firstOctave = config_.firstOctave();
-    int nOctaves = config_.computeNumOctaves(image.cols, image.rows);
+    int firstOctave = config_.firstOctave;
+    int nOctaves = config_.nOctaves;
 
     #ifdef LAR_USE_METAL_SIFTO
-    metalSift_->detectAndCompute(image, keypoints, _descriptors, nOctaves);
+    metalSift_->detectAndCompute(image, keypoints, _descriptors);
     #else
     cv::Mat base = createInitialImage(image, config_.enableUpsampling, (float)config_.sigma);
     std::vector<cv::Mat> gpyr;

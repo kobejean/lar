@@ -38,8 +38,7 @@ public:
 
     bool detectAndCompute(const cv::Mat& base,
                          std::vector<cv::KeyPoint>& keypoints,
-                         cv::OutputArray descriptors,
-                         int nOctaves);
+                         cv::OutputArray descriptors);
 
     bool isAvailable() const;
 
@@ -48,6 +47,42 @@ public:
 
 private:
     SIFTConfig config_;
+
+    // Metal command encoding helper methods
+    void encodeResizeCommand(
+        id cmdBuf,
+        id sourceTexture,
+        id destTexture);
+
+    void encodeInitialBlurCommand(
+        id cmdBuf,
+        id imageTexture,
+        id tempTexture,
+        id destTexture,
+        int level);
+
+    void encodeBlurAndDoGCommand(
+        id cmdBuf,
+        id prevGaussTexture,
+        id gaussTexture,
+        id dogTexture,
+        int level);
+
+    void encodeExtremaDetectionCommand(
+        id cmdBuf,
+        id dogTextureBelow,
+        id dogTextureCenter,
+        id dogTextureAbove,
+        id extremaBitarray);
+
+    // Octave construction strategies
+    void encodeStandardOctaveConstruction(
+        id cmdBuf,
+        int octave);
+
+    void encodeBatchedOctaveConstruction(
+        id cmdBuf,
+        int octave);
 };
 
 } // namespace lar

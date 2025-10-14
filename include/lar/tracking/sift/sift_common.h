@@ -45,6 +45,11 @@ struct SIFTConfig {
     double contrastThreshold = 0.02;
     double edgeThreshold = 10.0;
     int descriptorType = CV_8U;
+    // derived members
+    int firstOctave;
+    int nOctaves;
+    int nLevels;
+    int threshold;
 
     SIFTConfig() = default;
 
@@ -56,19 +61,16 @@ struct SIFTConfig {
         , contrastThreshold(0.04)
         , edgeThreshold(10.0)
         , descriptorType(CV_8U)
-    {}
-
-    int firstOctave() const { return enableUpsampling ? -1 : 0; }
+    {
+        firstOctave = enableUpsampling ? -1 : 0;
+        nOctaves = static_cast<int>(cvRound(std::log(std::min(imageSize.width, imageSize.height)) / std::log(2.0) - 2.0)) - firstOctave;
+        nLevels = nOctaveLayers + 3;
+        threshold = cvFloor(0.5 * contrastThreshold / nOctaveLayers * 255 * SIFT_FIXPT_SCALE);
+    }
 
     static constexpr int DESCR_WIDTH = 4;
     static constexpr int DESCR_HIST_BINS = 8;
     static constexpr int DESCR_SIZE = DESCR_WIDTH * DESCR_WIDTH * DESCR_HIST_BINS;
-
-    int computeNumOctaves(int baseWidth, int baseHeight) const {
-        return static_cast<int>(cvRound(std::log(std::min(baseWidth, baseHeight)) / std::log(2.0) - 2.0)) - firstOctave();
-    }
-
-    int pyramidLevels() const { return nOctaveLayers + 3; }
 };
 
 inline cv::Point2f toFullResolution(cv::Point2f pt, int octave, int firstOctave) {
