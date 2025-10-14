@@ -6,19 +6,8 @@
 #include <vector>
 #include "lar/tracking/sift/sift_common.h"
 
-// Conditional compilation: Use Metal on Apple platforms, CPU otherwise
-#define LAR_USE_METAL_SIFT 1
-
 namespace lar {
 
-/**
- * SIFT (Scale-Invariant Feature Transform) detector and descriptor
- *
- * Uses Pimpl idiom to hide implementation details.
- * Implementation automatically selected at compile time:
- * - Metal backend on Apple platforms (when LAR_USE_METAL_SIFT=1)
- * - CPU backend otherwise
- */
 class SIFT {
 public:
     explicit SIFT(const SIFTConfig& config);

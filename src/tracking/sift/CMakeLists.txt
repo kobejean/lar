@@ -12,12 +12,12 @@ set(SIFT_SOURCES
 
 # Add platform-specific implementation
 if(LAR_USE_METAL_SIFT AND APPLE)
-  # Metal implementation (GPU-accelerated) - contains both Impl and SIFT wrapper
+  # Metal implementation (GPU-accelerated) - fully self-contained in one file
   list(APPEND SIFT_SOURCES sift_impl_metal.mm)
   message(STATUS "Metal-accelerated SIFT enabled")
 else()
-  # CPU implementation (fallback) - sift.cpp provides wrapper, sift_impl_cpu.cpp provides Impl
-  list(APPEND SIFT_SOURCES sift.cpp sift_impl_cpu.cpp)
+  # CPU implementation (fallback) - fully self-contained in one file
+  list(APPEND SIFT_SOURCES sift_impl_cpu.cpp)
   message(STATUS "CPU SIFT enabled")
 endif()
 

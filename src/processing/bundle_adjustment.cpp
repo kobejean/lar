@@ -350,8 +350,8 @@ namespace lar {
     double distance = pose_change.translation().norm();
     double distance_scale = 1.0 / std::max(0.1, distance);
     Eigen::MatrixXd info = Eigen::MatrixXd::Zero(6,6);
-    info.block<3,3>(0,0) = Eigen::Matrix3d::Identity() * 25 * distance_scale;
-    info.block<3,3>(3,3) = Eigen::Matrix3d::Identity() * 50 * distance_scale;
+    info.block<3,3>(0,0) = Eigen::Matrix3d::Identity() * 10 * distance_scale;
+    info.block<3,3>(3,3) = Eigen::Matrix3d::Identity() * 20 * distance_scale;
     e->setInformation(info);
     // g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
     // rk->setDelta(sqrt(12.592));

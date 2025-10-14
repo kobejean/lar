@@ -1,4 +1,8 @@
 // CPU implementation of SIFT::Impl
+// This file should only be compiled when LAR_USE_METAL_SIFT is NOT defined
+
+#ifndef LAR_USE_METAL_SIFT
+
 #include "sift_impl_cpu.h"
 #include "lar/tracking/sift/sift_common.h"
 #include <opencv2/imgproc.hpp>
@@ -347,4 +351,52 @@ void SIFT::Impl::detectAndCompute(cv::InputArray _image, cv::InputArray _mask,
     }
 }
 
+// SIFT wrapper implementation for CPU backend
+// These must be in this file since Impl is defined here
+
+SIFT::SIFT(const SIFTConfig& config)
+    : impl_(new Impl(config))
+{
+}
+
+SIFT::~SIFT() {
+    delete impl_;
+}
+
+SIFT::SIFT(SIFT&& other) noexcept
+    : impl_(other.impl_)
+{
+    other.impl_ = nullptr;
+}
+
+SIFT& SIFT::operator=(SIFT&& other) noexcept {
+    if (this != &other) {
+        delete impl_;
+        impl_ = other.impl_;
+        other.impl_ = nullptr;
+    }
+    return *this;
+}
+
+int SIFT::descriptorSize() const {
+    return impl_->descriptorSize();
+}
+
+int SIFT::descriptorType() const {
+    return impl_->descriptorType();
+}
+
+int SIFT::defaultNorm() const {
+    return impl_->defaultNorm();
+}
+
+void SIFT::detectAndCompute(cv::InputArray image, cv::InputArray mask,
+                            std::vector<cv::KeyPoint>& keypoints,
+                            cv::OutputArray descriptors,
+                            bool useProvidedKeypoints) {
+    impl_->detectAndCompute(image, mask, keypoints, descriptors, useProvidedKeypoints);
+}
+
 } // namespace lar
+
+#endif // !LAR_USE_METAL_SIFT
