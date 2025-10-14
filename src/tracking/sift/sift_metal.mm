@@ -320,10 +320,10 @@ static void allocateOctaveResources(
                                                                                 bytesPerRow:alignedRowBytes];
 }
 
-static void extractKeypointsAndDescriptors(
+// Pass 1: Extract keypoints only (lightweight, determines exact count)
+static void extractKeypoints(
     uint32_t* bitarray,
     int octave,
-    int nLevels,
     int octaveBitarraySize,
     int octaveWidth,
     int layer,
@@ -333,15 +333,8 @@ static void extractKeypointsAndDescriptors(
     float sigma,
     const std::vector<cv::Mat>& gauss_pyr,
     const std::vector<cv::Mat>& dog_pyr,
-    std::vector<cv::KeyPoint>& keypoints,
-    cv::Mat& descriptors,
-    int descriptorType)
+    std::vector<cv::KeyPoint>& keypoints)
 {
-    int count = 0;
-    const int descriptorSize = SIFT_DESCR_WIDTH * SIFT_DESCR_WIDTH * SIFT_DESCR_HIST_BINS;
-    int maxKeypoints = octaveWidth * octaveWidth;  // Upper bound estimate
-    cv::Mat localDescriptors(maxKeypoints, descriptorSize, descriptorType);
-
     for (uint32_t chunkIdx = 0; chunkIdx < octaveBitarraySize; chunkIdx++) {
         uint32_t chunk = bitarray[chunkIdx];
         if (chunk == 0) continue;
@@ -374,7 +367,7 @@ static void extractKeypointsAndDescriptors(
 
                 float mag_thr = omax * SIFT_ORI_PEAK_RATIO;
 
-                // Find orientation peaks and create keypoints + descriptors
+                // Find orientation peaks and create keypoints
                 for (int j = 0; j < n; j++) {
                     int l = j > 0 ? j - 1 : n - 1;
                     int r2 = j < n-1 ? j + 1 : 0;
@@ -387,34 +380,52 @@ static void extractKeypointsAndDescriptors(
                             kpt.angle = 0.f;
 
                         keypoints.push_back(kpt);
-
-                        // Compute descriptor for this keypoint immediately
-                        int finalGaussIdx = octave * (nOctaveLayers + 3) + keypoint_layer;
-                        const cv::Mat& img = gauss_pyr[finalGaussIdx];
-
-                        // Scale to octave space
-                        float octaveScale = 1.f / (1 << octave);
-                        cv::Point2f ptf(kpt.pt.x * octaveScale, kpt.pt.y * octaveScale);
-                        float scl = kpt.size * 0.5f * octaveScale;
-
-                        float angle = 360.f - kpt.angle;
-                        if (std::abs(angle - 360.f) < FLT_EPSILON)
-                            angle = 0.f;
-
-                        calcSIFTDescriptor(img, ptf, angle,
-                                         scl, SIFT_DESCR_WIDTH, SIFT_DESCR_HIST_BINS,
-                                         localDescriptors, count);
-
-                        count++;
                     }
                 }
             }
         }
     }
+}
 
-    // Resize local descriptors to actual count and assign to output
-    if (count > 0) {
-        descriptors = localDescriptors.rowRange(0, count).clone();
+// Pass 2: Compute descriptors for all keypoints (exact pre-allocation)
+static void computeDescriptors(
+    const std::vector<cv::KeyPoint>& keypoints,
+    int octave,
+    int nOctaveLayers,
+    const std::vector<cv::Mat>& gauss_pyr,
+    cv::Mat& descriptors,
+    int descriptorType)
+{
+    const int descriptorSize = SIFT_DESCR_WIDTH * SIFT_DESCR_WIDTH * SIFT_DESCR_HIST_BINS;
+    int numKeypoints = static_cast<int>(keypoints.size());
+
+    if (numKeypoints == 0) {
+        return;
+    }
+
+    // Exact pre-allocation - no wasted memory
+    descriptors.create(numKeypoints, descriptorSize, descriptorType);
+
+    for (int i = 0; i < numKeypoints; i++) {
+        const cv::KeyPoint& kpt = keypoints[i];
+
+        // Get the layer from the keypoint's octave packing
+        int keypoint_layer = (kpt.octave >> 8) & 255;
+        int finalGaussIdx = octave * (nOctaveLayers + 3) + keypoint_layer;
+        const cv::Mat& img = gauss_pyr[finalGaussIdx];
+
+        // Scale to octave space
+        float octaveScale = 1.f / (1 << octave);
+        cv::Point2f ptf(kpt.pt.x * octaveScale, kpt.pt.y * octaveScale);
+        float scl = kpt.size * 0.5f * octaveScale;
+
+        float angle = 360.f - kpt.angle;
+        if (std::abs(angle - 360.f) < FLT_EPSILON)
+            angle = 0.f;
+
+        calcSIFTDescriptor(img, ptf, angle,
+                         scl, SIFT_DESCR_WIDTH, SIFT_DESCR_HIST_BINS,
+                         descriptors, i);
     }
 }
 
@@ -818,7 +829,11 @@ bool SIFTMetal::detectAndCompute(const cv::Mat& img,
         [cmdBuf commit];
         [cmdBuf waitUntilCompleted];
 
-        // Sequential CPU extraction after GPU completes (no mutex contention, simpler code)
+        // Two-pass CPU extraction after GPU completes:
+        // Pass 1: Extract all keypoints (determines exact count)
+        // Pass 2: Compute descriptors with exact pre-allocation
+
+        // Pass 1: Extract all keypoints
         for (int o = 0; o < nOctaves; o++) {
             int octaveWidth = base.cols >> o;
 
@@ -826,13 +841,9 @@ bool SIFTMetal::detectAndCompute(const cv::Mat& img,
                 int layerIndex = o * config_.nOctaveLayers + (layer - 1);
                 uint32_t* layerExtremaBitarray = (uint32_t*)layerExtremaBitarrays[layerIndex].contents;
 
-                std::vector<cv::KeyPoint> localKeypoints;
-                cv::Mat localDescriptors;
-
-                extractKeypointsAndDescriptors(
+                extractKeypoints(
                     layerExtremaBitarray,
                     o,
-                    nLevels,
                     layerExtremaBitarraySizes[layerIndex],
                     octaveWidth,
                     layer,
@@ -842,22 +853,47 @@ bool SIFTMetal::detectAndCompute(const cv::Mat& img,
                     (float)config_.sigma,
                     gauss_pyr,
                     dog_pyr,
-                    localKeypoints,
-                    localDescriptors,
-                    config_.descriptorType
+                    keypoints
                 );
+            }
+        }
 
-                // Append keypoints and descriptors directly (deterministic order)
-                if (!localKeypoints.empty()) {
-                    keypoints.insert(keypoints.end(), localKeypoints.begin(), localKeypoints.end());
+        // Pass 2: Compute descriptors for all keypoints with exact pre-allocation
+        const int descriptorSize = SIFT_DESCR_WIDTH * SIFT_DESCR_WIDTH * SIFT_DESCR_HIST_BINS;
+        int totalKeypoints = static_cast<int>(keypoints.size());
+
+        if (totalKeypoints > 0) {
+            descriptorsMat.create(totalKeypoints, descriptorSize, config_.descriptorType);
+
+            // Compute descriptors in octave groups for better cache locality
+            int descriptorRow = 0;
+            for (int o = 0; o < nOctaves; o++) {
+                // Find keypoints belonging to this octave
+                std::vector<cv::KeyPoint> octaveKeypoints;
+                for (const auto& kpt : keypoints) {
+                    int kptOctave = kpt.octave & 255;  // Extract octave from packed value
+                    if (kptOctave == o) {
+                        octaveKeypoints.push_back(kpt);
+                    }
                 }
 
-                if (!localDescriptors.empty()) {
-                    if (descriptorsMat.empty()) {
-                        descriptorsMat = localDescriptors.clone();
-                    } else {
-                        cv::vconcat(descriptorsMat, localDescriptors, descriptorsMat);
-                    }
+                if (!octaveKeypoints.empty()) {
+                    // Compute descriptors for this octave's keypoints
+                    cv::Mat octaveDescriptors = descriptorsMat.rowRange(
+                        descriptorRow,
+                        descriptorRow + octaveKeypoints.size()
+                    );
+
+                    computeDescriptors(
+                        octaveKeypoints,
+                        o,
+                        config_.nOctaveLayers,
+                        gauss_pyr,
+                        octaveDescriptors,
+                        config_.descriptorType
+                    );
+
+                    descriptorRow += octaveKeypoints.size();
                 }
             }
         }
