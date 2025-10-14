@@ -29,7 +29,7 @@
 namespace lar {
 
 struct ExtremaParams {
-    float threshold;
+    int threshold;
     int border;
 };
 
@@ -40,6 +40,7 @@ struct SIFTMetal::Impl {
     id<MTLComputePipelineState> blurAndDoGPipeline = nil;
     id<MTLComputePipelineState> blurHorizPipeline = nil;
     id<MTLComputePipelineState> blurVertPipeline = nil;
+    id<MTLComputePipelineState> blurVertAndDoGPipeline = nil;
     id<MTLComputePipelineState> extremaPipeline = nil;
     id<MTLComputePipelineState> resizePipeline = nil;
 
@@ -111,6 +112,7 @@ struct SIFTMetal::Impl {
             RELEASE_IF_MANUAL(blurAndDoGPipeline);
             RELEASE_IF_MANUAL(blurHorizPipeline);
             RELEASE_IF_MANUAL(blurVertPipeline);
+            RELEASE_IF_MANUAL(blurVertAndDoGPipeline);
             RELEASE_IF_MANUAL(extremaPipeline);
             RELEASE_IF_MANUAL(resizePipeline);
             RELEASE_IF_MANUAL(commandQueue);
@@ -119,6 +121,7 @@ struct SIFTMetal::Impl {
             blurAndDoGPipeline = nil;
             blurHorizPipeline = nil;
             blurVertPipeline = nil;
+            blurVertAndDoGPipeline = nil;
             extremaPipeline = nil;
             resizePipeline = nil;
             commandQueue = nil;
@@ -505,6 +508,19 @@ SIFTMetal::SIFTMetal(const SIFTConfig& config) : impl_(new Impl()), config_(conf
             throw std::runtime_error(errorMsg);
         }
 
+        // Create blur vertical pipeline
+        id<MTLFunction> blurVertAndDoGFunc = [library newFunctionWithName:@"gaussianBlurVerticalAndDoG"];
+        if (!blurVertAndDoGFunc) {
+            throw std::runtime_error("Failed to find Metal function: gaussianBlurVerticalAndDoG");
+        }
+        impl_->blurVertAndDoGPipeline = [impl_->device newComputePipelineStateWithFunction:blurVertAndDoGFunc error:&error];
+        RELEASE_IF_MANUAL(blurVertAndDoGFunc);
+        if (!impl_->blurVertAndDoGPipeline) {
+            std::string errorMsg = "Failed to create blur vertical and DoG pipeline: ";
+            if (error) errorMsg += [[error localizedDescription] UTF8String];
+            throw std::runtime_error(errorMsg);
+        }
+
         // Create extrema detection pipeline
         id<MTLFunction> extremaFunc = [library newFunctionWithName:@"detectExtrema"];
         if (!extremaFunc) {
@@ -537,7 +553,7 @@ SIFTMetal::SIFTMetal(const SIFTConfig& config) : impl_(new Impl()), config_(conf
 
         // Pre-compute Gaussian kernels once
         computeGaussianKernels(impl_->nLevels, config_.nOctaveLayers, config_.sigma,
-                                impl_->gaussianKernels, impl_->sigmas);
+                                impl_->gaussianKernels, impl_->sigmas, config_.enableUpsampling);
 
         // Pre-allocate kernel buffers for GPU (one set per pyramid level)
         impl_->kernelSizeBuffers.resize(impl_->nLevels);
@@ -672,23 +688,22 @@ bool SIFTMetal::detectAndCompute(const cv::Mat& img,
 
     @autoreleasepool {
         // Verify image dimensions match config (if pre-allocated)
-        if (impl_->nOctaves > 0) {
-            if (img.cols != config_.imageSize.width || img.rows != config_.imageSize.height) {
-                std::cerr << "Error: Input image dimensions (" << img.cols << "x" << img.rows
-                         << ") don't match SIFTConfig dimensions (" << config_.imageSize.width
-                         << "x" << config_.imageSize.height << ")" << std::endl;
-                return false;
-            }
-            // Use pre-computed values from constructor
-            nOctaves = impl_->nOctaves;
+        if (img.cols != config_.imageSize.width || img.rows != config_.imageSize.height) {
+            std::cerr << "Error: Input image dimensions (" << img.cols << "x" << img.rows
+                        << ") don't match SIFTConfig dimensions (" << config_.imageSize.width
+                        << "x" << config_.imageSize.height << ")" << std::endl;
+            return false;
         }
+        // Use pre-computed values from constructor
+        nOctaves = impl_->nOctaves;
         cv::Mat base;
         img.convertTo(base, CV_32F, SIFT_FIXPT_SCALE, 0);
 
         // Extract mutable Mat from OutputArray for internal processing
         cv::Mat descriptorsMat;
-        int nLevels = impl_->nLevels > 0 ? impl_->nLevels : (config_.nOctaveLayers + 3);
-        float threshold = 0.5f * config_.contrastThreshold / config_.nOctaveLayers * 255 * SIFT_FIXPT_SCALE;
+        int nLevels = impl_->nLevels;
+        // float threshold = 0.5f * config_.contrastThreshold / config_.nOctaveLayers * 255 * SIFT_FIXPT_SCALE;
+        int threshold = cvFloor(0.5 * config_.contrastThreshold / config_.nOctaveLayers * 255 * SIFT_FIXPT_SCALE);
 
         const std::vector<std::vector<float>>& gaussianKernels = impl_->gaussianKernels;
 
@@ -721,8 +736,6 @@ bool SIFTMetal::detectAndCompute(const cv::Mat& img,
             }
         }
 
-        // IMPORTANT: Create command buffer AFTER CPU upload completes
-        // This ensures Metal sees the uploaded data with MTLResourceStorageModeShared
         id<MTLCommandBuffer> cmdBuf = [impl_->commandQueue commandBuffer];
         cmdBuf.label = @"SIFT Feature Detection";
 
@@ -754,7 +767,8 @@ bool SIFTMetal::detectAndCompute(const cv::Mat& img,
                         [resizeEncoder dispatchThreads:resizeGridSize threadsPerThreadgroup:resizeThreadgroupSize];
                         [resizeEncoder endEncoding];
                     } else {
-                        if (config_.enableUpsampling) {
+                        if (config_.enableUpsampling) { // this is not used yet
+                            // TODO: add support for enableUpsampling
                             // sig_diff = std::sqrt(std::max(sigma * sigma - SIFT_INIT_SIGMA * SIFT_INIT_SIGMA * 4, 0.01f));
                             
                             // cv::Mat dbl;
@@ -804,6 +818,7 @@ bool SIFTMetal::detectAndCompute(const cv::Mat& img,
                     // Get texture views for this octave
                     std::vector<id<MTLTexture>>& gaussTextures = impl_->octaveTextures[o];
                     std::vector<id<MTLTexture>>& dogTextures = impl_->dogTextures[o];
+                    id<MTLTexture>& tempTexture = impl_->tempTextures[o];
 
                     id<MTLComputeCommandEncoder> encoder = [cmdBuf computeCommandEncoder];
 
@@ -819,6 +834,33 @@ bool SIFTMetal::detectAndCompute(const cv::Mat& img,
 
                     [encoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
                     [encoder endEncoding];
+                    // id<MTLComputeCommandEncoder> blurHorizEncoder = [cmdBuf computeCommandEncoder];
+
+                    // [blurHorizEncoder setComputePipelineState:impl_->blurHorizPipeline];
+                    // [blurHorizEncoder setTexture:gaussTextures[i-1] atIndex:0];  // Read from staging texture
+                    // [blurHorizEncoder setTexture:tempTexture atIndex:1];
+                    // [blurHorizEncoder setBuffer:impl_->kernelSizeBuffers[i] offset:0 atIndex:0];
+                    // [blurHorizEncoder setBuffer:impl_->kernelDataBuffers[i] offset:0 atIndex:1];
+
+                    // MTLSize gridSize = MTLSizeMake(octaveWidth, octaveHeight, 1);
+                    // MTLSize threadgroupSize = MTLSizeMake(16, 16, 1);
+
+                    // [blurHorizEncoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
+                    // [blurHorizEncoder endEncoding];
+
+                    // // Vertical gaussian blur + DoG (temp → gaussTextures[i], DoG = gaussTextures[i] - gaussTextures[i-1])
+                    // id<MTLComputeCommandEncoder> blurVertAndDoGEncoder = [cmdBuf computeCommandEncoder];
+
+                    // [blurVertAndDoGEncoder setComputePipelineState:impl_->blurVertAndDoGPipeline];
+                    // [blurVertAndDoGEncoder setTexture:gaussTextures[i-1] atIndex:0];  // Previous fully-blurred Gaussian (for DoG)
+                    // [blurVertAndDoGEncoder setTexture:tempTexture atIndex:1];  // Horizontally-blurred temp (for vertical blur)
+                    // [blurVertAndDoGEncoder setTexture:gaussTextures[i] atIndex:2];  // Output: next Gaussian level
+                    // [blurVertAndDoGEncoder setTexture:dogTextures[i-1] atIndex:3];  // Output: DoG
+                    // [blurVertAndDoGEncoder setBuffer:impl_->kernelSizeBuffers[i] offset:0 atIndex:0];
+                    // [blurVertAndDoGEncoder setBuffer:impl_->kernelDataBuffers[i] offset:0 atIndex:1];
+
+                    // [blurVertAndDoGEncoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
+                    // [blurVertAndDoGEncoder endEncoding];
                 }
 
                 // Encode extrema detection

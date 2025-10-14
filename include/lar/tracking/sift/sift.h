@@ -8,7 +8,8 @@
 #include "lar/tracking/sift/sift_common.h"
 
 // Forward declaration for SIFTMetal (only when Metal is enabled)
-#ifdef LAR_USE_METAL_SIFT
+#define LAR_USE_METAL_SIFTO 1
+#ifdef LAR_USE_METAL_SIFTO
 namespace lar {
     class SIFTMetal;
 }
@@ -47,7 +48,7 @@ private:
 
     SIFTConfig config_;
 
-#ifdef LAR_USE_METAL_SIFT
+#ifdef LAR_USE_METAL_SIFTO
     std::unique_ptr<SIFTMetal> metalSift_;
 #endif
 };

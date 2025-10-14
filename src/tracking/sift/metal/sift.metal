@@ -25,7 +25,7 @@ constant float SIFT_DESCR_MAG_THR = 0.2f;
 constant float SIFT_INT_DESCR_FCTR = 512.f;
 
 struct ExtremaParams {
-    float threshold;
+    int threshold;
     int border;
 };
 
@@ -95,7 +95,7 @@ kernel void gaussianBlurVertical(
         float bottomPixel = currGauss.read(uint2(x, bottomY)).r;
         float weight = gaussKernel[j];
 
-        gauss += weight * topPixel + weight * bottomPixel;
+        gauss = gauss + (weight * topPixel + weight * bottomPixel);
     }
 
     nextGauss.write(gauss, uint2(x, y));
@@ -104,8 +104,9 @@ kernel void gaussianBlurVertical(
 #pragma METAL fp math_mode(safe)
 kernel void gaussianBlurVerticalAndDoG(
     texture2d<float, access::read> currGauss [[texture(0)]],
-    texture2d<float, access::write> nextGauss [[texture(1)]],
-    texture2d<float, access::write> nextDoG [[texture(2)]],
+    texture2d<float, access::read> horizGauss [[texture(1)]],
+    texture2d<float, access::write> nextGauss [[texture(2)]],
+    texture2d<float, access::write> nextDoG [[texture(3)]],
     constant int& kernelSize [[buffer(0)]],
     constant float* gaussKernel [[buffer(1)]],
     uint2 gid [[thread_position_in_grid]])
@@ -113,24 +114,24 @@ kernel void gaussianBlurVerticalAndDoG(
     uint x = gid.x;
     uint y = gid.y;
 
-    if (x >= currGauss.get_width() || y >= currGauss.get_height()) return;
+    if (x >= horizGauss.get_width() || y >= horizGauss.get_height()) return;
 
     int radius = kernelSize / 2;
-    float centerPixel = currGauss.read(uint2(x, y)).r;
+    float centerPixel = horizGauss.read(uint2(x, y)).r;
     float gauss = gaussKernel[radius] * centerPixel;
 
     for (int j = 0; j < radius; j++) {
         int topY = int(y) - radius + j;
         int bottomY = int(y) + radius - j;
 
-        topY = clamp(topY, 0, int(currGauss.get_height()) - 1);
-        bottomY = clamp(bottomY, 0, int(currGauss.get_height()) - 1);
+        topY = clamp(topY, 0, int(horizGauss.get_height()) - 1);
+        bottomY = clamp(bottomY, 0, int(horizGauss.get_height()) - 1);
 
-        float topPixel = currGauss.read(uint2(x, topY)).r;
-        float bottomPixel = currGauss.read(uint2(x, bottomY)).r;
+        float topPixel = horizGauss.read(uint2(x, topY)).r;
+        float bottomPixel = horizGauss.read(uint2(x, bottomY)).r;
         float weight = gaussKernel[j];
 
-        gauss += weight * topPixel + weight * bottomPixel;
+        gauss = gauss + weight * topPixel + weight * bottomPixel;
     }
 
     float currVal = currGauss.read(uint2(x, y)).r;

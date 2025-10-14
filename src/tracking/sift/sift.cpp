@@ -9,7 +9,7 @@
 #include <chrono>
 
 // Include SIFTMetal header when Metal is enabled
-#ifdef LAR_USE_METAL_SIFT
+#ifdef LAR_USE_METAL_SIFTO
 #include "sift_metal.h"
 #endif
 
@@ -140,6 +140,7 @@ static void findScaleSpaceExtremaInLayer(
     const cv::Mat& img = dog_pyr[idx];
     const cv::Mat& prev = dog_pyr[idx-1];
     const cv::Mat& next = dog_pyr[idx+1];
+    int count = 0;
 
     for (int r = range.start; r < range.end; r++) {
         const sift_wt* currptr = img.ptr<sift_wt>(r);
@@ -339,21 +340,23 @@ static void findScaleSpaceExtremaInLayer(
                             kpt.angle = 0.f;
 
                         kpts.push_back(kpt);
+                        count++;
                     }
                 }
             }
         }
     }
+    std::cout << "octave " << o << " layer " << i << " added " << count << " keypoints" << std::endl;
 }
 
 // SIFT Implementation
 SIFT::SIFT(const SIFTConfig& config)
     : config_(config)
-#ifdef LAR_USE_METAL_SIFT
+#ifdef LAR_USE_METAL_SIFTO
     , metalSift_(nullptr)
 #endif
 {
-#ifdef LAR_USE_METAL_SIFT
+#ifdef LAR_USE_METAL_SIFTO
     metalSift_ = std::make_unique<SIFTMetal>(config);
 #endif
 }
@@ -362,7 +365,7 @@ SIFT::~SIFT() = default;
 
 SIFT::SIFT(SIFT&& other) noexcept
     : config_(other.config_)
-#ifdef LAR_USE_METAL_SIFT
+#ifdef LAR_USE_METAL_SIFTO
     , metalSift_(std::move(other.metalSift_))
 #endif
 {
@@ -371,7 +374,7 @@ SIFT::SIFT(SIFT&& other) noexcept
 SIFT& SIFT::operator=(SIFT&& other) noexcept {
     if (this != &other) {
         config_ = other.config_;
-#ifdef LAR_USE_METAL_SIFT
+#ifdef LAR_USE_METAL_SIFTO
         metalSift_ = std::move(other.metalSift_);
 #endif
     }
@@ -471,10 +474,10 @@ void SIFT::detectAndCompute(cv::InputArray _image, cv::InputArray _mask,
     int firstOctave = config_.firstOctave();
     int nOctaves = config_.computeNumOctaves(image.cols, image.rows);
 
-    #ifdef LAR_USE_METAL_SIFT
+    #ifdef LAR_USE_METAL_SIFTO
     metalSift_->detectAndCompute(image, keypoints, _descriptors, nOctaves);
     #else
-    cv::Mat base = createInitialImage(image, firstOctave < 0, (float)config_.sigma);
+    cv::Mat base = createInitialImage(image, config_.enableUpsampling, (float)config_.sigma);
     std::vector<cv::Mat> gpyr;
     // CPU+SIMD path: separate Gaussian pyramid, DoG pyramid, and extrema detection
     buildGaussianPyramid(base, gpyr, nOctaves);
