@@ -80,6 +80,24 @@ namespace lar {
     notifyDidAddEdge(anchor_id_u, anchor_id_v);
   }
 
+  void Map::removeEdge(std::size_t anchor_id_u, std::size_t anchor_id_v) {
+    // Remove anchor_id_v from anchor_id_u's edge list
+    auto& edges_u = edges[anchor_id_u];
+    edges_u.erase(
+      std::remove(edges_u.begin(), edges_u.end(), anchor_id_v),
+      edges_u.end()
+    );
+
+    // Remove anchor_id_u from anchor_id_v's edge list
+    auto& edges_v = edges[anchor_id_v];
+    edges_v.erase(
+      std::remove(edges_v.begin(), edges_v.end(), anchor_id_u),
+      edges_v.end()
+    );
+
+    notifyDidRemoveEdge(anchor_id_u, anchor_id_v);
+  }
+
   std::vector<Anchor*> Map::getPath(std::size_t start_id, std::size_t goal_id) {
     std::vector<Anchor*> path;
     std::unordered_map<std::size_t, double> g_score;
@@ -235,6 +253,10 @@ namespace lar {
     on_did_add_edge = callback;
   }
 
+  void Map::setDidRemoveEdgeCallback(DidRemoveEdgeCallback callback) {
+    on_did_remove_edge = callback;
+  }
+
   // Notification methods
   void Map::notifyDidAddAnchors(const std::vector<std::reference_wrapper<Anchor>>& anchors) {
     if (on_did_add_anchors) {
@@ -263,6 +285,12 @@ namespace lar {
   void Map::notifyDidAddEdge(std::size_t from_id, std::size_t to_id) {
     if (on_did_add_edge) {
       on_did_add_edge(from_id, to_id);
+    }
+  }
+
+  void Map::notifyDidRemoveEdge(std::size_t from_id, std::size_t to_id) {
+    if (on_did_remove_edge) {
+      on_did_remove_edge(from_id, to_id);
     }
   }
 }
