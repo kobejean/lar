@@ -335,6 +335,7 @@ static void extractKeypoints(
     const std::vector<cv::Mat>& dog_pyr,
     std::vector<cv::KeyPoint>& keypoints)
 {
+    int count = 0;
     for (uint32_t chunkIdx = 0; chunkIdx < octaveBitarraySize; chunkIdx++) {
         uint32_t chunk = bitarray[chunkIdx];
         if (chunk == 0) continue;
@@ -380,11 +381,13 @@ static void extractKeypoints(
                             kpt.angle = 0.f;
 
                         keypoints.push_back(kpt);
+                        count++;
                     }
                 }
             }
         }
     }
+    std::cout << "octave " << octave << " layer " << layer << " added " << count << " keypoints" << std::endl;
 }
 
 // Pass 2: Compute descriptors for all keypoints (exact pre-allocation)
@@ -664,6 +667,11 @@ bool SIFTMetal::detectAndCompute(const cv::Mat& img,
         // Single command buffer for entire frame (simpler, less driver overhead)
         id<MTLCommandBuffer> cmdBuf = [impl_->commandQueue commandBuffer];
         cmdBuf.label = @"SIFT Feature Detection";
+        {
+        float sigma = config_.sigma;
+        float sig_diff = std::sqrt(std::max(sigma * sigma - SIFT_INIT_SIGMA * SIFT_INIT_SIGMA, 0.01f));
+        cv::GaussianBlur(base, base, cv::Size(), sig_diff, sig_diff);
+        }
 
         // Upload octave 0 image to staging buffer (CPU → staging buffer)
         {
@@ -672,7 +680,8 @@ bool SIFTMetal::detectAndCompute(const cv::Mat& img,
             size_t rowBytes = octaveWidth * sizeof(float);
             size_t alignedRowBytes = ((rowBytes + METAL_BUFFER_ALIGNMENT - 1) / METAL_BUFFER_ALIGNMENT) * METAL_BUFFER_ALIGNMENT;
 
-            float* imagePtr = (float*)impl_->imageBuffer.contents;
+            // float* imagePtr = (float*)impl_->imageBuffer.contents;
+            float* imagePtr = (float*)impl_->octaveBuffers[0][0].contents;
             size_t alignedRowFloats = alignedRowBytes / sizeof(float);
 
             for (int row = 0; row < octaveHeight; row++) {
@@ -734,35 +743,35 @@ bool SIFTMetal::detectAndCompute(const cv::Mat& img,
                             // cv::GaussianBlur(dbl, result, cv::Size(), sig_diff, sig_diff);
 
                         } else {
-                            // GPU pipeline: imageTexture → tempTexture → gaussTextures[0]
-                            // This ensures CPU upload to imageBuffer is isolated from GPU processing
+                            // // GPU pipeline: imageTexture → tempTexture → gaussTextures[0]
+                            // // This ensures CPU upload to imageBuffer is isolated from GPU processing
 
-                            // Horizontal gaussian blur (staging → temp)
-                            id<MTLComputeCommandEncoder> blurHorizEncoder = [cmdBuf computeCommandEncoder];
+                            // // Horizontal gaussian blur (staging → temp)
+                            // id<MTLComputeCommandEncoder> blurHorizEncoder = [cmdBuf computeCommandEncoder];
 
-                            [blurHorizEncoder setComputePipelineState:impl_->blurHorizPipeline];
-                            [blurHorizEncoder setTexture:impl_->imageTexture atIndex:0];  // Read from staging texture
-                            [blurHorizEncoder setTexture:impl_->tempTextures[o] atIndex:1];
-                            [blurHorizEncoder setBuffer:impl_->kernelSizeBuffers[0] offset:0 atIndex:0];
-                            [blurHorizEncoder setBuffer:impl_->kernelDataBuffers[0] offset:0 atIndex:1];
+                            // [blurHorizEncoder setComputePipelineState:impl_->blurHorizPipeline];
+                            // [blurHorizEncoder setTexture:impl_->imageTexture atIndex:0];  // Read from staging texture
+                            // [blurHorizEncoder setTexture:impl_->tempTextures[o] atIndex:1];
+                            // [blurHorizEncoder setBuffer:impl_->kernelSizeBuffers[0] offset:0 atIndex:0];
+                            // [blurHorizEncoder setBuffer:impl_->kernelDataBuffers[0] offset:0 atIndex:1];
 
-                            MTLSize gridSize = MTLSizeMake(octaveWidth, octaveHeight, 1);
-                            MTLSize threadgroupSize = MTLSizeMake(16, 16, 1);
+                            // MTLSize gridSize = MTLSizeMake(octaveWidth, octaveHeight, 1);
+                            // MTLSize threadgroupSize = MTLSizeMake(16, 16, 1);
 
-                            [blurHorizEncoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
-                            [blurHorizEncoder endEncoding];
+                            // [blurHorizEncoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
+                            // [blurHorizEncoder endEncoding];
 
-                            // Vertical gaussian blur (temp → gaussTextures[0])
-                            id<MTLComputeCommandEncoder> blurVertEncoder = [cmdBuf computeCommandEncoder];
+                            // // Vertical gaussian blur (temp → gaussTextures[0])
+                            // id<MTLComputeCommandEncoder> blurVertEncoder = [cmdBuf computeCommandEncoder];
 
-                            [blurVertEncoder setComputePipelineState:impl_->blurVertPipeline];
-                            [blurVertEncoder setTexture:impl_->tempTextures[o] atIndex:0];
-                            [blurVertEncoder setTexture:gaussTextures[0] atIndex:1];  // Write to octave buffer
-                            [blurVertEncoder setBuffer:impl_->kernelSizeBuffers[0] offset:0 atIndex:0];
-                            [blurVertEncoder setBuffer:impl_->kernelDataBuffers[0] offset:0 atIndex:1];
+                            // [blurVertEncoder setComputePipelineState:impl_->blurVertPipeline];
+                            // [blurVertEncoder setTexture:impl_->tempTextures[o] atIndex:0];
+                            // [blurVertEncoder setTexture:gaussTextures[0] atIndex:1];  // Write to octave buffer
+                            // [blurVertEncoder setBuffer:impl_->kernelSizeBuffers[0] offset:0 atIndex:0];
+                            // [blurVertEncoder setBuffer:impl_->kernelDataBuffers[0] offset:0 atIndex:1];
 
-                            [blurVertEncoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
-                            [blurVertEncoder endEncoding];
+                            // [blurVertEncoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
+                            // [blurVertEncoder endEncoding];
                         }
                     }
                 }
