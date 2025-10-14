@@ -7,14 +7,18 @@ set(SIFT_HEADER_LIST
 )
 
 set(SIFT_SOURCES
-  sift.cpp
   sift_common.cpp
 )
 
-# Add Metal implementation on Apple platforms if enabled
+# Add platform-specific implementation
 if(LAR_USE_METAL_SIFT AND APPLE)
-  list(APPEND SIFT_SOURCES sift_metal.mm)
+  # Metal implementation (GPU-accelerated) - contains both Impl and SIFT wrapper
+  list(APPEND SIFT_SOURCES sift_impl_metal.mm)
   message(STATUS "Metal-accelerated SIFT enabled")
+else()
+  # CPU implementation (fallback) - sift.cpp provides wrapper, sift_impl_cpu.cpp provides Impl
+  list(APPEND SIFT_SOURCES sift.cpp sift_impl_cpu.cpp)
+  message(STATUS "CPU SIFT enabled")
 endif()
 
 # Add SIFT sources to lar_tracking library

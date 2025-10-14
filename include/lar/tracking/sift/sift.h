@@ -4,25 +4,27 @@
 #include <opencv2/core.hpp>
 #include <opencv2/features2d.hpp>
 #include <vector>
-#include <memory>
 #include "lar/tracking/sift/sift_common.h"
 
-// Forward declaration for SIFTMetal (only when Metal is enabled)
-#define LAR_USE_METAL_SIFTO 1
-#ifdef LAR_USE_METAL_SIFTO
-namespace lar {
-    class SIFTMetal;
-}
-#endif
+// Conditional compilation: Use Metal on Apple platforms, CPU otherwise
+#define LAR_USE_METAL_SIFT 1
 
 namespace lar {
 
+/**
+ * SIFT (Scale-Invariant Feature Transform) detector and descriptor
+ *
+ * Uses Pimpl idiom to hide implementation details.
+ * Implementation automatically selected at compile time:
+ * - Metal backend on Apple platforms (when LAR_USE_METAL_SIFT=1)
+ * - CPU backend otherwise
+ */
 class SIFT {
 public:
-    SIFT(const SIFTConfig& config);
+    explicit SIFT(const SIFTConfig& config);
     ~SIFT();
 
-    // Delete copy operations (SIFTMetal is not copyable)
+    // Delete copy operations (implementation is not copyable)
     SIFT(const SIFT&) = delete;
     SIFT& operator=(const SIFT&) = delete;
 
@@ -40,17 +42,8 @@ public:
     int defaultNorm() const;
 
 private:
-    void buildGaussianPyramid(const cv::Mat& base, std::vector<cv::Mat>& pyr, int nOctaves) const;
-    void buildDoGPyramid(const std::vector<cv::Mat>& pyr, std::vector<cv::Mat>& dogpyr) const;
-    void findScaleSpaceExtrema(const std::vector<cv::Mat>& gauss_pyr,
-                               const std::vector<cv::Mat>& dog_pyr,
-                               std::vector<cv::KeyPoint>& keypoints) const;
-
-    SIFTConfig config_;
-
-#ifdef LAR_USE_METAL_SIFTO
-    std::unique_ptr<SIFTMetal> metalSift_;
-#endif
+    struct Impl;  // Forward declaration - implementation in separate files
+    Impl* impl_;
 };
 
 } // namespace lar
