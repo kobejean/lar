@@ -63,6 +63,14 @@ struct SIFTMetal::Impl {
     std::vector<id<MTLBuffer>> kernelSizeBuffers;
     std::vector<id<MTLBuffer>> kernelDataBuffers;
 
+    // Pre-allocated extrema bitarray buffers (one per layer across all octaves)
+    std::vector<id<MTLBuffer>> extremaBitarrays;
+    std::vector<uint32_t> extremaBitarraySizes;
+
+    // Pre-allocated cv::Mat wrappers for GPU buffers (reused across frames)
+    std::vector<cv::Mat> gauss_pyr;
+    std::vector<cv::Mat> dog_pyr;
+
     // Image dimensions
     int nOctaves = 0;
     int nLevels = 0;
@@ -89,6 +97,7 @@ struct SIFTMetal::Impl {
             RELEASE_IF_MANUAL(imageBuffer);
             for (auto& buf : kernelSizeBuffers) RELEASE_IF_MANUAL(buf);
             for (auto& buf : kernelDataBuffers) RELEASE_IF_MANUAL(buf);
+            for (auto& buf : extremaBitarrays) RELEASE_IF_MANUAL(buf);
             octaveTextures.clear();
             octaveBuffers.clear();
             dogTextures.clear();
@@ -97,6 +106,8 @@ struct SIFTMetal::Impl {
             tempBuffers.clear();
             kernelSizeBuffers.clear();
             kernelDataBuffers.clear();
+            extremaBitarrays.clear();
+            extremaBitarraySizes.clear();
             RELEASE_IF_MANUAL(blurAndDoGPipeline);
             RELEASE_IF_MANUAL(blurHorizPipeline);
             RELEASE_IF_MANUAL(blurVertPipeline);
@@ -579,6 +590,50 @@ SIFTMetal::SIFTMetal(const SIFTConfig& config) : impl_(new Impl()), config_(conf
                                                                    bytesPerRow:alignedRowBytes];
         }
 
+        // Pre-allocate extrema bitarray buffers (one per layer across all octaves)
+        impl_->extremaBitarrays.reserve(impl_->nOctaves * config_.nOctaveLayers);
+        impl_->extremaBitarraySizes.reserve(impl_->nOctaves * config_.nOctaveLayers);
+
+        for (int o = 0; o < impl_->nOctaves; o++) {
+            int octaveWidth = config_.imageSize.width >> o;
+            int octaveHeight = config_.imageSize.height >> o;
+            uint32_t octavePixels = octaveWidth * octaveHeight;
+            uint32_t extremaBitarraySize = ((octavePixels + 31) / 32) * sizeof(uint32_t);
+
+            for (int layer = 1; layer <= config_.nOctaveLayers; layer++) {
+                id<MTLBuffer> buffer = [impl_->device newBufferWithLength:extremaBitarraySize
+                                                                  options:MTLResourceStorageModeShared];
+                impl_->extremaBitarrays.push_back(buffer);
+                impl_->extremaBitarraySizes.push_back(extremaBitarraySize / sizeof(uint32_t));
+            }
+        }
+
+        // Pre-allocate cv::Mat wrappers for GPU buffers (reused across frames)
+        impl_->gauss_pyr.resize(impl_->nOctaves * impl_->nLevels);
+        impl_->dog_pyr.resize(impl_->nOctaves * (impl_->nLevels - 1));
+
+        for (int o = 0; o < impl_->nOctaves; o++) {
+            int octaveWidth = config_.imageSize.width >> o;
+            int octaveHeight = config_.imageSize.height >> o;
+            size_t rowBytes = octaveWidth * sizeof(float);
+            size_t alignedRowBytes = ((rowBytes + METAL_BUFFER_ALIGNMENT - 1) / METAL_BUFFER_ALIGNMENT) * METAL_BUFFER_ALIGNMENT;
+
+            int gaussIdx = o * impl_->nLevels;
+            int dogIdx = o * (impl_->nLevels - 1);
+
+            std::vector<id<MTLBuffer>>& gaussBuffers = impl_->octaveBuffers[o];
+            std::vector<id<MTLBuffer>>& dogBuffers = impl_->dogBuffers[o];
+
+            // Create cv::Mat wrappers pointing to GPU buffers
+            for (int i = 0; i < impl_->nLevels; i++) {
+                impl_->gauss_pyr[gaussIdx + i] = cv::Mat(octaveHeight, octaveWidth, CV_32F, gaussBuffers[i].contents, alignedRowBytes);
+            }
+
+            for (int i = 0; i < impl_->nLevels - 1; i++) {
+                impl_->dog_pyr[dogIdx + i] = cv::Mat(octaveHeight, octaveWidth, CV_32F, dogBuffers[i].contents, alignedRowBytes);
+            }
+        }
+
         impl_->initialized = true;
     }
 }
@@ -637,29 +692,14 @@ bool SIFTMetal::detectAndCompute(const cv::Mat& img,
 
         const std::vector<std::vector<float>>& gaussianKernels = impl_->gaussianKernels;
 
-        // Pre-allocate pyramid storage (internal to SIFTMetal)
-        std::vector<cv::Mat> gauss_pyr(nOctaves * nLevels);
-        std::vector<cv::Mat> dog_pyr(nOctaves * (config_.nOctaveLayers + 2));
+        // Reference pre-allocated cv::Mat wrappers (reused across frames)
+        std::vector<cv::Mat>& gauss_pyr = impl_->gauss_pyr;
+        std::vector<cv::Mat>& dog_pyr = impl_->dog_pyr;
 
-        // Allocate extrema bitarray buffers for each layer
-        std::vector<id<MTLBuffer>> layerExtremaBitarrays;
-        std::vector<uint32_t> layerExtremaBitarraySizes;
-        layerExtremaBitarrays.reserve(nOctaves * config_.nOctaveLayers);
-        layerExtremaBitarraySizes.reserve(nOctaves * config_.nOctaveLayers);
-
-        for (int o = 0; o < nOctaves; o++) {
-            int octaveWidth = base.cols >> o;
-            int octaveHeight = base.rows >> o;
-            uint32_t octavePixels = octaveWidth * octaveHeight;
-            uint32_t extremaBitarraySize = ((octavePixels + 31) / 32) * sizeof(uint32_t);
-
-            for (int layer = 1; layer <= config_.nOctaveLayers; layer++) {
-                id<MTLBuffer> buffer = [impl_->device newBufferWithLength:extremaBitarraySize
-                                                           options:MTLResourceStorageModeShared];
-                memset(buffer.contents, 0, extremaBitarraySize);
-                layerExtremaBitarrays.push_back(buffer);
-                layerExtremaBitarraySizes.push_back(extremaBitarraySize / sizeof(uint32_t));
-            }
+        // Zero out pre-allocated extrema bitarray buffers (reused across frames)
+        for (size_t i = 0; i < impl_->extremaBitarrays.size(); i++) {
+            size_t bufferSize = impl_->extremaBitarraySizes[i] * sizeof(uint32_t);
+            memset(impl_->extremaBitarrays[i].contents, 0, bufferSize);
         }
 
         keypoints.clear();
@@ -696,24 +736,9 @@ bool SIFTMetal::detectAndCompute(const cv::Mat& img,
             int octaveWidth = base.cols >> o;
             int octaveHeight = base.rows >> o;
 
-            size_t rowBytes = octaveWidth * sizeof(float);
-            size_t alignedRowBytes = ((rowBytes + METAL_BUFFER_ALIGNMENT - 1) / METAL_BUFFER_ALIGNMENT) * METAL_BUFFER_ALIGNMENT;
-            int rowStride = (int)(alignedRowBytes / sizeof(float));
-
             int gaussIdx = o * nLevels;
             int dogIdx = o * (nLevels - 1);
 
-            std::vector<id<MTLBuffer>>& gaussBuffers = impl_->octaveBuffers[o];
-            std::vector<id<MTLBuffer>>& dogBuffers = impl_->dogBuffers[o];
-
-            // Create cv::Mat wrappers for GPU buffers
-            for (int i = 0; i < nLevels; i++) {
-                gauss_pyr[gaussIdx + i] = cv::Mat(octaveHeight, octaveWidth, CV_32F, gaussBuffers[i].contents, alignedRowBytes);
-            }
-
-            for (int i = 0; i < nLevels - 1; i++) {
-                dog_pyr[dogIdx + i] = cv::Mat(octaveHeight, octaveWidth, CV_32F, dogBuffers[i].contents, alignedRowBytes);
-            }
 
             // Encode GPU work for all layers in this octave
             for (int layer = 1; layer <= config_.nOctaveLayers; layer++) {
@@ -743,8 +768,8 @@ bool SIFTMetal::detectAndCompute(const cv::Mat& img,
                             // cv::GaussianBlur(dbl, result, cv::Size(), sig_diff, sig_diff);
 
                         } else {
-                            // // GPU pipeline: imageTexture → tempTexture → gaussTextures[0]
-                            // // This ensures CPU upload to imageBuffer is isolated from GPU processing
+                            // GPU pipeline: imageTexture → tempTexture → gaussTextures[0]
+                            // This ensures CPU upload to imageBuffer is isolated from GPU processing
 
                             // // Horizontal gaussian blur (staging → temp)
                             // id<MTLComputeCommandEncoder> blurHorizEncoder = [cmdBuf computeCommandEncoder];
@@ -821,7 +846,7 @@ bool SIFTMetal::detectAndCompute(const cv::Mat& img,
                 [encoder setTexture:dogTextures[layer+1] atIndex:2];  // DoG layer above
 
                 int layerIndex = o * config_.nOctaveLayers + (layer - 1);
-                [encoder setBuffer:layerExtremaBitarrays[layerIndex] offset:0 atIndex:0];  // Output bitarray
+                [encoder setBuffer:impl_->extremaBitarrays[layerIndex] offset:0 atIndex:0];  // Pre-allocated extrema bitarray
                 [encoder setBuffer:paramsBuffer offset:0 atIndex:1];  // Parameters
 
                 MTLSize gridSize = MTLSizeMake(octaveWidth, octaveHeight, 1);
@@ -848,12 +873,12 @@ bool SIFTMetal::detectAndCompute(const cv::Mat& img,
 
             for (int layer = 1; layer <= config_.nOctaveLayers; layer++) {
                 int layerIndex = o * config_.nOctaveLayers + (layer - 1);
-                uint32_t* layerExtremaBitarray = (uint32_t*)layerExtremaBitarrays[layerIndex].contents;
+                uint32_t* layerExtremaBitarray = (uint32_t*)impl_->extremaBitarrays[layerIndex].contents;
 
                 extractKeypoints(
                     layerExtremaBitarray,
                     o,
-                    layerExtremaBitarraySizes[layerIndex],
+                    impl_->extremaBitarraySizes[layerIndex],
                     octaveWidth,
                     layer,
                     config_.nOctaveLayers,
@@ -913,11 +938,6 @@ bool SIFTMetal::detectAndCompute(const cv::Mat& img,
         } else if (descriptors.needed()) {
             // Create empty descriptor matrix using shared constants
             descriptors.create(0, SIFT_DESCR_WIDTH * SIFT_DESCR_WIDTH * SIFT_DESCR_HIST_BINS, config_.descriptorType);
-        }
-
-        // Cleanup extrema bitarray buffers
-        for (auto& buffer : layerExtremaBitarrays) {
-            RELEASE_IF_MANUAL(buffer);
         }
 
         return true;

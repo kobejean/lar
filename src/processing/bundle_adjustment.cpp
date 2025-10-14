@@ -125,7 +125,7 @@ namespace lar {
       optimizer.initializeOptimization(0);
       optimizer.optimize(iteration[i]);
       rescaleToMatchOdometry();
-      // markOutliers(chi_threshold[i]);
+      markOutliers(chi_threshold[i]);
     }
 
     // // Final round: remove robust kernels for fine-tuning
@@ -140,7 +140,7 @@ namespace lar {
     //   }
     // }
 
-    markOutliers(5.991);
+    // markOutliers(5.991);
     optimizer.initializeOptimization(0);
     optimizer.optimize(50);
     markOutliers(4.605);
@@ -348,10 +348,10 @@ namespace lar {
     e->setMeasurement(pose_change);
     
     double distance = pose_change.translation().norm();
-    double distance_scale = 1.0 / std::max(0.1, distance); // Avoid division by zero
+    double distance_scale = 1.0 / std::max(0.1, distance);
     Eigen::MatrixXd info = Eigen::MatrixXd::Zero(6,6);
-    info.block<3,3>(0,0) = Eigen::Matrix3d::Identity() * 100 * distance_scale; // very low translation weight
-    info.block<3,3>(3,3) = Eigen::Matrix3d::Identity() * 200 * distance_scale; // very low rotation weight
+    info.block<3,3>(0,0) = Eigen::Matrix3d::Identity() * 25 * distance_scale;
+    info.block<3,3>(3,3) = Eigen::Matrix3d::Identity() * 50 * distance_scale;
     e->setInformation(info);
     // g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
     // rk->setDelta(sqrt(12.592));
