@@ -650,15 +650,9 @@ bool SIFTMetal::detectAndCompute(const cv::Mat& img,
 
         keypoints.clear();
 
-        // Producer-consumer synchronization
-        auto keypointsMutex = std::make_shared<std::mutex>();
-        int totalLayers = nOctaves * config_.nOctaveLayers;
-        auto allKeypoints = std::make_shared<std::vector<std::vector<cv::KeyPoint>>>(totalLayers);
-        auto allDescriptors = std::make_shared<std::vector<cv::Mat>>(totalLayers);
-        auto completedLayers = std::make_shared<std::atomic<int>>(0);
-
-        std::vector<id<MTLCommandBuffer>> allCommandBuffers;
-        allCommandBuffers.reserve(totalLayers);
+        // Single command buffer for entire frame (simpler, less driver overhead)
+        id<MTLCommandBuffer> cmdBuf = [impl_->commandQueue commandBuffer];
+        cmdBuf.label = @"SIFT Feature Detection";
 
         // Upload octave 0 image to staging buffer (CPU → staging buffer)
         {
@@ -668,7 +662,6 @@ bool SIFTMetal::detectAndCompute(const cv::Mat& img,
             size_t alignedRowBytes = ((rowBytes + METAL_BUFFER_ALIGNMENT - 1) / METAL_BUFFER_ALIGNMENT) * METAL_BUFFER_ALIGNMENT;
 
             float* imagePtr = (float*)impl_->imageBuffer.contents;
-            // float* imagePtr = (float*)impl_->octaveBuffers[0][0].contents;
             size_t alignedRowFloats = alignedRowBytes / sizeof(float);
 
             for (int row = 0; row < octaveHeight; row++) {
@@ -678,7 +671,7 @@ bool SIFTMetal::detectAndCompute(const cv::Mat& img,
             }
         }
 
-        // Submit per-layer command buffers for all octaves
+        // Encode all GPU work into single command buffer
         for (int o = 0; o < nOctaves; o++) {
             int octaveWidth = base.cols >> o;
             int octaveHeight = base.rows >> o;
@@ -702,18 +695,15 @@ bool SIFTMetal::detectAndCompute(const cv::Mat& img,
                 dog_pyr[dogIdx + i] = cv::Mat(octaveHeight, octaveWidth, CV_32F, dogBuffers[i].contents, alignedRowBytes);
             }
 
-            // Submit per-layer command buffers
+            // Encode GPU work for all layers in this octave
             for (int layer = 1; layer <= config_.nOctaveLayers; layer++) {
-                id<MTLCommandBuffer> layerCmdBuf = [impl_->commandQueue commandBuffer];
-                layerCmdBuf.label = [NSString stringWithFormat:@"Octave %d Layer %d", o, layer];
-
-                // For octave 1+ layer 1: encode GPU resize)
+                // For octave 1+ layer 1: encode GPU resize
                 if (layer == 1) {
                     std::vector<id<MTLTexture>>& gaussTextures = impl_->octaveTextures[o];
                     id<MTLTexture> tempTexture = impl_->tempTextures[o];
                     if (o > 0) {
                         std::vector<id<MTLTexture>>& prevGaussTextures = impl_->octaveTextures[o - 1];
-                        id<MTLComputeCommandEncoder> resizeEncoder = [layerCmdBuf computeCommandEncoder];
+                        id<MTLComputeCommandEncoder> resizeEncoder = [cmdBuf computeCommandEncoder];
                         [resizeEncoder setComputePipelineState:impl_->resizePipeline];
                         [resizeEncoder setTexture:prevGaussTextures[nLevels-3] atIndex:0];  // Source texture
                         [resizeEncoder setTexture:gaussTextures[0] atIndex:1];              // Destination texture
@@ -737,7 +727,7 @@ bool SIFTMetal::detectAndCompute(const cv::Mat& img,
                             // This ensures CPU upload to imageBuffer is isolated from GPU processing
 
                             // Horizontal gaussian blur (staging → temp)
-                            id<MTLComputeCommandEncoder> blurHorizEncoder = [layerCmdBuf computeCommandEncoder];
+                            id<MTLComputeCommandEncoder> blurHorizEncoder = [cmdBuf computeCommandEncoder];
 
                             [blurHorizEncoder setComputePipelineState:impl_->blurHorizPipeline];
                             [blurHorizEncoder setTexture:impl_->imageTexture atIndex:0];  // Read from staging texture
@@ -752,7 +742,7 @@ bool SIFTMetal::detectAndCompute(const cv::Mat& img,
                             [blurHorizEncoder endEncoding];
 
                             // Vertical gaussian blur (temp → gaussTextures[0])
-                            id<MTLComputeCommandEncoder> blurVertEncoder = [layerCmdBuf computeCommandEncoder];
+                            id<MTLComputeCommandEncoder> blurVertEncoder = [cmdBuf computeCommandEncoder];
 
                             [blurVertEncoder setComputePipelineState:impl_->blurVertPipeline];
                             [blurVertEncoder setTexture:impl_->tempTextures[o] atIndex:0];
@@ -775,7 +765,7 @@ bool SIFTMetal::detectAndCompute(const cv::Mat& img,
                     std::vector<id<MTLTexture>>& gaussTextures = impl_->octaveTextures[o];
                     std::vector<id<MTLTexture>>& dogTextures = impl_->dogTextures[o];
 
-                    id<MTLComputeCommandEncoder> encoder = [layerCmdBuf computeCommandEncoder];
+                    id<MTLComputeCommandEncoder> encoder = [cmdBuf computeCommandEncoder];
 
                     [encoder setComputePipelineState:impl_->blurAndDoGPipeline];
                     [encoder setTexture:gaussTextures[i-1] atIndex:0];  // Previous Gaussian texture
@@ -803,7 +793,7 @@ bool SIFTMetal::detectAndCompute(const cv::Mat& img,
                 // Get DoG texture views for this octave
                 std::vector<id<MTLTexture>>& dogTextures = impl_->dogTextures[o];
 
-                id<MTLComputeCommandEncoder> encoder = [layerCmdBuf computeCommandEncoder];
+                id<MTLComputeCommandEncoder> encoder = [cmdBuf computeCommandEncoder];
 
                 [encoder setComputePipelineState:impl_->extremaPipeline];
                 [encoder setTexture:dogTextures[layer-1] atIndex:0];  // DoG layer below
@@ -821,70 +811,55 @@ bool SIFTMetal::detectAndCompute(const cv::Mat& img,
                 [encoder endEncoding];
 
                 RELEASE_IF_MANUAL(paramsBuffer);
+            }
+        }
 
-                // Add completion handler for async keypoint+descriptor extraction
-                [layerCmdBuf addCompletedHandler:^(id<MTLCommandBuffer> commandBuffer) {
-                    uint32_t* layerExtremaBitarray = (uint32_t*)layerExtremaBitarrays[layerIndex].contents;
+        // Commit and wait for GPU work to complete
+        [cmdBuf commit];
+        [cmdBuf waitUntilCompleted];
 
-                    std::vector<cv::KeyPoint> localKeypoints;
-                    cv::Mat localDescriptors;
+        // Sequential CPU extraction after GPU completes (no mutex contention, simpler code)
+        for (int o = 0; o < nOctaves; o++) {
+            int octaveWidth = base.cols >> o;
 
-                    extractKeypointsAndDescriptors(
-                        layerExtremaBitarray,
-                        o,
-                        nLevels,
-                        layerExtremaBitarraySizes[layerIndex],
-                        octaveWidth,
-                        layer,
-                        config_.nOctaveLayers,
-                        (float)config_.contrastThreshold,
-                        (float)config_.edgeThreshold,
-                        (float)config_.sigma,
-                        gauss_pyr,
-                        dog_pyr,
-                        localKeypoints,
-                        localDescriptors,
-                        config_.descriptorType
-                    );
+            for (int layer = 1; layer <= config_.nOctaveLayers; layer++) {
+                int layerIndex = o * config_.nOctaveLayers + (layer - 1);
+                uint32_t* layerExtremaBitarray = (uint32_t*)layerExtremaBitarrays[layerIndex].contents;
 
-                    {
-                        std::lock_guard<std::mutex> lock(*keypointsMutex);
-                        (*allKeypoints)[layerIndex] = localKeypoints;
-                        (*allDescriptors)[layerIndex] = localDescriptors;
+                std::vector<cv::KeyPoint> localKeypoints;
+                cv::Mat localDescriptors;
+
+                extractKeypointsAndDescriptors(
+                    layerExtremaBitarray,
+                    o,
+                    nLevels,
+                    layerExtremaBitarraySizes[layerIndex],
+                    octaveWidth,
+                    layer,
+                    config_.nOctaveLayers,
+                    (float)config_.contrastThreshold,
+                    (float)config_.edgeThreshold,
+                    (float)config_.sigma,
+                    gauss_pyr,
+                    dog_pyr,
+                    localKeypoints,
+                    localDescriptors,
+                    config_.descriptorType
+                );
+
+                // Append keypoints and descriptors directly (deterministic order)
+                if (!localKeypoints.empty()) {
+                    keypoints.insert(keypoints.end(), localKeypoints.begin(), localKeypoints.end());
+                }
+
+                if (!localDescriptors.empty()) {
+                    if (descriptorsMat.empty()) {
+                        descriptorsMat = localDescriptors.clone();
+                    } else {
+                        cv::vconcat(descriptorsMat, localDescriptors, descriptorsMat);
                     }
-
-                    completedLayers->fetch_add(1, std::memory_order_release);
-                }];
-
-                [layerCmdBuf commit];
-                allCommandBuffers.push_back(layerCmdBuf);
+                }
             }
-        }
-
-        // Wait for all command buffers to complete
-        for (auto& cmdBuf : allCommandBuffers) {
-            [cmdBuf waitUntilCompleted];
-        }
-
-        // Merge keypoints in deterministic layer order
-        for (size_t i = 0; i < allKeypoints->size(); i++) {
-            const auto& layerKeypoints = (*allKeypoints)[i];
-            if (!layerKeypoints.empty()) {
-                keypoints.insert(keypoints.end(), layerKeypoints.begin(), layerKeypoints.end());
-            }
-        }
-
-        // Merge descriptors in same layer order
-        std::vector<cv::Mat> nonEmptyDescriptors;
-        nonEmptyDescriptors.reserve(allDescriptors->size());
-        for (const auto& mat : *allDescriptors) {
-            if (!mat.empty()) {
-                nonEmptyDescriptors.push_back(mat);
-            }
-        }
-
-        if (!nonEmptyDescriptors.empty()) {
-            cv::vconcat(nonEmptyDescriptors, descriptorsMat);
         }
 
         // Assign result to OutputArray
