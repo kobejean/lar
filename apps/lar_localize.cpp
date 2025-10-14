@@ -6,6 +6,11 @@
 #include <unordered_set>
 #include <cmath>
 #include <algorithm>
+#include <thread>
+#include <mutex>
+#include <chrono>
+#include <atomic>
+#include <vector>
 
 #include <Eigen/Dense>
 #include <opencv2/opencv.hpp>
@@ -23,38 +28,155 @@ std::string getPathPrefix(std::string directory, int id) {
   return directory + prefix;
 };
 
+struct FrameData {
+  lar::Frame frame;
+  cv::Mat image;
+  bool localized = false;
+  Eigen::Matrix4d result_transform;
+};
+
 int main(int argc, const char* argv[]){
-  // string localize = "./input/aizu-park-4-proc/";
+  // Parse command line arguments
+  int num_threads = std::thread::hardware_concurrency();
+  if (argc > 1) {
+    num_threads = std::stoi(argv[1]);
+  }
+
+  // string localize = "./input/aizu-park-4-ext/";
   string localize = "./input/aizu-park-sunny/";
 
+  std::cout << "=== Multithreaded Localization Test ===" << std::endl;
+  std::cout << "Using " << num_threads << " threads" << std::endl;
+  std::cout << "Hardware concurrency: " << std::thread::hardware_concurrency() << std::endl;
+  std::cout << std::endl;
+
+  // Load map
+  std::cout << "Loading map..." << std::endl;
+  auto map_load_start = std::chrono::high_resolution_clock::now();
   std::ifstream map_data_ifs("./output/aizu-park-map/map.json");
-  std::cout << "parse map" << std::endl;
   nlohmann::json map_data = nlohmann::json::parse(map_data_ifs);
   lar::Map map = map_data;
-  lar::Tracker tracker(map);
+  auto map_load_end = std::chrono::high_resolution_clock::now();
+  auto map_load_duration = std::chrono::duration_cast<std::chrono::milliseconds>(map_load_end - map_load_start);
+  std::cout << "Map loaded in " << map_load_duration.count() << " ms" << std::endl;
+  std::cout << std::endl;
 
-  // Using original FLANN matching implementation
-  std::cout << "FLANN matching enabled" << std::endl;
-  
+  // Pre-load all frames and images into memory
+  std::cout << "Pre-loading all images into memory..." << std::endl;
+  auto load_start = std::chrono::high_resolution_clock::now();
+
   std::vector<lar::Frame> frames = nlohmann::json::parse(std::ifstream(localize+"frames.json"));
-  int successful = 0;
-  for (auto& frame : frames) {
-    std::cout << std::endl << "LOCALIZING FRAME " << frame.id << std::endl;
-    std::string image_path = getPathPrefix(localize, frame.id) + "image.jpeg";
-    cv::Mat image = cv::imread(image_path, cv::IMREAD_GRAYSCALE);
-    // Use frame position for spatial query (assuming frame.extrinsics contains camera pose)
-    double query_x = frame.extrinsics(0, 3);
-    double query_z = frame.extrinsics(2, 3);
-    double query_diameter = 20.0; // 20 meter search radius
-    
-    Eigen::Matrix4d result_transform;
-    if (tracker.localize(image, frame, query_x, query_z, query_diameter, result_transform)) {
-      frame.extrinsics = result_transform;
-      std::cout << "transform:" << frame.extrinsics << std::endl;
-      successful++;
+  std::vector<FrameData> frame_data(frames.size());
+
+  for (size_t i = 0; i < frames.size(); i++) {
+    frame_data[i].frame = frames[i];
+    std::string image_path = getPathPrefix(localize, frames[i].id) + "image.jpeg";
+    frame_data[i].image = cv::imread(image_path, cv::IMREAD_GRAYSCALE);
+
+    if (frame_data[i].image.empty()) {
+      std::cerr << "Warning: Failed to load image for frame " << frames[i].id << std::endl;
     }
   }
 
-  std::cout << "Successfully localized " << successful << "/" << frames.size() << " images!" << std::endl;
+  auto load_end = std::chrono::high_resolution_clock::now();
+  auto load_duration = std::chrono::duration_cast<std::chrono::milliseconds>(load_end - load_start);
+  std::cout << "Loaded " << frame_data.size() << " images in " << load_duration.count() << " ms" << std::endl;
+  std::cout << std::endl;
+
+  std::cout << "FLANN matching enabled" << std::endl;
+  std::cout << std::endl;
+
+  // Thread synchronization
+  std::atomic<int> next_frame_index(0);
+  std::atomic<int> successful(0);
+  std::atomic<int> processed(0);
+  std::mutex cout_mutex;
+
+  // Worker function - each thread creates its own Tracker instance
+  auto worker = [&]() {
+    // Get image size from first valid image
+    cv::Size imageSize(1920, 1440); // Default ARKit size
+    for (const auto& data : frame_data) {
+      if (!data.image.empty()) {
+        imageSize = data.image.size();
+        break;
+      }
+    }
+
+    // Create thread-local tracker (Tracker is NOT thread-safe, has mutable state)
+    lar::Tracker tracker(map, imageSize);
+
+    while (true) {
+      int index = next_frame_index.fetch_add(1);
+      if (index >= static_cast<int>(frame_data.size())) {
+        break;
+      }
+
+      auto& data = frame_data[index];
+      auto& frame = data.frame;
+      auto& image = data.image;
+
+      if (image.empty()) {
+        processed.fetch_add(1);
+        continue;
+      }
+
+      // Use frame position for spatial query
+      double query_x = frame.extrinsics(0, 3);
+      double query_z = frame.extrinsics(2, 3);
+      double query_diameter = 20.0; // 20 meter search radius
+
+      Eigen::Matrix4d result_transform;
+      bool success = tracker.localize(image, frame, query_x, query_z, query_diameter, result_transform);
+
+      if (success) {
+        data.localized = true;
+        data.result_transform = result_transform;
+        successful.fetch_add(1);
+      }
+
+      int current_processed = processed.fetch_add(1) + 1;
+
+      {
+        std::lock_guard<std::mutex> lock(cout_mutex);
+        std::cout << "Thread " << std::this_thread::get_id()
+                  << " - Frame " << frame.id << " [" << current_processed << "/" << frame_data.size() << "] "
+                  << (success ? "✓ SUCCESS" : "✗ FAILED") << std::endl;
+      }
+    }
+
+  };
+
+  // Run multithreaded localization
+  std::cout << "Starting multithreaded localization..." << std::endl;
+  auto start_time = std::chrono::high_resolution_clock::now();
+
+  std::vector<std::thread> threads;
+  for (int i = 0; i < num_threads; i++) {
+    threads.emplace_back(worker);
+  }
+
+  for (auto& thread : threads) {
+    thread.join();
+  }
+
+  auto end_time = std::chrono::high_resolution_clock::now();
+  auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+
+  // Calculate statistics
+  double seconds = duration.count() / 1000.0;
+  double fps = frame_data.size() / seconds;
+  double avg_ms_per_frame = duration.count() / static_cast<double>(frame_data.size());
+
+  std::cout << std::endl;
+  std::cout << "=== Results ===" << std::endl;
+  std::cout << "Successfully localized: " << successful.load() << "/" << frame_data.size() << " frames" << std::endl;
+  std::cout << "Success rate: " << (100.0 * successful.load() / frame_data.size()) << "%" << std::endl;
+  std::cout << "Total processing time: " << duration.count() << " ms (" << seconds << " s)" << std::endl;
+  std::cout << "Average time per frame: " << avg_ms_per_frame << " ms" << std::endl;
+  std::cout << "Throughput: " << fps << " FPS" << std::endl;
+  std::cout << std::endl;
+  std::cout << "Configuration: " << num_threads << " threads" << std::endl;
+
   return 0;
 }

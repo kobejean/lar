@@ -179,7 +179,7 @@ def extract_opencv_sift_features(work_dir, output_features=True, max_num_feature
             
             # Filter by scale to keep the largest-scale (most prominent) features
             # First, filter out keypoints that are too small (size < 3.0)
-            min_scale = 3.5
+            min_scale = 2.9
             scale_filtered_keypoints = []
             scale_filtered_descriptors = []
 

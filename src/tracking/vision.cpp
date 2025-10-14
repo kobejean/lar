@@ -9,23 +9,36 @@ namespace lar {
 
   const float RATIO_TEST_THRESHOLD = 0.99f;
   const float MAX_DISTANCE_THRESHOLD = 210.0f;
-  const bool ENABLE_CROSS_CHECK = false; // seems best to use only for image to image matching
 
-  Vision::Vision() {
-    detector = cv::SIFT::create(0, 3, 0.02, 10, 1.6, CV_8U);
+  Vision::Vision(cv::Size imageSize) {
+    // Create SIFT config with custom parameters
+    SIFTConfig config(imageSize);
+    config.contrastThreshold = 0.02;  // Custom: lower than default 0.04
+    config.descriptorType = CV_8U;     // Custom: uint8 instead of float32
+
+    // Create SIFT detector using cv::Ptr for proper destruction order
+    detector = cv::makePtr<SIFT>(config);
 
     cv::Ptr<cv::flann::IndexParams> indexParams = cv::makePtr<cv::flann::KDTreeIndexParams>(3);
     cv::Ptr<cv::flann::SearchParams> searchParams = cv::makePtr<cv::flann::SearchParams>(32);
     flann_matcher = cv::FlannBasedMatcher(indexParams, searchParams);
-
     bf_matcher = cv::BFMatcher(cv::NORM_L2, false);
+  }
+
+  void Vision::configureImageSize(cv::Size imageSize) {
+    // Recreate SIFT detector with new image dimensions
+    SIFTConfig config(imageSize);
+    config.contrastThreshold = 0.02;  // Custom: lower than default 0.04
+    config.descriptorType = CV_8U;     // Custom: uint8 instead of float32
+
+    detector = cv::makePtr<SIFT>(config);
+    std::cout << "Vision reconfigured for image size: " << imageSize.width << "x" << imageSize.height << std::endl;
   }
 
   void Vision::extractFeatures(cv::InputArray image, cv::InputArray mask, std::vector<cv::KeyPoint>& kpts, cv::Mat& desc) {
     auto start_extract = std::chrono::high_resolution_clock::now();
 
     size_t max_features = 8192*2;
-    float min_scale = 2.9;
 
     auto start_sift = std::chrono::high_resolution_clock::now();
     detector->detectAndCompute(image, mask, kpts, desc);
@@ -34,9 +47,7 @@ namespace lar {
     // Filter out feature points that are too small
     std::vector<std::pair<float, int>> scale_indices;
     for (size_t i = 0; i < kpts.size(); ++i) {
-      if (kpts[i].size >= min_scale) {
-        scale_indices.emplace_back(kpts[i].size, i);
-      }
+      scale_indices.emplace_back(kpts[i].size, i);
     }
 
     // Sort by scale in descending order (largest first)
@@ -70,12 +81,13 @@ namespace lar {
     auto total_extract_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_extract - start_extract).count();
 
     std::cout << "Feature Extraction - SIFT: " << sift_time << "ms, Total: " << total_extract_time << std::endl;
-    std::cout << "Filtered to " << kpts.size() << " largest-scale features (scale >= " << min_scale << ") "
+    std::cout << "Filtered to " << kpts.size() << " largest-scale features "
               << "(scale range: " << (scale_indices.empty() ? 0.0f : scale_indices[0].first) << " - "
               << (num_features > 0 ? scale_indices[num_features-1].first : 0.0f) << ")" << std::endl;
   }
 
-  std::vector<cv::DMatch> Vision::matchOneWay(const cv::Mat& desc1, const cv::Mat& desc2) const {
+  std::vector<cv::DMatch> Vision::matchOneWay(const cv::Mat& desc1, const cv::Mat& desc2,
+                                               const std::vector<cv::KeyPoint>& kpts) {
     auto start_total = std::chrono::high_resolution_clock::now();
 
     std::vector<cv::DMatch> filtered_matches;
@@ -105,12 +117,14 @@ namespace lar {
     std::vector<cv::DMatch> distance_matches;
     distance_matches.reserve(desc1.rows / 8); // Conservative estimate for distance matches
     for (const auto& nn_match : nn_matches) {
+      if (nn_match.empty()) continue;
+
       float dist1 = nn_match[0].distance;
       if (dist1 < MAX_DISTANCE_THRESHOLD && nn_match.size() >= 2 && dist1 < RATIO_TEST_THRESHOLD * nn_match[1].distance) {
         // Passed distance and ratio test
         filtered_matches.push_back(nn_match[0]);
       } else {
-        for (auto& match : nn_match) {
+        for (const auto& match : nn_match) {
           if (match.distance > MAX_DISTANCE_THRESHOLD || dist1 < RATIO_TEST_THRESHOLD * match.distance) break;
           // these fail ratio test but might still help pnp
           distance_matches.push_back(match);
@@ -119,9 +133,22 @@ namespace lar {
     }
     std::cout << "ratio passed: " << filtered_matches.size() << std::endl;
 
-    std::sort(distance_matches.begin(), distance_matches.end(), [](const cv::DMatch& a, const cv::DMatch& b) {
-      return a.distance < b.distance;
-    });
+    const float SIZE_THRESHOLD = 3.5f;
+
+    std::sort(distance_matches.begin(), distance_matches.end(),
+      [&kpts, SIZE_THRESHOLD](const cv::DMatch& a, const cv::DMatch& b) {
+        // return a.distance < b.distance;
+        float size_a = kpts[a.queryIdx].size;
+        float size_b = kpts[b.queryIdx].size;
+
+        // If both are large features, sort by distance
+        if (size_a > SIZE_THRESHOLD && size_b > SIZE_THRESHOLD) {
+          return a.distance < b.distance;
+        }
+
+        // Otherwise, sort by size (larger first)
+        return size_a > size_b;
+      });
 
     filtered_matches.insert(filtered_matches.end(),
                        std::make_move_iterator(distance_matches.begin()),
@@ -139,28 +166,11 @@ namespace lar {
     return filtered_matches;
   }
 
-  std::vector<cv::DMatch> Vision::match(const cv::Mat& desc1, const cv::Mat& desc2) {
-    std::vector<cv::DMatch> final_matches;
-    if (desc1.rows <= 2 || desc2.rows <= 2) return final_matches;
+  std::vector<cv::DMatch> Vision::match(const cv::Mat& desc1, const cv::Mat& desc2,
+                                         const std::vector<cv::KeyPoint>& kpts) {
+    if (desc1.rows <= 2 || desc2.rows <= 2) return {};
 
     // Use simple one-way matching
-    std::vector<cv::DMatch> matches_12 = matchOneWay(desc1, desc2);
-
-    if (!ENABLE_CROSS_CHECK) return matches_12;
-
-    std::vector<cv::DMatch> matches_21 = matchOneWay(desc2, desc1);
-
-    // Cross-check: keep only bidirectional matches
-    for (const auto& match_12 : matches_12) {
-      for (const auto& match_21 : matches_21) {
-        if (match_12.queryIdx == match_21.trainIdx &&
-            match_12.trainIdx == match_21.queryIdx) {
-          final_matches.push_back(match_12);
-          break;
-        }
-      }
-    }
-
-    return final_matches;
+    return matchOneWay(desc1, desc2, kpts);
   }
 }

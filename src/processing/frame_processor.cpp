@@ -12,7 +12,9 @@
 
 namespace lar {
 
-  FrameProcessor::FrameProcessor(std::shared_ptr<Mapper::Data> data) : data(data) {
+  FrameProcessor::FrameProcessor(std::shared_ptr<Mapper::Data> data)
+    : data(data), vision(cv::Size(1920, 1440)) {
+    // Note: Using typical ARKit image size (1920x1440)
   }
 
   void FrameProcessor::process(Frame& frame) {
@@ -72,7 +74,7 @@ namespace lar {
     std::cout << "local_landmarks: " << results.size() << std::endl;
 
     // get matches
-    std::map<size_t, size_t> matches = getMatches(desc, local_desc);
+    std::map<size_t, size_t> matches = getMatches(desc, local_desc, kpts);
     
     size_t landmark_count = kpts.size();
     std::vector<Landmark> new_landmarks;
@@ -90,9 +92,9 @@ namespace lar {
     data->map.landmarks.insert(new_landmarks, &results);
   }
 
-  std::map<size_t, size_t> FrameProcessor::getMatches(const cv::Mat &query_desc, const cv::Mat &train_desc) {
+  std::map<size_t, size_t> FrameProcessor::getMatches(const cv::Mat &query_desc, const cv::Mat &train_desc, const std::vector<cv::KeyPoint> &kpts) {
     // Get matches
-    std::vector<cv::DMatch> matches = vision.match(query_desc, train_desc);
+    std::vector<cv::DMatch> matches = vision.match(query_desc, train_desc, kpts);
     std::cout << "matches: " << matches.size() << std::endl;
 
     // Populate `idx_matched` map

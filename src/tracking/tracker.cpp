@@ -5,7 +5,7 @@
 
 namespace lar {
 
-  Tracker::Tracker(Map& map) : map(map), last_gravity_angle_difference(0.0) {
+  Tracker::Tracker(Map& map, cv::Size imageSize) : vision(imageSize), map(map), last_gravity_angle_difference(0.0) {
     usac_params = cv::UsacParams();
     usac_params.confidence=0.99;
     usac_params.isParallel=false;
@@ -18,6 +18,10 @@ namespace lar {
     // usac_params.final_polisher = cv::PolishingMethod::POLISHING_MAGSAC;
     // usac_params.final_polisher_iterations = 10;
     usac_params.threshold=8.0;
+  }
+
+  void Tracker::configureImageSize(cv::Size imageSize) {
+    vision.configureImageSize(imageSize);
   }
 
   bool Tracker::localize(cv::InputArray image, const Frame &frame, double query_x, double query_z, double query_diameter, Eigen::Matrix4d &result_transform, const Eigen::Matrix4d &initial_guess, bool use_initial_guess) {
@@ -82,20 +86,6 @@ namespace lar {
     return success;
   }
 
-  bool Tracker::localize(cv::InputArray image, const cv::Mat& intrinsics, cv::Mat &transform, const cv::Mat &gvec) {
-    cv::Mat rvec, tvec;
-    if (!transform.empty()) {
-      std::cout << "transform" << transform << std::endl;
-      fromTransform(transform, rvec, tvec);
-    }
-
-    bool success = localize(image, intrinsics, cv::Mat(), rvec, tvec, gvec);
-    if (success) {
-      toTransform(rvec, tvec, transform);
-    }
-    return success;
-  }
-
   bool Tracker::localize(cv::InputArray image, const cv::Mat& intrinsics, const cv::Mat& dist_coeffs, cv::Mat &rvec, cv::Mat &tvec, const cv::Mat &gvec, double query_x, double query_z, double query_diameter) {
     for (Landmark *landmark : local_landmarks) { landmark->is_matched = false; }
     this->matches.clear();
@@ -132,7 +122,7 @@ namespace lar {
     cv::Mat desc;
     vision.extractFeatures(image, cv::noArray(), kpts, desc);
     
-    std::vector<cv::DMatch> matches = vision.match(desc, map_desc);
+    std::vector<cv::DMatch> matches = vision.match(desc, map_desc, kpts);
     if (matches.size() <= 3) return false; 
     
     cv::Mat object_points = objectPoints(local_landmarks, matches);
@@ -162,13 +152,11 @@ namespace lar {
       landmark->is_matched = true;
       this->inliers.emplace_back(landmark, kpts[match.queryIdx]);
     }
-    // for (auto& match : matches) {
-    //   this->inliers.emplace_back(local_landmarks[match.trainIdx], kpts[match.queryIdx]);
-    // }
+    
 // #endif
 
     return success;
-}
+  }
 
   // Private Methods
 
@@ -230,6 +218,7 @@ namespace lar {
 
   // Private method to check gravity vector consistency and store angle difference
   bool Tracker::checkGravityVector(const cv::Mat& rvec, const cv::Mat& gvec, float angleTolerance) {
+    if (rvec.empty()) return false;
     // World gravity vector (pointing down in Y direction)
     cv::Mat worldGravity = (cv::Mat_<double>(3,1) << 0.0, -1.0, 0.0);
     

@@ -37,6 +37,11 @@ jobs:
           build-essential \
           cmake \
           git
+    - name: Install dependencies (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        brew update
+        brew install eigen suite-sparse
 
     - name: Update Submodules
       run: git submodule update --init --recursive

@@ -218,12 +218,20 @@ def insert_two_view_geometries_from_arkit(frames, database_path, use_empty_match
         # Compute pair_id
         pair_id = image_ids_to_pair_id(image_id1, image_id2)
 
+        # Check if this pair already has two-view geometry from feature matching
+        cursor.execute('SELECT pair_id FROM two_view_geometries WHERE pair_id = ?', (int(pair_id),))
+        existing = cursor.fetchone()
+
+        if existing:
+            # Skip - feature-based geometry already exists and is likely higher quality
+            continue
+
         # Use identity matrices for F, E, H (not used by bundle adjustment)
         F = np.eye(3)
         E = np.eye(3)
         H = np.eye(3)
 
-        # Insert into two_view_geometries table
+        # Insert into two_view_geometries table (only if no existing entry)
         cursor.execute('''
             INSERT INTO two_view_geometries
             (pair_id, rows, cols, data, config, F, E, H, qvec, tvec)
