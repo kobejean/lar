@@ -27,6 +27,9 @@ target_sources(lar_tracking PRIVATE
   ${SIFT_SOURCES}
 )
 
+# Disable fast-math for numerical precision in SIFT computations
+# target_compile_options(lar_tracking PRIVATE -fno-fast-math)
+
 # ============================================================================
 # Metal Shader Compilation
 # ============================================================================

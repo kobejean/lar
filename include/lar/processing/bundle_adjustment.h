@@ -51,7 +51,8 @@ namespace lar {
 
       void markOutliers(double chi_threshold);
       void markOutliers(double landmark_chi_threshold, double odometry_chi_threshold);
-      
+      void printReprojectionError();
+
       // Staged optimization methods
       void optimizePosesOnly(int iterations);
       void optimizeStructureOnly(int iterations);

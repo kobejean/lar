@@ -30,7 +30,7 @@ private:
 static thread_local AlignedBuffer tls_buffer_common;
 
 std::vector<float> createGaussianKernel(double sigma) {
-    int ksize = cvRound(sigma * 3) * 2 + 1;
+    int ksize = cvRound(sigma*4*2 + 1)|1;
     cv::Mat kernel = cv::getGaussianKernel(ksize, sigma, CV_32F);
 
     std::vector<float> result(ksize);

@@ -3,7 +3,7 @@
 
 #ifndef LAR_USE_METAL_SIFT
 
-#include "sift_impl_cpu.h"
+#include "lar/tracking/sift/sift.h"
 #include "lar/tracking/sift/sift_common.h"
 #include <opencv2/imgproc.hpp>
 #include <opencv2/core/hal/hal.hpp>
@@ -13,17 +13,39 @@
 #include <iostream>
 #include <chrono>
 
-// SIMD disabled for now - can be enabled later for optimization
-#define SIMD_ENABLED 0
-#define CV_SIMD 0
-#define CV_SIMD_SCALABLE 0
-
 namespace lar {
 
-// Use float for DoG pyramids
-typedef float sift_wt;
+struct SIFT::Impl {
+    SIFTConfig config;
 
-// Simple aligned buffer allocator
+    explicit Impl(const SIFTConfig& cfg);
+    ~Impl() = default;
+
+    // Delete copy operations
+    Impl(const Impl&) = delete;
+    Impl& operator=(const Impl&) = delete;
+
+    // Allow move operations
+    Impl(Impl&& other) noexcept = default;
+    Impl& operator=(Impl&& other) noexcept = default;
+
+    void detectAndCompute(cv::InputArray image, cv::InputArray mask,
+                         std::vector<cv::KeyPoint>& keypoints,
+                         cv::OutputArray descriptors,
+                         bool useProvidedKeypoints);
+
+    int descriptorSize() const;
+    int descriptorType() const;
+    int defaultNorm() const;
+
+private:
+    void buildGaussianPyramid(const cv::Mat& base, std::vector<cv::Mat>& pyr, int nOctaves) const;
+    void buildDoGPyramid(const std::vector<cv::Mat>& gpyr, std::vector<cv::Mat>& dogpyr) const;
+    void findScaleSpaceExtrema(const std::vector<cv::Mat>& gauss_pyr,
+                              const std::vector<cv::Mat>& dog_pyr,
+                              std::vector<cv::KeyPoint>& keypoints) const;
+};
+
 class AlignedBuffer {
 public:
     AlignedBuffer() : data_(nullptr), size_(0) {}
@@ -42,12 +64,10 @@ private:
     size_t size_;
 };
 
-// Thread-local storage for aligned buffers
 static thread_local AlignedBuffer tls_buffer1;
 static thread_local AlignedBuffer tls_buffer2;
 static thread_local AlignedBuffer tls_buffer3;
 
-// Helper function to unpack octave information
 static inline void unpackOctave(const cv::KeyPoint& kpt, int& octave, int& layer, float& scale) {
     octave = kpt.octave & 255;
     layer = (kpt.octave >> 8) & 255;
@@ -55,7 +75,6 @@ static inline void unpackOctave(const cv::KeyPoint& kpt, int& octave, int& layer
     scale = octave >= 0 ? 1.f/(1 << octave) : (float)(1 << -octave);
 }
 
-// Create initial image with upscaling and blurring
 static cv::Mat createInitialImage(const cv::Mat& img, bool doubleImageSize, float sigma) {
     cv::Mat gray, gray_fpt;
 
@@ -99,24 +118,19 @@ static void findScaleSpaceExtremaInLayer(
     int count = 0;
 
     for (int r = range.start; r < range.end; r++) {
-        const sift_wt* currptr = img.ptr<sift_wt>(r);
-        const sift_wt* prevptr = prev.ptr<sift_wt>(r);
-        const sift_wt* nextptr = next.ptr<sift_wt>(r);
+        const float* currptr = img.ptr<float>(r);
+        const float* prevptr = prev.ptr<float>(r);
+        const float* nextptr = next.ptr<float>(r);
         int c = SIFT_IMG_BORDER;
 
-#if (CV_SIMD || CV_SIMD_SCALABLE)
-        // SIMD code omitted for brevity - can be re-enabled
-#endif // CV_SIMD
-
-        // Scalar fallback for remaining elements
         for (; c < cols-SIFT_IMG_BORDER; c++) {
-            sift_wt val = currptr[c];
+            float val = currptr[c];
             if (std::abs(val) <= threshold)
                 continue;
 
-            sift_wt _00,_01,_02;
-            sift_wt _10,    _12;
-            sift_wt _20,_21,_22;
+            float _00,_01,_02;
+            float _10,    _12;
+            float _20,_21,_22;
 
             _00 = currptr[c-step-1]; _01 = currptr[c-step]; _02 = currptr[c-step+1];
             _10 = currptr[c     -1];                        _12 = currptr[c     +1];
@@ -124,7 +138,7 @@ static void findScaleSpaceExtremaInLayer(
 
             bool calculate = false;
             if (val > 0) {
-                sift_wt vmax = std::max(std::max(std::max(_00,_01),std::max(_02,_10)),
+                float vmax = std::max(std::max(std::max(_00,_01),std::max(_02,_10)),
                                         std::max(std::max(_12,_20),std::max(_21,_22)));
                 if (val >= vmax) {
                     _00 = prevptr[c-step-1]; _01 = prevptr[c-step]; _02 = prevptr[c-step+1];
@@ -139,13 +153,13 @@ static void findScaleSpaceExtremaInLayer(
                         vmax = std::max(std::max(std::max(_00,_01),std::max(_02,_10)),
                                        std::max(std::max(_12,_20),std::max(_21,_22)));
                         if (val >= vmax) {
-                            sift_wt _11p = prevptr[c], _11n = nextptr[c];
+                            float _11p = prevptr[c], _11n = nextptr[c];
                             calculate = (val >= std::max(_11p,_11n));
                         }
                     }
                 }
             } else {
-                sift_wt vmin = std::min(std::min(std::min(_00,_01),std::min(_02,_10)),
+                float vmin = std::min(std::min(std::min(_00,_01),std::min(_02,_10)),
                                         std::min(std::min(_12,_20),std::min(_21,_22)));
                 if (val <= vmin) {
                     _00 = prevptr[c-step-1]; _01 = prevptr[c-step]; _02 = prevptr[c-step+1];
@@ -160,7 +174,7 @@ static void findScaleSpaceExtremaInLayer(
                         vmin = std::min(std::min(std::min(_00,_01),std::min(_02,_10)),
                                        std::min(std::min(_12,_20),std::min(_21,_22)));
                         if (val <= vmin) {
-                            sift_wt _11p = prevptr[c], _11n = nextptr[c];
+                            float _11p = prevptr[c], _11n = nextptr[c];
                             calculate = (val <= std::min(_11p,_11n));
                         }
                     }
@@ -204,11 +218,8 @@ static void findScaleSpaceExtremaInLayer(
     std::cout << "octave " << o << " layer " << i << " added " << count << " keypoints" << std::endl;
 }
 
-// SIFT::Impl Implementation
-SIFT::Impl::Impl(const SIFTConfig& cfg)
-    : config(cfg)
-{
-}
+SIFT::Impl::Impl(const SIFTConfig& cfg) : config(cfg)
+{}
 
 int SIFT::Impl::descriptorSize() const {
     return SIFT_DESCR_WIDTH*SIFT_DESCR_WIDTH*SIFT_DESCR_HIST_BINS;
@@ -299,13 +310,9 @@ void SIFT::Impl::detectAndCompute(cv::InputArray _image, cv::InputArray _mask,
     if (!mask.empty() && mask.type() != CV_8UC1)
         CV_Error(cv::Error::StsBadArg, "mask has incorrect type (!=CV_8UC1)");
 
-    int firstOctave = config.firstOctave;
-    int nOctaves = config.nOctaves;
-
-    // CPU path: separate Gaussian pyramid, DoG pyramid, and extrema detection
     cv::Mat base = createInitialImage(image, config.enableUpsampling, (float)config.sigma);
     std::vector<cv::Mat> gpyr;
-    buildGaussianPyramid(base, gpyr, nOctaves);
+    buildGaussianPyramid(base, gpyr, config.nOctaves);
     std::vector<cv::Mat> dogpyr;
     buildDoGPyramid(gpyr, dogpyr);
     findScaleSpaceExtrema(gpyr, dogpyr, keypoints);
@@ -313,21 +320,17 @@ void SIFT::Impl::detectAndCompute(cv::InputArray _image, cv::InputArray _mask,
     // Adjust keypoint positions for firstOctave = -1
     for (size_t i = 0; i < keypoints.size(); i++) {
         cv::KeyPoint& kpt = keypoints[i];
-        float scale = 1.f/(float)(1 << -firstOctave);
-        kpt.octave = (kpt.octave & ~255) | ((kpt.octave + firstOctave) & 255);
+        float scale = 1.f/(float)(1 << -config.firstOctave);
+        kpt.octave = (kpt.octave & ~255) | ((kpt.octave + config.firstOctave) & 255);
         kpt.pt *= scale;
         kpt.size *= scale;
     }
 
     if (_descriptors.needed()) {
-        // CPU path: compute descriptors for all keypoints
         int dsize = descriptorSize();
         _descriptors.create((int)keypoints.size(), dsize, config.descriptorType);
 
-        if (keypoints.empty()) {
-            // No keypoints found, descriptor matrix already created with 0 rows
-            return;
-        }
+        if (keypoints.empty()) return;
 
         cv::Mat descriptors = _descriptors.getMat();
         static const int d = SIFT_DESCR_WIDTH, n = SIFT_DESCR_HIST_BINS;
@@ -340,7 +343,7 @@ void SIFT::Impl::detectAndCompute(cv::InputArray _image, cv::InputArray _mask,
 
             float size = kpt.size*scale;
             cv::Point2f ptf(kpt.pt.x*scale, kpt.pt.y*scale);
-            const cv::Mat& img = gpyr[(octave - firstOctave)*(config.nOctaveLayers + 3) + layer];
+            const cv::Mat& img = gpyr[(octave - config.firstOctave)*(config.nOctaveLayers + 3) + layer];
 
             float angle = 360.f - kpt.angle;
             if (std::abs(angle - 360.f) < FLT_EPSILON)
@@ -351,21 +354,13 @@ void SIFT::Impl::detectAndCompute(cv::InputArray _image, cv::InputArray _mask,
     }
 }
 
-// SIFT wrapper implementation for CPU backend
-// These must be in this file since Impl is defined here
-
-SIFT::SIFT(const SIFTConfig& config)
-    : impl_(new Impl(config))
-{
-}
+SIFT::SIFT(const SIFTConfig& config) : impl_(new Impl(config)) {}
 
 SIFT::~SIFT() {
     delete impl_;
 }
 
-SIFT::SIFT(SIFT&& other) noexcept
-    : impl_(other.impl_)
-{
+SIFT::SIFT(SIFT&& other) noexcept : impl_(other.impl_) {
     other.impl_ = nullptr;
 }
 

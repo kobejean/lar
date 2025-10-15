@@ -12,22 +12,23 @@
 #include "lar/core/utils/transform.h"
 
 // Information matrix strategy constants - uncomment to try different approaches
-#define INFORMATION_STRATEGY_UNIFORM        // Uniform information matrix
+// #define INFORMATION_STRATEGY_UNIFORM        // Uniform information matrix
 // #define INFORMATION_STRATEGY_SIZE_LINEAR    // Linear scaling by keypoint size
 // #define INFORMATION_STRATEGY_SIZE_QUADRATIC // Quadratic scaling by keypoint size
 // #define INFORMATION_STRATEGY_SIZE_INVERSE   // Inverse scaling by keypoint size
-// #define INFORMATION_STRATEGY_PYRAMID        // Pyramid-level based (ORB-SLAM style)
+#define INFORMATION_STRATEGY_PYRAMID        // Pyramid-level based (ORB-SLAM style)
 // #define INFORMATION_STRATEGY_RESPONSE       // Response-weighted
 // #define INFORMATION_STRATEGY_ANISOTROPIC    // Anisotropic based on keypoint angle
 
 // Strategy parameters
-static constexpr double BASE_INFORMATION = 1.0;           // Base information value
+static constexpr double BASE_PIXEL_STDDEV = 0.5;
+static constexpr double BASE_INFORMATION = 1.0 / (BASE_PIXEL_STDDEV * BASE_PIXEL_STDDEV);
 static constexpr double SIZE_SCALING_FACTOR = 1.0;        // Scaling factor for size-based methods
 static constexpr double BASE_KEYPOINT_SIZE = 3.0;         // Base keypoint size for pyramid calculation
-static constexpr double PYRAMID_SCALE_FACTOR = 1.6;       // Scale factor between pyramid levels
+static constexpr double PYRAMID_SCALE_FACTOR = 1.2599210498948732;  // 2^(1/3) - SIFT scale between pyramid levels
 static constexpr double RESPONSE_WEIGHT = 0.3;            // Weight for response-based scaling
 static constexpr double ANISOTROPY_RATIO = 2.0;           // Major/minor axis ratio for anisotropic
-static constexpr double MIN_INFORMATION = 0.1;           // Minimum information value
+static constexpr double MIN_INFORMATION = 0.1;            // Minimum information value
 static constexpr double MAX_INFORMATION = 100.0;          // Maximum information value
 
 G2O_USE_OPTIMIZATION_LIBRARY(eigen);
@@ -102,6 +103,7 @@ namespace lar {
   }
 
   void BundleAdjustment::optimize() {
+    printReprojectionError();
     for (auto edge : _landmark_edges) {
       g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
       rk->setDelta(sqrt(5.991));
@@ -114,16 +116,18 @@ namespace lar {
     optimizer.initializeOptimization(0);
     optimizer.optimize(20);
     fixAllLandmarks(false);
+    printReprojectionError();
     
     // Stage 2: Main optimization rounds
     constexpr size_t rounds = 4;
-    double chi_threshold[4] = { 7.378, 5.991, 5.991, 5.991 };
-    size_t iteration[4] = { 50, 50, 50, 50 };
+    double chi_threshold[4] = { 7.378, 5.991, 4.605, 3.841 };
+    size_t iteration[4] = { 100, 60, 60, 60 };
 
     for (size_t i = 0; i < rounds; i++) {
       std::cout << "Stage 2." << (i+1) << ": Full optimization..." << std::endl;
       optimizer.initializeOptimization(0);
       optimizer.optimize(iteration[i]);
+      printReprojectionError();
       rescaleToMatchOdometry();
       markOutliers(chi_threshold[i]);
     }
@@ -140,12 +144,13 @@ namespace lar {
     //   }
     // }
 
-    // markOutliers(5.991);
+    markOutliers(3.841);
     optimizer.initializeOptimization(0);
-    optimizer.optimize(50);
-    markOutliers(4.605);
+    optimizer.optimize(100);
+    printReprojectionError();
+    markOutliers(3.841);
+    printReprojectionError();
     rescaleToMatchOdometry();
-    performRescaling(1.04);
   }
 
   void BundleAdjustment::update(double marginRatio) {
@@ -338,20 +343,27 @@ namespace lar {
     Frame const& frame2 = data->frames[frame_id];
     
     // Convert to g2o poses first, then compute relative transform
-    g2o::SE3Quat arkit_pose1 = lar::utils::TransformUtils::arkitToG2oPose(frame1.extrinsics);
-    g2o::SE3Quat arkit_pose2 = lar::utils::TransformUtils::arkitToG2oPose(frame2.extrinsics);
-    g2o::SE3Quat pose_change = arkit_pose2 * arkit_pose1.inverse();
+    g2o::SE3Quat pose1 = lar::utils::TransformUtils::arkitToG2oPose(frame1.extrinsics); // converted to camera to world convention
+    g2o::SE3Quat pose2 = lar::utils::TransformUtils::arkitToG2oPose(frame2.extrinsics); // converted to camera to world convention
+    g2o::SE3Quat pose_change = pose2 * pose1.inverse();
     
     g2o::EdgeSE3Expmap * e = new g2o::EdgeSE3Expmap();
     e->setVertex(0, v1);
     e->setVertex(1, v2);
     e->setMeasurement(pose_change);
-    
     double distance = pose_change.translation().norm();
     double distance_scale = 1.0 / std::max(0.1, distance);
+
+    // Estimated uncertainties per meter of movement
+    double translation_uncertainty = 0.2; // 20cm per meter
+    double rotation_uncertainty_deg = 10.0; // 8 degrees per meter
+    double rotation_uncertainty = rotation_uncertainty_deg * M_PI / 180.0; // Convert to radians
+
     Eigen::MatrixXd info = Eigen::MatrixXd::Zero(6,6);
-    info.block<3,3>(0,0) = Eigen::Matrix3d::Identity() * 10 * distance_scale;
-    info.block<3,3>(3,3) = Eigen::Matrix3d::Identity() * 20 * distance_scale;
+    // Translation information: scales as 1/distance²
+    info.block<3,3>(0,0) = Eigen::Matrix3d::Identity() * distance_scale * distance_scale / (translation_uncertainty*translation_uncertainty);
+    // Rotation information: scales as 1/distance² (drift accumulates with time/distance)
+    info.block<3,3>(3,3) = Eigen::Matrix3d::Identity() * distance_scale * distance_scale / (rotation_uncertainty*rotation_uncertainty);
     e->setInformation(info);
     // g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
     // rk->setDelta(sqrt(12.592));
@@ -422,8 +434,13 @@ namespace lar {
           xy_information = BASE_INFORMATION * SIZE_SCALING_FACTOR / std::max(1.0f, obs.kpt.size);
         #elif defined(INFORMATION_STRATEGY_PYRAMID)
           // Pyramid-level based (ORB-SLAM style)
-          int pyramid_level = std::max(0, static_cast<int>(std::log2(obs.kpt.size / BASE_KEYPOINT_SIZE)));
-          double level_sigma2 = std::pow(PYRAMID_SCALE_FACTOR, 2.0 * pyramid_level);
+          // Extract layer from packed octave field (bits 8-15)
+          // kpt.octave format: octave (bits 0-7) | layer (bits 8-15) | subpixel_offset (bits 16-23)
+          int layer = (obs.kpt.octave >> 8) & 255;
+
+          // Pixel uncertainty scales as PYRAMID_SCALE_FACTOR^layer
+          // Variance (sigma²) scales as PYRAMID_SCALE_FACTOR^(2*layer)
+          double level_sigma2 = std::pow(PYRAMID_SCALE_FACTOR, 2.0 * layer);
           xy_information = BASE_INFORMATION / level_sigma2;
         #elif defined(INFORMATION_STRATEGY_RESPONSE)
           // Response-weighted information
@@ -456,12 +473,12 @@ namespace lar {
   }
 
   void BundleAdjustment::markOutliers(double chi_threshold) {
-    markOutliers(chi_threshold, chi_threshold * 2.0); // Use higher threshold for odometry (6 DOF vs 2 DOF)
+    markOutliers(chi_threshold, chi_threshold * 2.3); // Use higher threshold for odometry (6 DOF vs 2 DOF)
   }
 
   void BundleAdjustment::markOutliers(double landmark_chi_threshold, double odometry_chi_threshold) {
     int landmark_outliers = 0, odometry_outliers = 0;
-    
+
     // Check landmark edges (reprojection errors - 2 DOF)
     for (auto edge : _landmark_edges) {
       edge->computeError();
@@ -472,22 +489,47 @@ namespace lar {
         edge->setLevel(0);
       }
     }
-    
-    // // Check odometry edges (pose-to-pose errors - 6 DOF)  
-    // for (auto edge : _odometry_edges) {
-    //   // if (edge->level() == 1 || edge->chi2() == 0) {
-    //   // }
-    //   edge->computeError();
-    //   if (edge->chi2() > odometry_chi_threshold) {
-    //     edge->setLevel(1);
-    //     odometry_outliers++;
-    //   } else {
-    //     edge->setLevel(0);
-    //   }
-    // }
-    
-    std::cout << "Marked " << landmark_outliers << " landmark outliers, " 
+
+    // Check odometry edges (pose-to-pose errors - 6 DOF)
+    for (auto edge : _odometry_edges) {
+      edge->computeError();
+      if (edge->chi2() > odometry_chi_threshold) {
+        // edge->setLevel(1);
+        odometry_outliers++;
+      } else {
+        // edge->setLevel(0);
+      }
+    }
+
+    std::cout << "Marked " << landmark_outliers << " landmark outliers, "
               << odometry_outliers << " odometry outliers" << std::endl;
+  }
+
+  void BundleAdjustment::printReprojectionError() {
+    double total_error = 0.0;
+    int inlier_count = 0;
+
+    // Only compute error for level 0 (inlier) edges
+    for (auto edge : _landmark_edges) {
+      if (edge->level() == 0) {
+        edge->computeError();
+        // chi2() returns Mahalanobis distance (weighted squared error)
+        // For pixel errors, we want the RMSE in pixels
+        // Edge has 3 measurements (u, v, depth) but we only care about u,v
+        Eigen::Vector3d error = edge->error();
+        double pixel_error = std::sqrt(error[0]*error[0] + error[1]*error[1]);
+        total_error += pixel_error;
+        inlier_count++;
+      }
+    }
+
+    if (inlier_count > 0) {
+      double avg_error = total_error / inlier_count;
+      std::cout << "Average reprojection error: " << avg_error
+                << " pixels (" << inlier_count << " inliers)" << std::endl;
+    } else {
+      std::cout << "No inlier edges for reprojection error calculation" << std::endl;
+    }
   }
 
   void BundleAdjustment::updateLandmarks(double marginRatio) {

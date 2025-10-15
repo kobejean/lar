@@ -42,8 +42,8 @@ int main(int argc, const char* argv[]){
     num_threads = std::stoi(argv[1]);
   }
 
-  // string localize = "./input/aizu-park-4-ext/";
-  string localize = "./input/aizu-park-sunny/";
+  string localize = "./input/aizu-park-4-ext/";
+  // string localize = "./input/aizu-park-sunny/";
 
   std::cout << "=== Multithreaded Localization Test ===" << std::endl;
   std::cout << "Using " << num_threads << " threads" << std::endl;
@@ -61,14 +61,15 @@ int main(int argc, const char* argv[]){
   std::cout << "Map loaded in " << map_load_duration.count() << " ms" << std::endl;
   std::cout << std::endl;
 
-  // Pre-load all frames and images into memory
   std::cout << "Pre-loading all images into memory..." << std::endl;
   auto load_start = std::chrono::high_resolution_clock::now();
 
   std::vector<lar::Frame> frames = nlohmann::json::parse(std::ifstream(localize+"frames.json"));
-  std::vector<FrameData> frame_data(frames.size());
+  size_t frame_count = std::min(400, (int)frames.size());
+  std::vector<FrameData> frame_data(frame_count);
 
-  for (size_t i = 0; i < frames.size(); i++) {
+
+  for (size_t i = 0; i < frame_count; i++) {
     frame_data[i].frame = frames[i];
     std::string image_path = getPathPrefix(localize, frames[i].id) + "image.jpeg";
     frame_data[i].image = cv::imread(image_path, cv::IMREAD_GRAYSCALE);
@@ -92,18 +93,10 @@ int main(int argc, const char* argv[]){
   std::atomic<int> processed(0);
   std::mutex cout_mutex;
 
-  // Worker function - each thread creates its own Tracker instance
   auto worker = [&]() {
-    // Get image size from first valid image
     cv::Size imageSize(1920, 1440); // Default ARKit size
-    for (const auto& data : frame_data) {
-      if (!data.image.empty()) {
-        imageSize = data.image.size();
-        break;
-      }
-    }
 
-    // Create thread-local tracker (Tracker is NOT thread-safe, has mutable state)
+    // Create thread-local tracker 
     lar::Tracker tracker(map, imageSize);
 
     while (true) {
@@ -147,7 +140,6 @@ int main(int argc, const char* argv[]){
 
   };
 
-  // Run multithreaded localization
   std::cout << "Starting multithreaded localization..." << std::endl;
   auto start_time = std::chrono::high_resolution_clock::now();
 

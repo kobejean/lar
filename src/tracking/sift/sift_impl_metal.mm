@@ -1,6 +1,7 @@
 // Metal implementation of SIFT::Impl
 // This file should only be compiled when LAR_USE_METAL_SIFT is defined
 #import <Foundation/Foundation.h>
+#include <cstddef>
 #import <Metal/Metal.h>
 #import <MetalPerformanceShaders/MetalPerformanceShaders.h>
 #include <opencv2/core.hpp>
@@ -12,6 +13,14 @@
 
 #include "lar/tracking/sift/sift.h"
 #include "lar/tracking/sift/sift_common.h"
+
+// ============================================================================
+// GAUSSIAN PYRAMID STORAGE TOGGLE
+// ============================================================================
+// Set to 1 to use buffer-based Gaussian pyramid (tests L1 cache hypothesis)
+// Set to 0 to use texture-based Gaussian pyramid (default/baseline)
+#define USE_BUFFER_GAUSSIAN_PYRAMID 0
+// ============================================================================
 
 #if !__has_feature(objc_arc)
     #define RELEASE_IF_MANUAL(obj) [obj release]
@@ -28,6 +37,27 @@ struct ExtremaParams {
     int border;
 };
 
+// Metal structs for descriptor computation (must match sift.metal)
+struct KeypointInfo {
+    simd_float2 pt;              // Keypoint position in octave space (already scaled)
+    uint32_t r;
+    uint32_t c;
+    float angle;                  // Orientation angle (degrees)
+    float scale;                  // Scale in octave space
+    float size;                  // Scale in octave space
+    uint32_t gaussPyramidIndex;   // Which Gaussian pyramid texture to sample from
+    uint32_t octave;
+    float response;
+};
+
+struct DescriptorConfig {
+    int32_t descriptorWidth;      // SIFT_DESCR_WIDTH (4)
+    int32_t histBins;             // SIFT_DESCR_HIST_BINS (8)
+    float scaleFactor;            // SIFT_DESCR_SCL_FCTR (3.0)
+    float magThreshold;           // SIFT_DESCR_MAG_THR (0.2)
+    float intFactor;              // SIFT_INT_DESCR_FCTR (512.0)
+};
+
 // Metal-accelerated implementation of SIFT::Impl using GPU compute pipelines
 struct SIFT::Impl {
     // Configuration (owned by Impl)
@@ -42,6 +72,8 @@ struct SIFT::Impl {
     id<MTLComputePipelineState> blurVertAndDoGPipeline = nil;
     id<MTLComputePipelineState> extremaPipeline = nil;
     id<MTLComputePipelineState> resizePipeline = nil;
+    id<MTLComputePipelineState> descriptorPipeline = nil;
+    id<MTLComputePipelineState> orientationPipeline = nil;
 
     // Pre-allocated GPU buffers/textures
     std::vector<std::vector<id<MTLBuffer>>> octaveBuffers;
@@ -101,6 +133,8 @@ struct SIFT::Impl {
     void encodeInitialBlurCommand(id cmdBuf, id imageTexture, id tempTexture, id destTexture, int level);
     void encodeBlurAndDoGCommand(id cmdBuf, id prevGaussTexture, id gaussTexture, id dogTexture, int level);
     void encodeExtremaDetectionCommand(id cmdBuf, id dogTextureBelow, id dogTextureCenter, id dogTextureAbove, id extremaBitarray);
+    id<MTLBuffer> encodeOrientationComputationCommand(id cmdBuf, const std::vector<KeypointInfo>& extrema);
+    id<MTLBuffer> encodeDescriptorComputationCommand(id cmdBuf, id<MTLBuffer> keypointInfoBuffer, uint32_t keypointCount, cv::Mat& descriptors);
 
     // Octave construction strategies
     void encodeStandardOctaveConstruction(id cmdBuf, int octave);
@@ -296,18 +330,17 @@ void SIFT::Impl::allocateOctaveResources(int octave, int octaveWidth, int octave
 
     // Allocate temporary texture for separable convolution
     tempBuffers[octave] = [device newBufferWithLength:bufferSize
-                                        options:MTLResourceStorageModeShared];
+                                        options:MTLResourceStorageModePrivate];
     MTLTextureDescriptor* tempDesc = [MTLTextureDescriptor
         texture2DDescriptorWithPixelFormat:MTLPixelFormatR32Float
         width:octaveWidth height:octaveHeight mipmapped:NO];
-    tempDesc.storageMode = MTLStorageModeShared;
+    tempDesc.storageMode = MTLStorageModePrivate;
     tempDesc.usage = MTLTextureUsageShaderRead | MTLTextureUsageShaderWrite;
     tempTextures[octave] = [tempBuffers[octave] newTextureWithDescriptor:tempDesc
                                                                                      offset:0
                                                                                 bytesPerRow:alignedRowBytes];
 }
 
-// Pass 1: Extract keypoints only (lightweight, determines exact count)
 static void extractKeypoints(
     uint32_t* bitarray,
     int octave,
@@ -320,12 +353,14 @@ static void extractKeypoints(
     float sigma,
     const std::vector<cv::Mat>& gauss_pyr,
     const std::vector<cv::Mat>& dog_pyr,
-    std::vector<cv::KeyPoint>& keypoints)
+    std::vector<KeypointInfo>& keypoints)
 {
     int count = 0;
+    int pts = 0;
     for (uint32_t chunkIdx = 0; chunkIdx < octaveBitarraySize; chunkIdx++) {
         uint32_t chunk = bitarray[chunkIdx];
         if (chunk == 0) continue;
+        bitarray[chunkIdx] = 0;
 
         for (int bitOffset = 0; bitOffset < 32; bitOffset++) {
             if (chunk & (1u << bitOffset)) {
@@ -340,44 +375,25 @@ static void extractKeypoints(
                                     nOctaveLayers, contrastThreshold, edgeThreshold, sigma)) {
                     continue;
                 }
-
-                // Calculate orientation histogram
-                static const int n = SIFT_ORI_HIST_BINS;
-                float hist[n];
-                float scl_octv = kpt.size * 0.5f / (1 << octave);
-
-                int gaussIdx = octave * (nOctaveLayers + 3) + keypoint_layer;
-                float omax = calcOrientationHist(gauss_pyr[gaussIdx],
-                                                cv::Point(c_pos, r),
-                                                cvRound(SIFT_ORI_RADIUS * scl_octv),
-                                                SIFT_ORI_SIG_FCTR * scl_octv,
-                                                hist, n);
-
-                float mag_thr = omax * SIFT_ORI_PEAK_RATIO;
-
-                // Find orientation peaks and create keypoints
-                for (int j = 0; j < n; j++) {
-                    int l = j > 0 ? j - 1 : n - 1;
-                    int r2 = j < n-1 ? j + 1 : 0;
-
-                    if (hist[j] > hist[l] && hist[j] > hist[r2] && hist[j] >= mag_thr) {
-                        float bin = j + 0.5f * (hist[l]-hist[r2]) / (hist[l] - 2*hist[j] + hist[r2]);
-                        bin = bin < 0 ? n + bin : bin >= n ? bin - n : bin;
-                        kpt.angle = 360.f - (360.f/n) * bin;
-                        if (std::abs(kpt.angle - 360.f) < FLT_EPSILON)
-                            kpt.angle = 0.f;
-
-                        keypoints.push_back(kpt);
-                        count++;
-                    }
-                }
+                pts++;
+                KeypointInfo info;
+                info.pt.x = kpt.pt.x;
+                info.pt.y = kpt.pt.y;
+                info.r = r;
+                info.c = c_pos;
+                info.angle = kpt.angle;
+                info.size = kpt.size;
+                info.octave = kpt.octave;
+                info.response = kpt.response;
+                info.gaussPyramidIndex = octave * (nOctaveLayers + 3) + keypoint_layer;
+                keypoints.push_back(info);
+                count++;
             }
         }
     }
-    std::cout << "octave " << octave << " layer " << layer << " added " << count << " keypoints" << std::endl;
+    std::cout << "octave " << octave << " layer " << layer << " added " << count << " keypoints " << pts << " pts" << std::endl;
 }
 
-// Pass 2: Compute descriptors for all keypoints (exact pre-allocation)
 static void computeDescriptors(
     const std::vector<cv::KeyPoint>& keypoints,
     int octave,
@@ -409,13 +425,102 @@ static void computeDescriptors(
         cv::Point2f ptf(kpt.pt.x * octaveScale, kpt.pt.y * octaveScale);
         float scl = kpt.size * 0.5f * octaveScale;
 
-        float angle = 360.f - kpt.angle;
-        if (std::abs(angle - 360.f) < FLT_EPSILON)
-            angle = 0.f;
-
-        calcSIFTDescriptor(img, ptf, angle,
+        calcSIFTDescriptor(img, ptf, kpt.angle,
                          scl, SIFT_DESCR_WIDTH, SIFT_DESCR_HIST_BINS,
                          descriptors, i);
+    }
+}
+
+static void computeCPUOrientationsForExtrema(
+    const std::vector<KeypointInfo>& kpt_info,
+    const std::vector<size_t>& cpuExtremaIndices,
+    const std::vector<cv::Mat>& gauss_pyr,
+    std::vector<cv::KeyPoint>& outKeypoints)
+{
+    constexpr int n = SIFT_ORI_HIST_BINS;
+
+    for (size_t idx : cpuExtremaIndices) {
+        const KeypointInfo& info = kpt_info[idx];
+        int octave = info.octave & 255;
+
+        // Compute orientation histogram
+        float hist[n];
+        float scl_octv = info.size * 0.5f / (1 << octave);
+        float omax = calcOrientationHist(
+            gauss_pyr[info.gaussPyramidIndex],
+            cv::Point(info.c, info.r),
+            cvRound(SIFT_ORI_RADIUS * scl_octv),
+            SIFT_ORI_SIG_FCTR * scl_octv,
+            hist, n
+        );
+
+        // Create keypoint template (same for all orientations)
+        cv::KeyPoint kpt;
+        kpt.pt.x = info.pt.x;
+        kpt.pt.y = info.pt.y;
+        kpt.octave = info.octave;
+        kpt.size = info.size;
+        kpt.response = info.response;
+
+        // Find peaks in orientation histogram and create keypoints (up to 18 peaks possible)
+        float mag_thr = omax * SIFT_ORI_PEAK_RATIO;
+        for (int j = 0; j < n; j++) {
+            int l = j > 0 ? j - 1 : n - 1;
+            int r2 = j < n-1 ? j + 1 : 0;
+
+            if (hist[j] > hist[l] && hist[j] > hist[r2] && hist[j] >= mag_thr) {
+                // Parabolic interpolation to refine peak location
+                float bin = j + 0.5f * (hist[l]-hist[r2]) / (hist[l] - 2*hist[j] + hist[r2]);
+                bin = bin < 0 ? n + bin : bin >= n ? bin - n : bin;
+                kpt.angle = (360.f/n) * bin;
+                outKeypoints.push_back(kpt);
+            }
+        }
+    }
+}
+
+// Helper: Copy GPU descriptor results and create final keypoints
+// Reads back GPU-computed descriptors and orientation angles, filters invalid entries
+static void copyGPUDescriptorResults(
+    id<MTLBuffer> descriptorResultBuffer,
+    id<MTLBuffer> orientationResultBuffer,
+    const std::vector<KeypointInfo>& gpuExtrema,
+    cv::Mat& descriptorsMat,
+    std::vector<cv::KeyPoint>& keypoints,
+    int cpuCount,
+    int descriptorSize,
+    int descriptorType)
+{
+    KeypointInfo* gpuResults = (KeypointInfo*)orientationResultBuffer.contents;
+    float* gpuData = (float*)descriptorResultBuffer.contents;
+
+    int gpuRowIdx = cpuCount;  // Start after CPU descriptors
+    for (int i = 0; i < gpuExtrema.size(); i++) {
+        const KeypointInfo& info = gpuResults[i];
+        if (info.angle < 0.0f) continue;  // GPU marks invalid keypoints with negative angle
+
+        // Create keypoint from GPU results
+        cv::KeyPoint kpt;
+        kpt.pt.x = info.pt.x;
+        kpt.pt.y = info.pt.y;
+        kpt.angle = info.angle;
+        kpt.octave = info.octave;
+        kpt.size = info.size;
+        kpt.response = info.response;
+        keypoints.push_back(kpt);
+
+        // Copy descriptor data
+        if (descriptorType == CV_8U) {
+            for (int j = 0; j < descriptorSize; j++) {
+                descriptorsMat.at<uint8_t>(gpuRowIdx, j) =
+                    static_cast<uint8_t>(gpuData[i * descriptorSize + j]);
+            }
+        } else {
+            memcpy(descriptorsMat.ptr<float>(gpuRowIdx),
+                   &gpuData[i * descriptorSize],
+                   descriptorSize * sizeof(float));
+        }
+        gpuRowIdx++;
     }
 }
 
@@ -538,76 +643,207 @@ void SIFT::Impl::encodeExtremaDetectionCommand(
     RELEASE_IF_MANUAL(paramsBuffer);
 }
 
-// Octave construction strategies
-
-void SIFT::Impl::encodeStandardOctaveConstruction(
+// GPU orientation computation using Metal shader
+// Takes extrema (18-slot KeypointInfo arrays) and fills in-place with computed orientations
+// Returns the kpt_info buffer (same as input, modified in-place by GPU)
+id<MTLBuffer> SIFT::Impl::encodeOrientationComputationCommand(
     id cmdBuf,
-    int octave)
+    const std::vector<KeypointInfo>& extrema)
 {
-    // STRATEGY: Interleaved blur+extrema detection (original SIFT approach)
+    if (extrema.empty()) {
+        return nil;
+    }
+
+    constexpr int MAX_ORI_PEAKS = SIFT_ORI_HIST_BINS / 2;  // 18 max peaks
+    uint32_t extremaCount = static_cast<uint32_t>(extrema.size() / MAX_ORI_PEAKS);
+    uint32_t extremaStride = MAX_ORI_PEAKS;
+
+    // Upload extrema data to GPU (angle field is pre-initialized to -1)
+    size_t bufferSize = extrema.size() * sizeof(KeypointInfo);
+    id<MTLBuffer> kptInfoBuffer = [device newBufferWithBytes:extrema.data()
+                                                       length:bufferSize
+                                                      options:MTLResourceStorageModeShared];
+
+    // Create parameter buffers
+    id<MTLBuffer> extremaCountBuffer = [device newBufferWithBytes:&extremaCount
+                                                            length:sizeof(uint32_t)
+                                                           options:MTLResourceStorageModeShared];
+
+    id<MTLBuffer> extremaStrideBuffer = [device newBufferWithBytes:&extremaStride
+                                                             length:sizeof(uint32_t)
+                                                            options:MTLResourceStorageModeShared];
+
+    // Create texture array for Gaussian pyramid (matching descriptor implementation)
+    std::vector<id<MTLTexture>> allGaussTextures;
+    for (int o = 0; o < config.nOctaves; o++) {
+        for (int i = 0; i < config.nLevels; i++) {
+            allGaussTextures.push_back(octaveTextures[o][i]);
+        }
+    }
+
+    // Encode orientation computation
+    id<MTLComputeCommandEncoder> encoder = [(id<MTLCommandBuffer>)cmdBuf computeCommandEncoder];
+    [encoder setComputePipelineState:orientationPipeline];
+
+    // Set buffers (buffer indices match Metal kernel signature)
+    [encoder setBuffer:kptInfoBuffer offset:0 atIndex:0];
+    [encoder setBuffer:extremaCountBuffer offset:0 atIndex:1];
+    [encoder setBuffer:extremaStrideBuffer offset:0 atIndex:2];
+
+    // Set texture array (textures start at index 0, up to 6 textures for octave 0)
+    [encoder setTextures:allGaussTextures.data() withRange:NSMakeRange(0, 6)];
+
+    // Dispatch one thread per extrema (not per orientation slot!)
+    MTLSize gridSize = MTLSizeMake(extremaCount, 1, 1);
+    MTLSize threadgroupSize = MTLSizeMake(std::min(256u, extremaCount), 1, 1);
+
+    [encoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
+    [encoder endEncoding];
+
+    // Clean up temporary buffers
+    RELEASE_IF_MANUAL(extremaCountBuffer);
+    RELEASE_IF_MANUAL(extremaStrideBuffer);
+
+    // Return kpt_info buffer (caller must release after reading results)
+    return kptInfoBuffer;
+}
+
+// GPU descriptor computation using Metal shader
+// Note: This returns the descriptor buffer that must be copied after GPU completion
+// Reuses the keypointInfoBuffer from orientation computation to avoid redundant GPU upload
+id<MTLBuffer> SIFT::Impl::encodeDescriptorComputationCommand(
+    id cmdBuf,
+    id<MTLBuffer> keypointInfoBuffer,
+    uint32_t keypointCount,
+    cv::Mat& descriptors)
+{
+    if (!keypointInfoBuffer || keypointCount == 0) {
+        descriptors.create(0, SIFT_DESCR_WIDTH * SIFT_DESCR_WIDTH * SIFT_DESCR_HIST_BINS, config.descriptorType);
+        return nil;
+    }
+
+    const int descriptorSize = SIFT_DESCR_WIDTH * SIFT_DESCR_WIDTH * SIFT_DESCR_HIST_BINS;
+
+    id<MTLBuffer> keypointCountBuffer = [device newBufferWithBytes:&keypointCount
+                                                             length:sizeof(uint32_t)
+                                                            options:MTLResourceStorageModeShared];
+
+    // Prepare descriptor configuration
+    DescriptorConfig descConfig;
+    descConfig.descriptorWidth = SIFT_DESCR_WIDTH;
+    descConfig.histBins = SIFT_DESCR_HIST_BINS;
+    descConfig.scaleFactor = SIFT_DESCR_SCL_FCTR;
+    descConfig.magThreshold = SIFT_DESCR_MAG_THR;
+    descConfig.intFactor = SIFT_INT_DESCR_FCTR;
+
+    id<MTLBuffer> configBuffer = [device newBufferWithBytes:&descConfig
+                                                      length:sizeof(DescriptorConfig)
+                                                     options:MTLResourceStorageModeShared];
+
+    // Create output buffer for descriptors (float32 output from GPU)
+    size_t descriptorBufferSize = keypointCount * descriptorSize * sizeof(float);
+    id<MTLBuffer> descriptorBuffer = [device newBufferWithLength:descriptorBufferSize
+                                                         options:MTLResourceStorageModeShared];
+
+    // Create texture array for Gaussian pyramid
+    std::vector<id<MTLTexture>> allGaussTextures;
+    for (int o = 0; o < config.nOctaves; o++) {
+        for (int i = 0; i < config.nLevels; i++) {
+            allGaussTextures.push_back(octaveTextures[o][i]);
+        }
+    }
+
+    // Encode descriptor computation
+    id<MTLComputeCommandEncoder> encoder = [(id<MTLCommandBuffer>)cmdBuf computeCommandEncoder];
+    [encoder setComputePipelineState:descriptorPipeline];
+
+    // Set buffers (note: using the passed-in buffer instead of creating new one)
+    [encoder setBuffer:keypointInfoBuffer offset:0 atIndex:0];
+    [encoder setBuffer:keypointCountBuffer offset:0 atIndex:1];
+    [encoder setBuffer:configBuffer offset:0 atIndex:2];
+    [encoder setBuffer:descriptorBuffer offset:0 atIndex:3];
+
+    // Set texture array using setTextures (textures start at index 0)
+    [encoder setTextures:allGaussTextures.data() withRange:NSMakeRange(0, 6)];
+
+    // Dispatch one thread per keypoint
+    MTLSize gridSize = MTLSizeMake(keypointCount, 1, 1);
+    MTLSize threadgroupSize = MTLSizeMake(std::min(256u, keypointCount), 1, 1);
+
+    [encoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
+    [encoder endEncoding];
+
+    // Pre-allocate descriptor Mat (will be filled after GPU completion)
+    descriptors.create(keypointCount, descriptorSize, config.descriptorType);
+
+    // Clean up temporary buffers (NOT keypointInfoBuffer - that's owned by caller!)
+    RELEASE_IF_MANUAL(keypointCountBuffer);
+    RELEASE_IF_MANUAL(configBuffer);
+
+    // Return descriptor buffer (caller must release after copying results)
+    return descriptorBuffer;
+}
+
+void SIFT::Impl::encodeStandardOctaveConstruction(id cmdBuf, int octave) {
     std::vector<id<MTLTexture>>& gaussTextures = octaveTextures[octave];
     std::vector<id<MTLTexture>>& dogTexturesVec = dogTextures[octave];
 
-    for (int layer = 1; layer <= config.nOctaveLayers; layer++) {
-        if (layer == 1) {
-            if (octave > 0) {
-                std::vector<id<MTLTexture>>& prevGaussTextures = octaveTextures[octave - 1];
-                encodeResizeCommand(cmdBuf,
-                                  prevGaussTextures[config.nOctaveLayers], gaussTextures[0]);
-            } else {
-                encodeInitialBlurCommand(cmdBuf,
-                                       imageTexture, tempTextures[octave], gaussTextures[0],
-                                       0);
-            }
-        }
+    if (octave > 0) {
+        std::vector<id<MTLTexture>>& prevGaussTextures = octaveTextures[octave - 1];
+        encodeResizeCommand(
+            cmdBuf, prevGaussTextures[config.nOctaveLayers], gaussTextures[0]
+        );
+    } else {
+        encodeInitialBlurCommand(
+            cmdBuf, imageTexture, tempTextures[octave], gaussTextures[0], 0
+        );
+    }
 
+    for (int layer = 1; layer <= config.nOctaveLayers; layer++) {
         int blurStart = (layer == 1) ? 1 : (layer + 2);
         int blurEnd = (layer == 1) ? 4 : (layer + 3);
 
         for (int i = blurStart; i < blurEnd && i < config.nLevels; i++) {
-            encodeBlurAndDoGCommand(cmdBuf,
-                                  gaussTextures[i-1], gaussTextures[i], dogTexturesVec[i-1],
-                                  i);
+            encodeBlurAndDoGCommand(
+                cmdBuf, gaussTextures[i-1], gaussTextures[i], dogTexturesVec[i-1], i
+            );
         }
 
         int layerIndex = octave * config.nOctaveLayers + (layer - 1);
-        encodeExtremaDetectionCommand(cmdBuf,
-                                    dogTexturesVec[layer-1], dogTexturesVec[layer], dogTexturesVec[layer+1],
-                                    extremaBitarrays[layerIndex]);
+        encodeExtremaDetectionCommand(
+            cmdBuf, dogTexturesVec[layer-1], dogTexturesVec[layer], dogTexturesVec[layer+1],
+            extremaBitarrays[layerIndex]
+        );
     }
 }
 
-void SIFT::Impl::encodeBatchedOctaveConstruction(
-    id cmdBuf,
-    int octave)
-{
-    // STRATEGY: Fully batched pyramid construction
+void SIFT::Impl::encodeBatchedOctaveConstruction(id cmdBuf, int octave) {
     std::vector<id<MTLTexture>>& gaussTextures = octaveTextures[octave];
     std::vector<id<MTLTexture>>& dogTexturesVec = dogTextures[octave];
 
-    // Phase 1: Build complete Gaussian pyramid + DoG
     if (octave > 0) {
         std::vector<id<MTLTexture>>& prevGaussTextures = octaveTextures[octave - 1];
-        encodeResizeCommand(cmdBuf,
-                          prevGaussTextures[config.nOctaveLayers], gaussTextures[0]);
+        encodeResizeCommand(
+            cmdBuf, prevGaussTextures[config.nOctaveLayers], gaussTextures[0]
+        );
     } else {
-        encodeInitialBlurCommand(cmdBuf,
-                               imageTexture, tempTextures[octave], gaussTextures[0],
-                               0);
+        encodeInitialBlurCommand(
+            cmdBuf, imageTexture, tempTextures[octave], gaussTextures[0], 0
+        );
     }
 
     for (int i = 1; i < config.nLevels; i++) {
-        encodeBlurAndDoGCommand(cmdBuf,
-                              gaussTextures[i-1], gaussTextures[i], dogTexturesVec[i-1],
-                              i);
+        encodeBlurAndDoGCommand(
+            cmdBuf, gaussTextures[i-1], gaussTextures[i], dogTexturesVec[i-1], i
+        );
     }
 
-    // Phase 2: Detect extrema across all layers
     for (int layer = 1; layer <= config.nOctaveLayers; layer++) {
         int layerIndex = octave * config.nOctaveLayers + (layer - 1);
-        encodeExtremaDetectionCommand(cmdBuf,
-                                    dogTexturesVec[layer-1], dogTexturesVec[layer], dogTexturesVec[layer+1],
-                                    extremaBitarrays[layerIndex]);
+        encodeExtremaDetectionCommand(
+            cmdBuf, dogTexturesVec[layer-1], dogTexturesVec[layer], dogTexturesVec[layer+1],
+            extremaBitarrays[layerIndex]
+        );
     }
 }
 
@@ -710,6 +946,32 @@ SIFT::Impl::Impl(const SIFTConfig& cfg)
         RELEASE_IF_MANUAL(resizeFunc);
         if (!resizePipeline) {
             std::string errorMsg = "Failed to create resize pipeline: ";
+            if (error) errorMsg += [[error localizedDescription] UTF8String];
+            throw std::runtime_error(errorMsg);
+        }
+
+        // Create descriptor computation pipeline
+        id<MTLFunction> descriptorFunc = [library newFunctionWithName:@"computeSIFTDescriptors"];
+        if (!descriptorFunc) {
+            throw std::runtime_error("Failed to find Metal function: computeSIFTDescriptors");
+        }
+        descriptorPipeline = [device newComputePipelineStateWithFunction:descriptorFunc error:&error];
+        RELEASE_IF_MANUAL(descriptorFunc);
+        if (!descriptorPipeline) {
+            std::string errorMsg = "Failed to create descriptor pipeline: ";
+            if (error) errorMsg += [[error localizedDescription] UTF8String];
+            throw std::runtime_error(errorMsg);
+        }
+
+        // Create orientation computation pipeline
+        id<MTLFunction> orientationFunc = [library newFunctionWithName:@"computeOrientationHistogramsAndPeaks"];
+        if (!orientationFunc) {
+            throw std::runtime_error("Failed to find Metal function: computeOrientationHistogramsAndPeaks");
+        }
+        orientationPipeline = [device newComputePipelineStateWithFunction:orientationFunc error:&error];
+        RELEASE_IF_MANUAL(orientationFunc);
+        if (!orientationPipeline) {
+            std::string errorMsg = "Failed to create orientation pipeline: ";
             if (error) errorMsg += [[error localizedDescription] UTF8String];
             throw std::runtime_error(errorMsg);
         }
@@ -854,6 +1116,8 @@ SIFT::Impl::~Impl() {
         RELEASE_IF_MANUAL(blurVertAndDoGPipeline);
         RELEASE_IF_MANUAL(extremaPipeline);
         RELEASE_IF_MANUAL(resizePipeline);
+        RELEASE_IF_MANUAL(descriptorPipeline);
+        RELEASE_IF_MANUAL(orientationPipeline);
         RELEASE_IF_MANUAL(commandQueue);
         RELEASE_IF_MANUAL(device);
 #if __has_feature(objc_arc)
@@ -863,6 +1127,8 @@ SIFT::Impl::~Impl() {
         blurVertAndDoGPipeline = nil;
         extremaPipeline = nil;
         resizePipeline = nil;
+        descriptorPipeline = nil;
+        orientationPipeline = nil;
         commandQueue = nil;
         device = nil;
 #endif
@@ -879,6 +1145,8 @@ SIFT::Impl::Impl(Impl&& other) noexcept
     , blurVertAndDoGPipeline(other.blurVertAndDoGPipeline)
     , extremaPipeline(other.extremaPipeline)
     , resizePipeline(other.resizePipeline)
+    , descriptorPipeline(other.descriptorPipeline)
+    , orientationPipeline(other.orientationPipeline)
     , octaveBuffers(std::move(other.octaveBuffers))
     , octaveTextures(std::move(other.octaveTextures))
     , tempBuffers(std::move(other.tempBuffers))
@@ -906,6 +1174,8 @@ SIFT::Impl::Impl(Impl&& other) noexcept
     other.blurVertAndDoGPipeline = nil;
     other.extremaPipeline = nil;
     other.resizePipeline = nil;
+    other.descriptorPipeline = nil;
+    other.orientationPipeline = nil;
     other.imageBuffer = nil;
     other.imageTexture = nil;
     other.initialized = false;
@@ -926,6 +1196,8 @@ SIFT::Impl& SIFT::Impl::operator=(Impl&& other) noexcept {
         blurVertAndDoGPipeline = other.blurVertAndDoGPipeline;
         extremaPipeline = other.extremaPipeline;
         resizePipeline = other.resizePipeline;
+        descriptorPipeline = other.descriptorPipeline;
+        orientationPipeline = other.orientationPipeline;
         octaveBuffers = std::move(other.octaveBuffers);
         octaveTextures = std::move(other.octaveTextures);
         tempBuffers = std::move(other.tempBuffers);
@@ -953,6 +1225,8 @@ SIFT::Impl& SIFT::Impl::operator=(Impl&& other) noexcept {
         other.blurVertAndDoGPipeline = nil;
         other.extremaPipeline = nil;
         other.resizePipeline = nil;
+        other.descriptorPipeline = nil;
+        other.orientationPipeline = nil;
         other.imageBuffer = nil;
         other.imageTexture = nil;
         other.initialized = false;
@@ -1000,12 +1274,6 @@ void SIFT::Impl::detectAndCompute(cv::InputArray _image, cv::InputArray _mask,
         cv::Mat base;
         image.convertTo(base, CV_32F, SIFT_FIXPT_SCALE, 0);
 
-        // Zero out pre-allocated extrema bitarray buffers
-        for (size_t i = 0; i < extremaBitarrays.size(); i++) {
-            size_t bufferSize = extremaBitarraySizes[i] * sizeof(uint32_t);
-            memset(extremaBitarrays[i].contents, 0, bufferSize);
-        }
-
         keypoints.clear();
 
         // Upload octave 0 layer 0 to GPU buffer
@@ -1028,16 +1296,14 @@ void SIFT::Impl::detectAndCompute(cv::InputArray _image, cv::InputArray _mask,
         id<MTLCommandBuffer> cmdBuf = [commandQueue commandBuffer];
         cmdBuf.label = @"SIFT Feature Detection";
 
-        // Encode all GPU work into single command buffer
         for (int o = 0; o < config.nOctaves; o++) {
             encodeBatchedOctaveConstruction(cmdBuf, o);
         }
 
-        // Commit and wait for GPU work to complete
         [cmdBuf commit];
         [cmdBuf waitUntilCompleted];
 
-        // Pass 1: Extract all keypoints
+        std::vector<KeypointInfo> kpt_info;
         for (int o = 0; o < config.nOctaves; o++) {
             int octaveWidth = base.cols >> o;
 
@@ -1057,63 +1323,146 @@ void SIFT::Impl::detectAndCompute(cv::InputArray _image, cv::InputArray _mask,
                     (float)config.sigma,
                     gauss_pyr,
                     dog_pyr,
-                    keypoints
+                    kpt_info
                 );
             }
         }
 
-        // Adjust keypoint positions for firstOctave
-        for (size_t i = 0; i < keypoints.size(); i++) {
-            cv::KeyPoint& kpt = keypoints[i];
-            float scale = 1.f/(float)(1 << -config.firstOctave);
-            kpt.octave = (kpt.octave & ~255) | ((kpt.octave + config.firstOctave) & 255);
-            kpt.pt *= scale;
-            kpt.size *= scale;
+        double descriptorTimeMs = 0.0;  // Track descriptor time for summary
+
+        // Partition extrema by octave: GPU handles octave 0, CPU handles octaves 1+
+        constexpr int MAX_ORI_PEAKS = SIFT_ORI_HIST_BINS / 2;  // 18 max peaks
+        std::vector<KeypointInfo> gpuExtrema;  // Octave 0 extrema
+        std::vector<size_t> cpuExtremaIndices;  // Octaves 1+ extrema indices
+        // Partition keypoints by octave
+        std::vector<cv::KeyPoint> cpuKeypoints;  // Octaves 1+
+
+        const int maxGPUOctave = 0;
+
+        for (size_t i = 0; i < kpt_info.size(); i++) {
+            KeypointInfo& info = kpt_info[i];
+            int octave = info.octave & 255;
+
+            if (octave <= maxGPUOctave) {
+                // GPU path: copy 18-slot array
+                for (int j = 0; j < MAX_ORI_PEAKS; j++) {
+                    gpuExtrema.push_back(kpt_info[i]);
+                }
+            } else {
+                // CPU path: just track index
+                cpuExtremaIndices.push_back(i);
+            }
         }
 
-        // Pass 2: Compute descriptors if needed
+        // ═══════════════════════════════════════════════════════════════════
+        // STEP 3: GPU Orientation + Descriptor (Batched, Non-Blocking)
+        // ═══════════════════════════════════════════════════════════════════
+        // Submit GPU work without waiting (overlapped with CPU orientation below)
+        // Combined command buffer reduces overhead by ~0.1-0.5ms vs separate submissions
+
+        id<MTLCommandBuffer> combinedCmdBuf = nil;
+        id<MTLBuffer> orientationResultBuffer = nil;
+        id<MTLBuffer> descriptorResultBuffer = nil;
+
+        if (!gpuExtrema.empty()) {
+            combinedCmdBuf = [commandQueue commandBuffer];
+            combinedCmdBuf.label = @"SIFT Orientation + Descriptor Computation (GPU)";
+
+            orientationResultBuffer = encodeOrientationComputationCommand(
+                combinedCmdBuf, gpuExtrema
+            );
+
+            cv::Mat gpuDescriptorsMat;
+            descriptorResultBuffer = encodeDescriptorComputationCommand(
+                combinedCmdBuf,
+                orientationResultBuffer,  // Reuse buffer to avoid redundant upload
+                static_cast<uint32_t>(gpuExtrema.size()),
+                gpuDescriptorsMat
+            );
+
+            [combinedCmdBuf commit];  // Submit to GPU but don't wait
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // STEP 4: CPU Orientation Computation (Overlapped with GPU)
+        // ═══════════════════════════════════════════════════════════════════
+        // Process higher octaves on CPU while GPU handles octave 0
+
+        computeCPUOrientationsForExtrema(kpt_info, cpuExtremaIndices, gauss_pyr, cpuKeypoints);
+
+        // ═══════════════════════════════════════════════════════════════════
+        // STEP 5: Assemble Final Keypoint List
+        // ═══════════════════════════════════════════════════════════════════
+
+        int gpuCount = static_cast<int>(gpuExtrema.size());
+        int cpuCount = static_cast<int>(cpuKeypoints.size());
+        int totalKeypoints = cpuCount + gpuCount;
+        keypoints.insert(keypoints.end(), cpuKeypoints.begin(), cpuKeypoints.end());
+
+        // TODO: scale keypoints if needed for upsampling support
+        // float scale = 1.f/(float)(1 << -config.firstOctave);
+        // for (size_t i = 0; i < keypoints.size(); i++) {
+        //     cv::KeyPoint& kpt = keypoints[i];
+        //     kpt.octave = (kpt.octave & ~255) | ((kpt.octave + config.firstOctave) & 255);
+        //     kpt.pt *= scale;
+        //     kpt.size *= scale;
+        // }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // STEP 6: Compute Descriptors (CPU + GPU Results)
+        // ═══════════════════════════════════════════════════════════════════
+
         if (_descriptors.needed()) {
             const int descriptorSize = SIFT_DESCR_WIDTH * SIFT_DESCR_WIDTH * SIFT_DESCR_HIST_BINS;
-            int totalKeypoints = static_cast<int>(keypoints.size());
+            auto descriptorStartTime = std::chrono::high_resolution_clock::now();
 
             if (totalKeypoints > 0) {
                 cv::Mat descriptorsMat;
                 descriptorsMat.create(totalKeypoints, descriptorSize, config.descriptorType);
 
-                // Compute descriptors in octave groups for better cache locality
-                int descriptorRow = 0;
-                for (int o = 0; o < config.nOctaves; o++) {
-                    // Find keypoints belonging to this octave
-                    std::vector<cv::KeyPoint> octaveKeypoints;
-                    for (const auto& kpt : keypoints) {
+                // Compute CPU descriptors
+                if (cpuCount > 0) {
+                    for (int i = 0; i < cpuCount; i++) {
+                        const cv::KeyPoint& kpt = cpuKeypoints[i];
                         int kptOctave = kpt.octave & 255;
-                        if (kptOctave == o + config.firstOctave) {
-                            octaveKeypoints.push_back(kpt);
-                        }
-                    }
+                        int octave = kptOctave - config.firstOctave;
+                        int keypoint_layer = (kpt.octave >> 8) & 255;
+                        int finalGaussIdx = octave * (config.nOctaveLayers + 3) + keypoint_layer;
+                        const cv::Mat& img = gauss_pyr[finalGaussIdx];
 
-                    if (!octaveKeypoints.empty()) {
-                        cv::Mat octaveDescriptors = descriptorsMat.rowRange(
-                            descriptorRow,
-                            descriptorRow + octaveKeypoints.size()
-                        );
+                        float octaveScale = 1.f / (1 << octave);
+                        cv::Point2f ptf(kpt.pt.x * octaveScale, kpt.pt.y * octaveScale);
+                        float scl = kpt.size * 0.5f * octaveScale;
 
-                        computeDescriptors(
-                            octaveKeypoints,
-                            o,
-                            config.nOctaveLayers,
-                            gauss_pyr,
-                            octaveDescriptors,
-                            config.descriptorType
-                        );
-
-                        descriptorRow += octaveKeypoints.size();
+                        calcSIFTDescriptor(img, ptf, kpt.angle,
+                                          scl, SIFT_DESCR_WIDTH, SIFT_DESCR_HIST_BINS,
+                                          descriptorsMat, i);
                     }
                 }
 
+                // Copy GPU descriptors (wait for GPU completion + readback)
+                if (gpuCount > 0 && descriptorResultBuffer) {
+                    [combinedCmdBuf waitUntilCompleted];
+                    copyGPUDescriptorResults(
+                        descriptorResultBuffer,
+                        orientationResultBuffer,
+                        gpuExtrema,
+                        descriptorsMat,
+                        keypoints,
+                        cpuCount,
+                        descriptorSize,
+                        config.descriptorType
+                    );
+                    descriptorsMat = descriptorsMat.rowRange(0, keypoints.size());
+                    RELEASE_IF_MANUAL(descriptorResultBuffer);
+                    RELEASE_IF_MANUAL(orientationResultBuffer);
+                }
+
                 descriptorsMat.copyTo(_descriptors);
+
+                auto descriptorEndTime = std::chrono::high_resolution_clock::now();
+                descriptorTimeMs = std::chrono::duration<double, std::milli>(descriptorEndTime - descriptorStartTime).count();
             } else {
-                // Create empty descriptor matrix
                 _descriptors.create(0, descriptorSize, config.descriptorType);
             }
         }
