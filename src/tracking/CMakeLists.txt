@@ -10,6 +10,8 @@ set(HEADER_LIST
   "${PROJECT_SOURCE_DIR}/include/lar/tracking/outlier_detection/outlier_detector.h"
   "${PROJECT_SOURCE_DIR}/include/lar/tracking/pose_filtering/pose_filter_strategy.h"
   "${PROJECT_SOURCE_DIR}/include/lar/tracking/vision.h"
+  "${PROJECT_SOURCE_DIR}/include/lar/tracking/matching/flann_matcher.h"
+  "${PROJECT_SOURCE_DIR}/include/lar/tracking/matching/bf_matcher_metal.h"
   # Confidence estimation headers
   "${PROJECT_SOURCE_DIR}/include/lar/tracking/confidence_estimation/confidence_estimator_base.h"
   "${PROJECT_SOURCE_DIR}/include/lar/tracking/confidence_estimation/geometric_confidence_estimator.h"
@@ -35,6 +37,8 @@ set(TRACKING_SOURCES
   tracker.cpp
   filtered_tracker.cpp
   vision.cpp
+  matching/flann_matcher.cpp
+  matching/bf_matcher_metal.mm
   # Confidence estimation sources
   confidence_estimation/geometric_confidence_estimator.cpp
   confidence_estimation/simple_confidence_estimator.cpp
@@ -84,6 +88,7 @@ target_link_libraries(lar_tracking
     opencv_calib3d
     opencv_imgproc
     opencv_features2d  # For KeyPointsFilter utilities
+    opencv_flann       # For custom FlannMatcher
     lar_core
     lar_mapping
   PRIVATE
@@ -105,3 +110,66 @@ target_include_directories(lar_tracking
 
 # Add subdirectories for modular components
 add_subdirectory(sift)
+
+# ============================================================================
+# Metal BFMatcher Shader Compilation (macOS/iOS only)
+# ============================================================================
+
+if(APPLE)
+  find_library(METAL_LIBRARY Metal)
+
+  if(METAL_LIBRARY)
+    target_link_libraries(lar_tracking PRIVATE ${METAL_LIBRARY})
+
+    # Compile Metal shader library for BFMatcher
+    set(BF_MATCHER_SHADER_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/matching/metal/bf_matcher.metal")
+    set(BF_MATCHER_AIR_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/bf_matcher.air")
+    set(BF_MATCHER_LIB_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/bf_matcher.metallib")
+
+    # Step 1: Compile .metal to .air
+    add_custom_command(
+      OUTPUT ${BF_MATCHER_AIR_OUTPUT}
+      COMMAND xcrun -sdk macosx metal -c -O2 -fno-fast-math ${BF_MATCHER_SHADER_SOURCE} -o ${BF_MATCHER_AIR_OUTPUT}
+      DEPENDS ${BF_MATCHER_SHADER_SOURCE}
+      COMMENT "Compiling Metal shader: bf_matcher.metal → bf_matcher.air"
+    )
+
+    # Step 2: Link .air to .metallib
+    add_custom_command(
+      OUTPUT ${BF_MATCHER_LIB_OUTPUT}
+      COMMAND xcrun -sdk macosx metallib ${BF_MATCHER_AIR_OUTPUT} -o ${BF_MATCHER_LIB_OUTPUT}
+      DEPENDS ${BF_MATCHER_AIR_OUTPUT}
+      COMMENT "Linking Metal library: bf_matcher.air → bf_matcher.metallib"
+    )
+
+    # Step 3: Copy .metallib to runtime bin directory
+    set(RUNTIME_BIN_DIR "${CMAKE_SOURCE_DIR}/bin")
+    add_custom_command(
+      OUTPUT ${RUNTIME_BIN_DIR}/bf_matcher.metallib
+      COMMAND ${CMAKE_COMMAND} -E make_directory ${RUNTIME_BIN_DIR}
+      COMMAND ${CMAKE_COMMAND} -E copy ${BF_MATCHER_LIB_OUTPUT} ${RUNTIME_BIN_DIR}/bf_matcher.metallib
+      DEPENDS ${BF_MATCHER_LIB_OUTPUT}
+      COMMENT "Copying bf_matcher.metallib to ${RUNTIME_BIN_DIR}/"
+    )
+
+    # Also copy to build directory bin for consistency
+    add_custom_command(
+      OUTPUT ${PROJECT_BINARY_DIR}/bin/bf_matcher.metallib
+      COMMAND ${CMAKE_COMMAND} -E copy ${BF_MATCHER_LIB_OUTPUT} ${PROJECT_BINARY_DIR}/bin/bf_matcher.metallib
+      DEPENDS ${BF_MATCHER_LIB_OUTPUT}
+      COMMENT "Copying bf_matcher.metallib to ${PROJECT_BINARY_DIR}/bin/"
+    )
+
+    # Create custom target to ensure Metal library is built and copied to both locations
+    add_custom_target(metal_bf_matcher_shaders ALL
+      DEPENDS ${RUNTIME_BIN_DIR}/bf_matcher.metallib ${PROJECT_BINARY_DIR}/bin/bf_matcher.metallib
+    )
+
+    # Make lar_tracking depend on the Metal shader compilation
+    add_dependencies(lar_tracking metal_bf_matcher_shaders)
+
+    message(STATUS "Metal BFMatcher shader compilation configured: bf_matcher.metal → bf_matcher.metallib")
+  else()
+    message(WARNING "Metal framework not found. Metal BFMatcher will not be available.")
+  endif()
+endif()

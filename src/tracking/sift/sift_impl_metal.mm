@@ -356,7 +356,6 @@ static void extractKeypoints(
     std::vector<KeypointInfo>& keypoints)
 {
     int count = 0;
-    int pts = 0;
     for (uint32_t chunkIdx = 0; chunkIdx < octaveBitarraySize; chunkIdx++) {
         uint32_t chunk = bitarray[chunkIdx];
         if (chunk == 0) continue;
@@ -375,7 +374,6 @@ static void extractKeypoints(
                                     nOctaveLayers, contrastThreshold, edgeThreshold, sigma)) {
                     continue;
                 }
-                pts++;
                 KeypointInfo info;
                 info.pt.x = kpt.pt.x;
                 info.pt.y = kpt.pt.y;
@@ -391,7 +389,7 @@ static void extractKeypoints(
             }
         }
     }
-    std::cout << "octave " << octave << " layer " << layer << " added " << count << " keypoints " << pts << " pts" << std::endl;
+    std::cout << "octave " << octave << " layer " << layer << " added " << count << " keypoints " << std::endl;
 }
 
 static void computeDescriptors(

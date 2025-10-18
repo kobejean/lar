@@ -2,16 +2,21 @@
 #define LAR_TRACKING_VISION_H
 
 #include "sift/sift.h"
+#include "matching/flann_matcher.h"
+#include "matching/bf_matcher_metal.h"
 #include <opencv2/features2d.hpp>
 #include <opencv2/core/types.hpp>
+#include <opencv2/flann.hpp>
 
 namespace lar {
 
   class Vision {
     public:
       cv::Ptr<SIFT> detector;
-      cv::FlannBasedMatcher flann_matcher;
-      cv::BFMatcher bf_matcher;
+      FlannMatcher flann_matcher;
+      FlannMatcher lsh_matcher;  // LSH-based matcher for binary/uint8 descriptors
+      BFMatcherMetal bf_matcher_metal;
+      cv::BFMatcher bf_matcher;  // Keep for fallback/comparison
 
       /// Constructor with optional image dimensions for Metal SIFT optimization
       /// @param imageSize Expected input image dimensions (default: 1920x1440, typical ARKit resolution)

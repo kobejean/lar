@@ -42,8 +42,8 @@ int main(int argc, const char* argv[]){
     num_threads = std::stoi(argv[1]);
   }
 
-  string localize = "./input/aizu-park-4-ext/";
-  // string localize = "./input/aizu-park-sunny/";
+  // string localize = "./input/aizu-park-4-ext/";
+  string localize = "./input/aizu-park-sunny/";
 
   std::cout << "=== Multithreaded Localization Test ===" << std::endl;
   std::cout << "Using " << num_threads << " threads" << std::endl;
@@ -117,7 +117,7 @@ int main(int argc, const char* argv[]){
       // Use frame position for spatial query
       double query_x = frame.extrinsics(0, 3);
       double query_z = frame.extrinsics(2, 3);
-      double query_diameter = 20.0; // 20 meter search radius
+      double query_diameter = 10.0; // 10 meter search radius
 
       Eigen::Matrix4d result_transform;
       bool success = tracker.localize(image, frame, query_x, query_z, query_diameter, result_transform);
