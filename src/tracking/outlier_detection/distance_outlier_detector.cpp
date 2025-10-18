@@ -16,9 +16,6 @@ bool DistanceOutlierDetector::isOutlier(
     double confidence,
     const FilteredTrackerConfig& config) const {
 
-    if (!config.enable_outlier_detection) {
-        return false;
-    }
 
     // Position distance check
     Eigen::Vector3d pos_measured = measurement.block<3,1>(0,3);

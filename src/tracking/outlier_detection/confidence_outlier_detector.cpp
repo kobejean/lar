@@ -15,10 +15,6 @@ bool ConfidenceOutlierDetector::isOutlier(
     double confidence,
     const FilteredTrackerConfig& config) const {
 
-    if (!config.enable_outlier_detection) {
-        return false;
-    }
-
     bool is_outlier = confidence < MIN_CONFIDENCE_THRESHOLD;
 
     if (config.enable_debug_output && is_outlier) {

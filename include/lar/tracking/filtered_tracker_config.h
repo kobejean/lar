@@ -20,9 +20,10 @@ struct FilteredTrackerConfig {
         EXTENDED_KALMAN_FILTER,
         SLIDING_WINDOW_BA,
         AVERAGING,
-        PASS_THROUGH
+        PASS_THROUGH,
+        SMOOTH_FILTER
     };
-    FilterStrategy filter_strategy = FilterStrategy::PASS_THROUGH;
+    FilterStrategy filter_strategy = FilterStrategy::SMOOTH_FILTER;
 
     std::unique_ptr<PoseFilterStrategy> createFilterStrategy() const;
 
@@ -34,8 +35,9 @@ struct FilteredTrackerConfig {
     double initial_orientation_uncertainty = 0.1; // Initial orientation uncertainty (radians)
 
     // === Outlier Detection ===
-    double outlier_threshold = 12.592;  // Chi-squared threshold for 6 DOF, 95% confidence
-    bool enable_outlier_detection = true;
+    // double outlier_threshold = 12.592;  // Chi-squared threshold for 6 DOF, 95% confidence
+    // double outlier_threshold = 8.558;  // Chi-squared threshold for 6 DOF, 80% confidence
+    double outlier_threshold = 5.348;  // Chi-squared threshold for 6 DOF, 60% confidence
 
     // === Measurement Noise Estimation ===
     double base_position_noise = 0.2;      // Base position uncertainty (10cm)
@@ -87,6 +89,12 @@ struct FilteredTrackerConfig {
     int sliding_window_optimization_iterations = 10;  // g2o optimization iterations
     double sliding_window_pixel_noise = 2.0;          // Expected reprojection noise (pixels)
 
+    // === Smooth Filter ===
+    double smooth_filter_alpha = 0.07;                 // Base smoothing factor (0-1, higher = faster convergence)
+    double smooth_filter_min_alpha = 0.1;             // Minimum alpha for low-confidence measurements
+    double smooth_filter_motion_scale = 1.0;          // Motion amount for 2x correction boost (meters or equivalent)
+    double smooth_filter_rotation_scale = 1.0;        // Rotation-to-translation conversion (radians → meters equivalent)
+
     // === Debugging ===
     bool enable_debug_output = true;
     bool enable_coordinate_debugging = false;
@@ -133,7 +141,10 @@ struct FilteredTrackerConfig {
                sliding_window_keyframe_angle > 0.0 &&
                sliding_window_min_observations > 0 &&
                sliding_window_optimization_iterations > 0 &&
-               sliding_window_pixel_noise > 0.0;
+               sliding_window_pixel_noise > 0.0 &&
+               smooth_filter_alpha > 0.0 && smooth_filter_alpha <= 1.0 &&
+               smooth_filter_motion_scale > 0.0 &&
+               smooth_filter_rotation_scale > 0.0;
     }
 };
 

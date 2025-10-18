@@ -140,9 +140,6 @@ FilteredTracker::MeasurementResult FilteredTracker::measurementUpdate(
     result.success = false;
     result.confidence = 0.0;
 
-    // Update VIO pose from frame
-    updateVIOCameraPose(frame.extrinsics);
-
     // Perform LAR localization (returns camera pose in LAR world)
     Eigen::Matrix4d T_lar_from_camera_measured;
     bool localization_success;
@@ -152,7 +149,7 @@ FilteredTracker::MeasurementResult FilteredTracker::measurementUpdate(
         Eigen::Matrix4d predicted_pose = filter_strategy_->getState().toTransform();
 
         if (config_.enable_debug_output) {
-            std::cout << "Using EKF prediction as initial guess for PnP" << std::endl;
+            std::cout << "Using prediction as initial guess for PnP" << std::endl;
         }
 
         localization_success = base_tracker_->localize(
@@ -262,7 +259,7 @@ FilteredTracker::MeasurementResult FilteredTracker::measurementUpdate(
 // ============================================================================
 
 Eigen::Matrix4d FilteredTracker::getFilteredTransform() const {
-    return last_transform_result_.map_to_vio_transform;
+	return current_vio_camera_pose_ * filter_strategy_->getState().toTransform().inverse();
 }
 
 double FilteredTracker::getPositionUncertainty() const {

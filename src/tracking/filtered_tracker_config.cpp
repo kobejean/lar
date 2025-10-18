@@ -3,6 +3,7 @@
 #include "lar/tracking/pose_filtering/sliding_window_ba.h"
 #include "lar/tracking/pose_filtering/averaging_filter.h"
 #include "lar/tracking/pose_filtering/pass_through_filter.h"
+#include "lar/tracking/pose_filtering/smooth_filter.h"
 #include <iostream>
 
 namespace lar {
@@ -24,6 +25,10 @@ std::unique_ptr<PoseFilterStrategy> FilteredTrackerConfig::createFilterStrategy(
         case FilterStrategy::PASS_THROUGH:
             std::cout << "FilteredTracker: Using Pass Through Filter" << std::endl;
             return std::make_unique<PassThroughFilter>();
+
+        case FilterStrategy::SMOOTH_FILTER:
+            std::cout << "FilteredTracker: Using Smooth Filter" << std::endl;
+            return std::make_unique<SmoothFilter>();
 
         default:
             std::cout << "FilteredTracker: Unknown strategy, defaulting to SWBA" << std::endl;

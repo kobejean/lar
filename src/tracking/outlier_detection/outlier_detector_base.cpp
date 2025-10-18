@@ -20,8 +20,8 @@ OutlierAnalysisResult OutlierDetector::analyzeOutlier(
         consecutive_rejections_++;
 
         // Simple pattern analysis with tunable parameters
-        // Default: 3 consecutive rejections + confidence > 0.5 suggests bad state
-        bool likely_bad_state = (consecutive_rejections_ >= 3) && (confidence > 0.5);
+        // Default: 3 consecutive rejections + confidence > 0.4 suggests bad state
+        bool likely_bad_state = (consecutive_rejections_ >= 3) && (confidence > 0.4);
 
         result.likely_bad_state = likely_bad_state;
         result.should_reset_motion = likely_bad_state;

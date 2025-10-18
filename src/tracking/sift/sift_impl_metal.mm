@@ -28,7 +28,7 @@
     #define RELEASE_IF_MANUAL(obj) (void)0
 #endif
 
-#define METAL_BUFFER_ALIGNMENT 16  // Metal prefers 16-byte alignment
+#define METAL_BUFFER_ALIGNMENT 64  // Metal requires 64-byte alignment for buffer-backed textures
 
 namespace lar {
 

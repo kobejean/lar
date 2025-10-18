@@ -216,16 +216,16 @@ void SlidingWindowBA::marginalizeOldestKeyframe() {
 
     auto oldest = keyframes_.front();
 
-    // Proper marginalization: extract marginal information before removal
-    // Convert covariance to information matrix for marginalization
-    Eigen::MatrixXd marginal_covariance = extractCovarianceFromBA(oldest->id);
-    Eigen::MatrixXd marginal_info = calculateInformationMatrix(marginal_covariance);
+    // // Proper marginalization: extract marginal information before removal
+    // // Convert covariance to information matrix for marginalization
+    // Eigen::MatrixXd marginal_covariance = extractCovarianceFromBA(oldest->id);
+    // Eigen::MatrixXd marginal_info = calculateInformationMatrix(marginal_covariance);
 
-    // Apply prior from marginalized pose to connected keyframes
-    if (keyframes_.size() > 1) {
-        auto next_keyframe = keyframes_[1];
-        applyMarginalPrior(next_keyframe->id, marginal_info, oldest->pose);
-    }
+    // // Apply prior from marginalized pose to connected keyframes
+    // if (keyframes_.size() > 1) {
+    //     auto next_keyframe = keyframes_[1];
+    //     applyMarginalPrior(next_keyframe->id, marginal_info, oldest->pose);
+    // }
 
     // Remove the keyframe from the window
     keyframes_.pop_front();
@@ -288,29 +288,8 @@ void SlidingWindowBA::buildOptimizationGraph(const FilteredTrackerConfig& config
         }
     }
 
-    // Fix the keyframe with highest confidence (best measurement quality) for gauge freedom
-    size_t best_keyframe_id = 0;
-    double highest_confidence = -1.0;
-
-    for (const auto& kf : keyframes_) {
-        if (kf->confidence > highest_confidence) {
-            highest_confidence = kf->confidence;
-            best_keyframe_id = kf->id;
-        }
-    }
-
-    // Fix the most confident keyframe
-    auto best_vertex_it = pose_vertices_.find(best_keyframe_id);
-    if (best_vertex_it != pose_vertices_.end()) {
-        best_vertex_it->second->setFixed(true);
-
-        if (config_.enable_debug_output) {
-            std::cout << "Fixed keyframe " << best_keyframe_id << " (confidence: "
-                    << highest_confidence << ") for gauge freedom" << std::endl;
-        }
-    }
-
-    // Add landmark vertices - no fixing needed since we fix one pose for gauge freedom
+    // Add landmark vertices - FIXED for motion-only BA
+    // Only camera poses are optimized, landmarks provide constraints but don't move
 
     for (const auto& landmark : active_landmarks_) {
         auto v = new g2o::VertexPointXYZ();
@@ -318,6 +297,7 @@ void SlidingWindowBA::buildOptimizationGraph(const FilteredTrackerConfig& config
         Eigen::Vector3d position(landmark->position[0], landmark->position[1], landmark->position[2]);
         v->setEstimate(position);
         v->setMarginalized(true);
+        v->setFixed(true);  // MOTION-ONLY BA: Fix all landmarks
 
         optimizer_->addVertex(v);
         landmark_vertices_[landmark] = v;
@@ -344,7 +324,7 @@ void SlidingWindowBA::buildOptimizationGraph(const FilteredTrackerConfig& config
                 // Set measurement (u, v, depth=0 for monocular) - extract from keypoint
                 Eigen::Vector2d measurement_with_depth(keypoint.pt.x, keypoint.pt.y);
                 edge->setMeasurement(measurement_with_depth);
-                double xy_information = 1./9.0;
+                double xy_information = 1.;
                 Eigen::Vector2d information_diag(xy_information, xy_information);
                 edge->setInformation(information_diag.asDiagonal());
 

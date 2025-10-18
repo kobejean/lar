@@ -5,14 +5,6 @@
 #include <opencv2/flann.hpp>
 #include <opencv2/imgproc.hpp>
 
-// ============================================================================
-// Matcher Selection - Choose your matcher for benchmarking
-// ============================================================================
-// Matcher options:
-// 0 = FLANN KD-Tree (CPU, approximate, best for float descriptors)
-// 1 = Metal BFMatcher (GPU, exact, brute-force)
-// 2 = LSH (CPU, approximate, optimized for binary/uint8 descriptors)
-#define MATCHER_TYPE 0  // Change to 1 for Metal, 2 for LSH
 
 namespace lar {
 
@@ -23,12 +15,7 @@ namespace lar {
     : flann_matcher(
         cv::makePtr<cv::flann::KDTreeIndexParams>(3),
         cv::makePtr<cv::flann::SearchParams>(32)
-      ),
-      lsh_matcher(
-        cv::makePtr<cv::flann::LshIndexParams>(12, 20, 2),  // table_number, key_size, multi_probe_level
-        cv::makePtr<cv::flann::SearchParams>(32)
-      ),
-      bf_matcher(cv::NORM_L2, false)
+      )
   {
     // Create SIFT config with custom parameters
     SIFTConfig config(imageSize);
@@ -112,43 +99,8 @@ namespace lar {
     nn_matches.reserve(desc1.rows);
     filtered_matches.reserve(desc1.rows / 4); // Conservative estimate
 
-    // Matcher selection based on MATCHER_TYPE
     auto start_match = std::chrono::high_resolution_clock::now();
-    auto start_convert = std::chrono::high_resolution_clock::now();
 
-#if MATCHER_TYPE == 1
-    // ========================================================================
-    // Metal GPU-accelerated brute-force matching (exact k=8)
-    // ========================================================================
-    if (bf_matcher_metal.isReady()) {
-        bf_matcher_metal.knnMatch(desc1, desc2, nn_matches, 8);
-        auto end_convert = std::chrono::high_resolution_clock::now();
-        auto convert_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_convert - start_convert).count();
-        std::cout << "[Metal BFMatcher] " << bf_matcher_metal.getPerformanceStats()
-                  << " | GPU exact matching" << std::endl;
-    } else {
-        std::cerr << "Metal not available, change MATCHER_TYPE to 0 or 2" << std::endl;
-        return filtered_matches;
-    }
-
-#elif MATCHER_TYPE == 2
-    // ========================================================================
-    // LSH matcher (approximate, optimized for binary/uint8 descriptors)
-    // ========================================================================
-    // LSH requires CV_8U (uint8) type - use descriptors directly without conversion!
-    auto end_convert = std::chrono::high_resolution_clock::now();
-
-    FlannMatcher temp_lsh_matcher(
-        cv::makePtr<cv::flann::LshIndexParams>(12, 20, 2),  // 12 tables, 20-bit keys, multi-probe level 2
-        cv::makePtr<cv::flann::SearchParams>(32)
-    );
-    temp_lsh_matcher.add(desc2);  // Use uint8 directly
-    temp_lsh_matcher.knnMatch(desc1, nn_matches, 8);
-
-    auto convert_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_convert - start_convert).count();
-    std::cout << "[LSH Matcher] No conversion needed: " << convert_time << "ms | CPU LSH (uint8 native)" << std::endl;
-
-#else
     // ========================================================================
     // FLANN KD-Tree matcher (approximate k-NN, best for float descriptors)
     // ========================================================================
@@ -156,18 +108,12 @@ namespace lar {
     cv::Mat desc1_float, desc2_float;
     desc1.convertTo(desc1_float, CV_32F);
     desc2.convertTo(desc2_float, CV_32F);
-    auto end_convert = std::chrono::high_resolution_clock::now();
 
-    FlannMatcher temp_matcher(
-        cv::makePtr<cv::flann::KDTreeIndexParams>(3),  // 3 randomized KD-trees
-        cv::makePtr<cv::flann::SearchParams>(32)
-    );
-    temp_matcher.add(desc2_float);
-    temp_matcher.knnMatch(desc1_float, nn_matches, 8);
 
-    auto convert_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_convert - start_convert).count();
-    std::cout << "[FLANN KD-Tree] Convert: " << convert_time << "ms | CPU KD-tree approximate matching" << std::endl;
-#endif
+    flann_matcher.clear();
+    flann_matcher.add(desc2_float);
+    flann_matcher.knnMatch(desc1_float, nn_matches, 8);
+
 
     auto end_match = std::chrono::high_resolution_clock::now();
     std::sort(nn_matches.begin(), nn_matches.end(), [](const std::vector<cv::DMatch>& a, const std::vector<cv::DMatch>& b) {

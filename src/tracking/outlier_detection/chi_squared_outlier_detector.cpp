@@ -16,10 +16,6 @@ bool ChiSquaredOutlierDetector::isOutlier(
     double confidence,
     const FilteredTrackerConfig& config) const {
 
-    if (!config.enable_outlier_detection) {
-        return false;
-    }
-
     // Convert to state vectors
     Eigen::VectorXd measured_vector = transformToVector(measurement);
     Eigen::VectorXd predicted_vector = transformToVector(predicted_state);
@@ -31,18 +27,16 @@ bool ChiSquaredOutlierDetector::isOutlier(
     double mahalanobis_squared = innovation.transpose() * covariance.inverse() * innovation;
 
     // Adjust threshold based on confidence
-    double threshold = config.outlier_threshold / std::max(config.min_confidence_factor, confidence);
+    double threshold = 0.5 * config.outlier_threshold / std::max(config.min_confidence_factor, confidence);
 
     bool is_outlier = mahalanobis_squared > threshold;
 
-    if (config.enable_debug_output && is_outlier) {
-        std::cout << "Chi-squared outlier detected: Mahalanobis distance = " << std::sqrt(mahalanobis_squared)
-                  << " (threshold = " << std::sqrt(threshold) << ")" << std::endl;
+    if (config.enable_debug_output) {
+        std::cout << "Chi-squared: Mahalanobis distance = " << std::sqrt(mahalanobis_squared)
+                  << " (threshold = " << std::sqrt(threshold) << ", is_outlier = " << is_outlier << ")" << std::endl;
     }
 
-    // return is_outlier;
-    // TODO: reenable after tuning
-    return false;
+    return is_outlier;
 }
 
 Eigen::VectorXd ChiSquaredOutlierDetector::transformToVector(const Eigen::Matrix4d& T) const {

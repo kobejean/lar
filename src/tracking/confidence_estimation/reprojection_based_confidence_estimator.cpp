@@ -43,20 +43,20 @@ double ReprojectionBasedConfidenceEstimator::calculateConfidence(
     // Extract position and orientation uncertainties from diagonal
     double pos_uncertainty = std::sqrt((fisher_cov(0,0) + fisher_cov(1,1) + fisher_cov(2,2)) / 3.0);
     double ori_uncertainty = std::sqrt((fisher_cov(3,3) + fisher_cov(4,4) + fisher_cov(5,5)) / 3.0);
-
+    constexpr double ln_0_5 = -0.6931471806; // ln(0.5) 
     // Reprojection quality component
     double target_rmse = 5.0;  // Target: 5 pixels or better
-    double error_score = std::exp(-rmse / target_rmse);
+    double error_score = std::exp(ln_0_5 * rmse / target_rmse);
 
     // Uncertainty-based confidence (lower uncertainty = higher confidence)
-    double pos_score = std::exp(-pos_uncertainty / 0.1);  // Target: 10cm position uncertainty
-    double ori_score = std::exp(-ori_uncertainty / 0.05); // Target: ~3° orientation uncertainty
+    double pos_score = std::exp(ln_0_5 * pos_uncertainty / 0.5);  // Target: 50cm position uncertainty
+    double ori_score = std::exp(ln_0_5 * ori_uncertainty / 0.25); // Target: ~15° orientation uncertainty
 
     // Inlier quality
     double inlier_ratio = context.total_matches > 0 ?
         static_cast<double>(inliers.size()) / context.total_matches : 1.0;
-    double count_score = std::min(1.0, inliers.size() / 50.0);  // Normalize by 50 inliers
-    double ratio_score = std::min(1.0, inlier_ratio * 5.0);    // Cap at 20% ratio
+    double count_score = std::min(1.0, inliers.size() / 30.0);  // Normalize by 30 inliers
+    double ratio_score = std::min(1.0, inlier_ratio * 10.0);    // Cap at 10% ratio
 
     // Combined confidence with data-driven weighting
     double confidence = 0.3 * error_score +   // 30% reprojection quality

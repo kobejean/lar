@@ -14,9 +14,6 @@ namespace lar {
     public:
       cv::Ptr<SIFT> detector;
       FlannMatcher flann_matcher;
-      FlannMatcher lsh_matcher;  // LSH-based matcher for binary/uint8 descriptors
-      BFMatcherMetal bf_matcher_metal;
-      cv::BFMatcher bf_matcher;  // Keep for fallback/comparison
 
       /// Constructor with optional image dimensions for Metal SIFT optimization
       /// @param imageSize Expected input image dimensions (default: 1920x1440, typical ARKit resolution)
