@@ -2,7 +2,7 @@
 
 ![LAR Test Status](https://github.com/kobejean/lar/actions/workflows/test.yml/badge.svg?branch=main)
 
-![LARExplore](/docs/media/lar_explore1.png)
+![LARExplore](/docs/media/lar_explore2.png)
 
 ## Demo
 
