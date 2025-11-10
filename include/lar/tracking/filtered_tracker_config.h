@@ -23,7 +23,7 @@ struct FilteredTrackerConfig {
         PASS_THROUGH,
         SMOOTH_FILTER
     };
-    FilterStrategy filter_strategy = FilterStrategy::SMOOTH_FILTER;
+    FilterStrategy filter_strategy = FilterStrategy::PASS_THROUGH;
 
     std::unique_ptr<PoseFilterStrategy> createFilterStrategy() const;
 

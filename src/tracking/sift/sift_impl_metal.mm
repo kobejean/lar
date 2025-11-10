@@ -389,7 +389,7 @@ static void extractKeypoints(
             }
         }
     }
-    std::cout << "octave " << octave << " layer " << layer << " added " << count << " keypoints " << std::endl;
+    // std::cout << "octave " << octave << " layer " << layer << " added " << count << " keypoints " << std::endl;
 }
 
 static void computeDescriptors(

@@ -114,22 +114,24 @@ namespace lar {
     std::cout << "Stage 1: Pose-only optimization (landmarks fixed)..." << std::endl;
     fixAllLandmarks(true);
     optimizer.initializeOptimization(0);
-    optimizer.optimize(20);
+    optimizer.optimize(50);
     fixAllLandmarks(false);
     printReprojectionError();
+    // markOutliers(1e20, 3*7.378);
     
     // Stage 2: Main optimization rounds
     constexpr size_t rounds = 4;
     double chi_threshold[4] = { 7.378, 5.991, 4.605, 3.841 };
-    size_t iteration[4] = { 100, 60, 60, 60 };
+    double odometry_chi_threshold[4] = { 7.378, 5.991, 4.605, 3.841 };
+    size_t iteration[4] = { 300, 100, 60, 60 };
 
     for (size_t i = 0; i < rounds; i++) {
       std::cout << "Stage 2." << (i+1) << ": Full optimization..." << std::endl;
       optimizer.initializeOptimization(0);
       optimizer.optimize(iteration[i]);
       printReprojectionError();
-      rescaleToMatchOdometry();
-      markOutliers(chi_threshold[i]);
+      // rescaleToMatchOdometry();
+      markOutliers(chi_threshold[i], 2.3*odometry_chi_threshold[i]);
     }
 
     // // Final round: remove robust kernels for fine-tuning
@@ -150,7 +152,7 @@ namespace lar {
     printReprojectionError();
     markOutliers(3.841);
     printReprojectionError();
-    rescaleToMatchOdometry();
+    // rescaleToMatchOdometry();
   }
 
   void BundleAdjustment::update(double marginRatio) {

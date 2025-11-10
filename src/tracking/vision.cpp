@@ -24,6 +24,7 @@ namespace lar {
 
     // Create SIFT detector using cv::Ptr for proper destruction order
     detector = cv::makePtr<SIFT>(config);
+    detector_opencv = cv::SIFT::create(0, 3, 0.02, 10, 1.6, CV_8U);
   }
 
   void Vision::configureImageSize(cv::Size imageSize) {

@@ -34,6 +34,12 @@ namespace lar {
     std::string points3d_txt = sparse_dir + "/points3D.txt";
     
     if (!std::filesystem::exists(images_txt) || !std::filesystem::exists(points3d_txt)) {
+      if (!std::filesystem::exists(images_txt)) {
+        std::cout << "images_txt " << images_txt << std::endl;
+      }
+      if (!std::filesystem::exists(points3d_txt)) {
+        std::cout << "points3d_txt " << points3d_txt << std::endl;
+      }
       std::cout << "Text files found in " << sparse_dir << std::endl;
       return false;
     }

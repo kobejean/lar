@@ -67,7 +67,7 @@ add_library(lar_tracking
 # These flags balance performance with IEEE 754 compliance for reproducible results
 target_compile_options(lar_tracking PRIVATE
   $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:
-    -O3                      # High optimization
+    -O2                      # High optimization
     -march=native            # Use best available SIMD for current CPU
     # -mfpmath=sse             # Use SSE for FP math (consistent 32/64-bit precision)
     -fno-fast-math
@@ -76,7 +76,7 @@ target_compile_options(lar_tracking PRIVATE
     -fno-unsafe-math-optimizations  # Uncomment for strictest compliance
   >
   $<$<CXX_COMPILER_ID:MSVC>:
-    /O3                      # Optimize for speed
+    /O2                      # Optimize for speed
     /arch:AVX2               # AVX2 SIMD (or /arch:AVX512 if available)
     /fp:precise              # Precise floating-point model (default, good)
     /fp:strict             # Uncomment for strictest IEEE 754 compliance (slower)

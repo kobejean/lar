@@ -43,6 +43,10 @@ debug: CMAKE_ARGS = -DCMAKE_BUILD_TYPE=Debug
 debug: configure
 	$(MAKE) $(QUIET) -C build -j 8
 
+profile: CMAKE_ARGS = -DCMAKE_BUILD_TYPE=RelWithDebInfo
+profile: configure
+	$(MAKE) $(QUIET) -C build -j 8
+
 clean: CMAKE_ARGS =
 clean: configure
 	$(MAKE) $(QUIET) -C build clean

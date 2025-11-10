@@ -57,11 +57,25 @@ if(LAR_USE_METAL_SIFT AND APPLE)
     #   -fno-fast-math: Disable unsafe optimizations (reassociation, reciprocals, etc.)
     #   -ffp-contract=off: Disable FMA to match CPU computation exactly
     #   -I: Include directory for sift_constants.metal header
+    # Debug/Profiling flags (RelWithDebInfo, Debug):
+    #   -gline-tables-only: Line info for Instruments profiling
+    #   -frecord-sources: Embed shader source for GPU debugging
+    #   -MO: Generate optimization remarks
+
+    # Determine Metal compilation flags based on build type
+    if(CMAKE_BUILD_TYPE MATCHES "RelWithDebInfo|Debug")
+      set(METAL_COMPILE_FLAGS -O2 -fno-fast-math -fmetal-math-mode=safe -gline-tables-only -frecord-sources -MO)
+      message(STATUS "Metal shaders: Debug symbols enabled for profiling")
+    else()
+      set(METAL_COMPILE_FLAGS -O2 -fno-fast-math -fmetal-math-mode=safe)
+      message(STATUS "Metal shaders: Production build (no debug symbols)")
+    endif()
+
     add_custom_command(
       OUTPUT ${METAL_AIR_OUTPUT}
-      COMMAND xcrun -sdk macosx metal -c -fno-fast-math -fmetal-math-mode=safe -I${CMAKE_CURRENT_SOURCE_DIR}/metal ${METAL_SHADER_SOURCE} -o ${METAL_AIR_OUTPUT}
+      COMMAND xcrun -sdk macosx metal -c ${METAL_COMPILE_FLAGS} -I${CMAKE_CURRENT_SOURCE_DIR}/metal ${METAL_SHADER_SOURCE} -o ${METAL_AIR_OUTPUT}
       DEPENDS ${METAL_SHADER_SOURCE} ${METAL_CONSTANTS_HEADER}
-      COMMENT "Compiling Metal shader: sift.metal → sift.air (precision mode)"
+      COMMENT "Compiling Metal shader: sift.metal → sift.air (${CMAKE_BUILD_TYPE})"
     )
 
     # Step 2: Link .air to .metallib

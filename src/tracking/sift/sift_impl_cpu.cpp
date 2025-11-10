@@ -215,7 +215,7 @@ static void findScaleSpaceExtremaInLayer(
             }
         }
     }
-    std::cout << "octave " << o << " layer " << i << " added " << count << " keypoints" << std::endl;
+    // std::cout << "octave " << o << " layer " << i << " added " << count << " keypoints" << std::endl;
 }
 
 SIFT::Impl::Impl(const SIFTConfig& cfg) : config(cfg)

@@ -316,7 +316,7 @@ def main():
     # Step 1: Setup
     arkit_frames = setup(args, frames_json_path, database_path, work_dir)
 
-    # Step 2: Extract SIFT features
+    # # Step 2: Extract SIFT features
     extract_features(args, work_dir, database_path)
 
     # Step 3: Feature matching

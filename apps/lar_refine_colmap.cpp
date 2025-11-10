@@ -10,12 +10,14 @@ using namespace std;
 
 int main(int argc, const char* argv[]){
   // string input = "./input/dwell-crane-202";
-  string input = "./input/aizu-park-4-ext-2";
+  // string input = "./input/aizu-park-4-ext-4";
+  string input = "./input/u-aizu-park-5";
   // string input = "./input/my-room-3";
   if (argc > 1) {
     input = argv[1];
   }
-  string output = "./output/map";
+  // string output = "./output/aizu-park-4-ext-4-refined";
+  string output = "./output/u-aizu-park-5-refined-3";
 
   struct stat st;
   int status = stat(input.c_str(), &st);

@@ -20,7 +20,8 @@ def extract_colmap_sift_features(work_dir, database_path, max_num_features=8192)
         "--SiftExtraction.num_octaves", "4",
         "--SiftExtraction.octave_resolution", "3",
         "--SiftExtraction.peak_threshold", "0.00666667",
-        "--SiftExtraction.edge_threshold", "10.0"
+        "--SiftExtraction.edge_threshold", "10.0",
+        "--SiftExtraction.normalization", "l1_root"  # Required for vocab tree matcher
     ]
     
     print(f"Running COLMAP feature extraction (max {max_num_features} features per image)...")

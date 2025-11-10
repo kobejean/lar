@@ -42,8 +42,8 @@ int main(int argc, const char* argv[]){
     num_threads = std::stoi(argv[1]);
   }
 
-  // string localize = "./input/aizu-park-4-ext/";
-  string localize = "./input/aizu-park-sunny/";
+  string localize = "./input/aizu-park-4-ext/";
+  // string localize = "./input/aizu-park-sunny/";
 
   std::cout << "=== Multithreaded Localization Test ===" << std::endl;
   std::cout << "Using " << num_threads << " threads" << std::endl;

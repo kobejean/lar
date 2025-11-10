@@ -13,6 +13,7 @@ namespace lar {
   class Vision {
     public:
       cv::Ptr<SIFT> detector;
+      cv::Ptr<cv::SIFT> detector_opencv;
       FlannMatcher flann_matcher;
 
       /// Constructor with optional image dimensions for Metal SIFT optimization

@@ -18,7 +18,14 @@ void PassThroughFilter::initialize(const MeasurementContext& context, const Filt
 }
 
 void PassThroughFilter::predict(const Eigen::Matrix4d& motion, double dt, const FilteredTrackerConfig& config) {
-    // No prediction - just keep last measurement
+    if (!is_initialized_) {
+        return;
+    }
+
+    // Apply motion delta to current state (VIO-driven prediction)
+    Eigen::Matrix4d T_current = state_.toTransform();
+    Eigen::Matrix4d T_predicted = T_current * motion;
+    state_.fromTransform(T_predicted);
 }
 
 void PassThroughFilter::update(const MeasurementContext& context,
