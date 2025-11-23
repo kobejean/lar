@@ -58,7 +58,7 @@ int main(int argc, const char* argv[]){
   lar::Map map = map_data;
   auto map_load_end = std::chrono::high_resolution_clock::now();
   auto map_load_duration = std::chrono::duration_cast<std::chrono::milliseconds>(map_load_end - map_load_start);
-  std::cout << "Map loaded in " << map_load_duration.count() << " ms" << std::endl;
+  std::cout << "Map loaded in " << map_load_duration.count() << " ms " << map.landmarks.size() << " landmarks" << std::endl;
   std::cout << std::endl;
 
   std::cout << "Pre-loading all images into memory..." << std::endl;

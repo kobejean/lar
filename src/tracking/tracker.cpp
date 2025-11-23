@@ -114,7 +114,6 @@ namespace lar {
       local_landmarks.resize(MAX_LANDMARKS);
     }
     
-    std::cout << "local_landmarks.size(): " << local_landmarks.size() << std::endl;
     cv::Mat map_desc = Landmark::concatDescriptions(local_landmarks);
     
     // Extract Features
