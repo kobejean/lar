@@ -130,7 +130,7 @@ namespace lar {
       optimizer.initializeOptimization(0);
       optimizer.optimize(iteration[i]);
       printReprojectionError();
-      // rescaleToMatchOdometry();
+      rescaleToMatchOdometry();
       markOutliers(chi_threshold[i], 2.3*odometry_chi_threshold[i]);
     }
 
