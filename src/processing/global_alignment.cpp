@@ -67,7 +67,7 @@ namespace lar {
 
   inline double GlobalAlignment::weight(Eigen::Vector3d accuracy) {
     double ha = accuracy.x();
-    if (ha <= 0) return 1e-4;
+    if (ha < 1e-4) return 1e-4;
     // inverse variance weighting
     return 1 / (ha*ha);
   }
