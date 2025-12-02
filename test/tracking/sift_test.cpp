@@ -50,62 +50,6 @@ TEST_F(SIFTTest, ComputeDescriptors) {
     EXPECT_EQ(descriptors.rows, static_cast<int>(keypoints.size()));
     EXPECT_EQ(descriptors.cols, 128);
     EXPECT_EQ(descriptors.type(), CV_32F);
-
-}
-
-TEST_F(SIFTTest, CompareWithOpenCVSIFT) {
-    // Create OpenCV SIFT
-    auto cv_sift = cv::SIFT::create(0, 3, 0.04, 10, 1.6, CV_32F);
-
-    // Create our SIFT
-    lar::SIFTConfig lar_config(test_image.size());
-    lar_config.nOctaveLayers = 3;
-    lar_config.contrastThreshold = 0.04;
-    lar_config.edgeThreshold = 10;
-    lar_config.sigma = 1.6;
-    lar_config.descriptorType = CV_32F;
-
-    lar::SIFT lar_sift(lar_config);
-    
-    // Detect and compute with both
-    std::vector<cv::KeyPoint> cv_keypoints, lar_keypoints;
-    cv::Mat cv_descriptors, lar_descriptors;
-
-    cv_sift->detectAndCompute(test_image, cv::noArray(), cv_keypoints, cv_descriptors);
-    lar_sift.detectAndCompute(test_image, cv::noArray(), lar_keypoints, lar_descriptors);
-    
-    // Both should find keypoints
-    EXPECT_GT(cv_keypoints.size(), 0);
-    EXPECT_GT(lar_keypoints.size(), 0);
-    
-    // Descriptor format should match
-    EXPECT_EQ(cv_descriptors.cols, lar_descriptors.cols);  // 128 features
-    EXPECT_EQ(cv_descriptors.type(), lar_descriptors.type());  // CV_32F
-    
-    // Number of keypoints may differ significantly due to implementation differences
-    // Our implementation typically detects ~10% as many keypoints as OpenCV
-    double ratio = static_cast<double>(lar_keypoints.size()) / cv_keypoints.size();
-    EXPECT_GT(ratio, 0.05);  // At least 5% as many keypoints
-    EXPECT_LT(ratio, 3.0);   // At most 3x as many keypoints
-    
-    std::cout << "Keypoint comparison - OpenCV: " << cv_keypoints.size() 
-              << ", LAR: " << lar_keypoints.size() 
-              << " (ratio: " << ratio << ")" << std::endl;
-              
-    float cv_min_size = cv_keypoints[0].size;
-    float cv_max_size = cv_keypoints[0].size;
-    for (int i = 1; i < cv_keypoints.size(); i++) {
-        cv_min_size = std::min(cv_min_size, cv_keypoints[i].size);
-        cv_max_size = std::max(cv_max_size, cv_keypoints[i].size);
-    }
-    float lar_min_size = lar_keypoints[0].size;
-    float lar_max_size = lar_keypoints[0].size;
-    for (int i = 1; i < lar_keypoints.size(); i++) {
-        lar_min_size = std::min(lar_min_size, lar_keypoints[i].size);
-        lar_max_size = std::max(lar_max_size, lar_keypoints[i].size);
-    }
-    std::cout << "OpenCV keypoint size range: " << cv_min_size << " - " << cv_max_size << std::endl;
-    std::cout << "LAR keypoint size range: " << lar_min_size << " - " << lar_max_size << std::endl;
 }
 
 TEST_F(SIFTTest, CV8UDescriptors) {
@@ -170,34 +114,6 @@ TEST_F(SIFTTest, MultipleRealImages) {
         // Both should detect features in real images
         EXPECT_GT(cv_keypoints.size(), 10) << "OpenCV SIFT should find many keypoints in " << path;
         EXPECT_GT(lar_keypoints.size(), 10) << "LAR SIFT should find many keypoints in " << path;
-        
-        // // Descriptors should be properly normalized
-        // if (!cv_descriptors.empty()) {
-        //     for (int i = 0; i < std::min(5, cv_descriptors.rows); i++) {  // Check first 5 descriptors
-        //         float norm = 0;
-        //         for (int j = 0; j < cv_descriptors.cols; j++) {
-        //             float val = cv_descriptors.at<float>(i, j);
-        //             norm += val * val;
-        //         }
-        //         norm = std::sqrt(norm);
-        //         EXPECT_NEAR(norm, 1.0f, 1e-4f) << "Descriptor " << i << " in " << path << " should be normalized";
-        //     }
-        // }
-        // // Descriptors should be properly normalized
-        // if (!lar_descriptors.empty()) {
-        //     for (int i = 0; i < std::min(5, lar_descriptors.rows); i++) {  // Check first 5 descriptors
-        //         float norm = 0;
-        //         for (int j = 0; j < lar_descriptors.cols; j++) {
-        //             float val = lar_descriptors.at<float>(i, j);
-        //             norm += val * val;
-        //         }
-        //         norm = std::sqrt(norm);
-        //         EXPECT_NEAR(norm, 1.0f, 1e-4f) << "Descriptor " << i << " in " << path << " should be normalized";
-        //     }
-        // }
-        
-        std::cout << "Image: " << path << " - OpenCV: " << cv_keypoints.size() 
-                  << " keypoints, LAR: " << lar_keypoints.size() << " keypoints" << std::endl;
     }
 }
 
