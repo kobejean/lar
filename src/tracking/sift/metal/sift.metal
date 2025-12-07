@@ -620,24 +620,6 @@ kernel void computeSIFTDescriptors(
     texture2d<float, access::sample> gaussPyramid3 [[texture(3)]],
     texture2d<float, access::sample> gaussPyramid4 [[texture(4)]],
     texture2d<float, access::sample> gaussPyramid5 [[texture(5)]],
-    // texture2d<float, access::sample> gaussPyramid6 [[texture(6)]],
-    // texture2d<float, access::sample> gaussPyramid7 [[texture(7)]],
-    // texture2d<float, access::sample> gaussPyramid8 [[texture(8)]],
-    // texture2d<float, access::sample> gaussPyramid9 [[texture(9)]],
-    // texture2d<float, access::sample> gaussPyramid10 [[texture(10)]],
-    // texture2d<float, access::sample> gaussPyramid11 [[texture(11)]],
-    // texture2d<float, access::sample> gaussPyramid12 [[texture(12)]],
-    // texture2d<float, access::sample> gaussPyramid13 [[texture(13)]],
-    // texture2d<float, access::sample> gaussPyramid14 [[texture(14)]],
-    // texture2d<float, access::sample> gaussPyramid15 [[texture(15)]],
-    // texture2d<float, access::sample> gaussPyramid16 [[texture(16)]],
-    // texture2d<float, access::sample> gaussPyramid17 [[texture(17)]],
-    // texture2d<float, access::sample> gaussPyramid18 [[texture(18)]],
-    // texture2d<float, access::sample> gaussPyramid19 [[texture(19)]],
-    // texture2d<float, access::sample> gaussPyramid20 [[texture(20)]],
-    // texture2d<float, access::sample> gaussPyramid21 [[texture(21)]],
-    // texture2d<float, access::sample> gaussPyramid22 [[texture(22)]],
-    // texture2d<float, access::sample> gaussPyramid23 [[texture(23)]],
 
     uint gid [[thread_position_in_grid]])
 {
@@ -658,24 +640,6 @@ kernel void computeSIFTDescriptors(
         case 3: img = gaussPyramid3; break;
         case 4: img = gaussPyramid4; break;
         case 5: img = gaussPyramid5; break;
-        // case 6: img = gaussPyramid6; break;
-        // case 7: img = gaussPyramid7; break;
-        // case 8: img = gaussPyramid8; break;
-        // case 9: img = gaussPyramid9; break;
-        // case 10: img = gaussPyramid10; break;
-        // case 11: img = gaussPyramid11; break;
-        // case 12: img = gaussPyramid12; break;
-        // case 13: img = gaussPyramid13; break;
-        // case 14: img = gaussPyramid14; break;
-        // case 15: img = gaussPyramid15; break;
-        // case 16: img = gaussPyramid16; break;
-        // case 17: img = gaussPyramid17; break;
-        // case 18: img = gaussPyramid18; break;
-        // case 19: img = gaussPyramid19; break;
-        // case 20: img = gaussPyramid20; break;
-        // case 21: img = gaussPyramid21; break;
-        // case 22: img = gaussPyramid22; break;
-        // case 23: img = gaussPyramid23; break;
     }
 
     // Setup descriptor computation parameters (use constants directly)

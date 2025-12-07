@@ -123,14 +123,14 @@ namespace lar {
     constexpr size_t rounds = 4;
     double chi_threshold[4] = { 7.378, 5.991, 4.605, 3.841 };
     double odometry_chi_threshold[4] = { 7.378, 5.991, 4.605, 3.841 };
-    size_t iteration[4] = { 100, 100, 60, 60 };
+    size_t iteration[4] = { 300, 100, 60, 60 };
 
     for (size_t i = 0; i < rounds; i++) {
       std::cout << "Stage 2." << (i+1) << ": Full optimization..." << std::endl;
       optimizer.initializeOptimization(0);
       optimizer.optimize(iteration[i]);
       printReprojectionError();
-      rescaleToMatchOdometry();
+      // rescaleToMatchOdometry();
       markOutliers(chi_threshold[i], 2.3*odometry_chi_threshold[i]);
     }
 
