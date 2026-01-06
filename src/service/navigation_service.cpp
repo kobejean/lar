@@ -1,10 +1,10 @@
-#include "lar/service/pathfinding_service.h"
+#include "lar/service/navigation_service.h"
 
 namespace lar {
 
-PathfindingServiceImpl::PathfindingServiceImpl(Map& map) : map_(map) {}
+NavigationServiceImpl::NavigationServiceImpl(Map& map) : map_(map) {}
 
-grpc::Status PathfindingServiceImpl::GetPath(
+grpc::Status NavigationServiceImpl::GetPath(
     grpc::ServerContext* /*context*/,
     const proto::GetPathRequest* request,
     proto::GetPathResponse* response) {

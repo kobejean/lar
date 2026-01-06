@@ -5,7 +5,7 @@
 
 #include "lar/core/utils/json.h"
 #include "lar/core/map.h"
-#include "lar/service/pathfinding_service.h"
+#include "lar/service/navigation_service.h"
 
 using namespace std;
 
@@ -32,7 +32,7 @@ int main(int argc, const char* argv[]) {
     grpc::reflection::InitProtoReflectionServerBuilderPlugin();
 
     // Start gRPC server
-    lar::PathfindingServiceImpl service(map);
+    lar::NavigationServiceImpl service(map);
     grpc::ServerBuilder builder;
     builder.AddListeningPort(address, grpc::InsecureServerCredentials());
     builder.RegisterService(&service);

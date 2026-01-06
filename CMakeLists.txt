@@ -67,10 +67,10 @@ if(LAR_BUILD_SERVICE)
   get_target_property(GRPC_CPP_PLUGIN gRPC::grpc_cpp_plugin LOCATION)
 
   # Generate proto sources
-  set(PROTO_SRCS ${PROTO_GEN_DIR}/pathfinding.pb.cc)
-  set(PROTO_HDRS ${PROTO_GEN_DIR}/pathfinding.pb.h)
-  set(GRPC_SRCS ${PROTO_GEN_DIR}/pathfinding.grpc.pb.cc)
-  set(GRPC_HDRS ${PROTO_GEN_DIR}/pathfinding.grpc.pb.h)
+  set(PROTO_SRCS ${PROTO_GEN_DIR}/navigation.pb.cc)
+  set(PROTO_HDRS ${PROTO_GEN_DIR}/navigation.pb.h)
+  set(GRPC_SRCS ${PROTO_GEN_DIR}/navigation.grpc.pb.cc)
+  set(GRPC_HDRS ${PROTO_GEN_DIR}/navigation.grpc.pb.h)
 
   add_custom_command(
     OUTPUT ${PROTO_SRCS} ${PROTO_HDRS} ${GRPC_SRCS} ${GRPC_HDRS}
@@ -79,8 +79,8 @@ if(LAR_BUILD_SERVICE)
       --grpc_out=${PROTO_GEN_DIR}
       --plugin=protoc-gen-grpc=${GRPC_CPP_PLUGIN}
       -I${PROTO_DIR}
-      ${PROTO_DIR}/pathfinding.proto
-    DEPENDS ${PROTO_DIR}/pathfinding.proto
+      ${PROTO_DIR}/navigation.proto
+    DEPENDS ${PROTO_DIR}/navigation.proto
     COMMENT "Generating gRPC/protobuf sources"
   )
 

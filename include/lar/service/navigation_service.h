@@ -1,15 +1,15 @@
-#ifndef LAR_SERVER_PATHFINDING_SERVICE_H
-#define LAR_SERVER_PATHFINDING_SERVICE_H
+#ifndef LAR_SERVICE_NAVIGATION_SERVICE_H
+#define LAR_SERVICE_NAVIGATION_SERVICE_H
 
 #include <grpcpp/grpcpp.h>
-#include "pathfinding.grpc.pb.h"
+#include "navigation.grpc.pb.h"
 #include "lar/core/map.h"
 
 namespace lar {
 
-class PathfindingServiceImpl final : public proto::PathfindingService::Service {
+class NavigationServiceImpl final : public proto::NavigationService::Service {
 public:
-    explicit PathfindingServiceImpl(Map& map);
+    explicit NavigationServiceImpl(Map& map);
 
     grpc::Status GetPath(grpc::ServerContext* context,
                          const proto::GetPathRequest* request,
@@ -21,4 +21,4 @@ private:
 
 } // namespace lar
 
-#endif // LAR_SERVER_PATHFINDING_SERVICE_H
+#endif // LAR_SERVICE_NAVIGATION_SERVICE_H
