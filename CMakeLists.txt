@@ -51,9 +51,9 @@ find_package(OpenCV 4.5.4 REQUIRED core calib3d features2d imgcodecs imgproc)
 find_package(nlohmann_json 3.11.3 REQUIRED)
 find_package(g2o 1.0.0 REQUIRED)
 
-# gRPC and Protobuf (optional, for server build)
-option(LAR_BUILD_SERVER "Whether or not the gRPC server should be built" OFF)
-if(LAR_BUILD_SERVER)
+# gRPC and Protobuf (optional, for service build)
+option(LAR_BUILD_SERVICE "Whether or not the gRPC service should be built" ON)
+if(LAR_BUILD_SERVICE)
   find_package(protobuf CONFIG REQUIRED)
   find_package(gRPC CONFIG REQUIRED)
 
