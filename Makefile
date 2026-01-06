@@ -19,8 +19,8 @@ endif
 
 CMAKE_ARGS=
 
-# Allow CMAKE_PREFIX_PATH from environment
-ifdef CMAKE_PREFIX_PATH
+# Allow CMAKE_PREFIX_PATH from environment (automatically imported by Make)
+ifneq ($(CMAKE_PREFIX_PATH),)
 CMAKE_PREFIX_PATH_ARG = -DCMAKE_PREFIX_PATH=$(CMAKE_PREFIX_PATH)
 else
 CMAKE_PREFIX_PATH_ARG =
