@@ -1,4 +1,4 @@
-#include "lar/server/pathfinding_service.h"
+#include "lar/service/pathfinding_service.h"
 
 namespace lar {
 

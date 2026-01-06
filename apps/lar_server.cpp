@@ -4,12 +4,12 @@
 
 #include "lar/core/utils/json.h"
 #include "lar/core/map.h"
-#include "lar/server/pathfinding_service.h"
+#include "lar/service/pathfinding_service.h"
 
 using namespace std;
 
 int main(int argc, const char* argv[]) {
-    string map_path = "./output/map.json";
+    string map_path = "./output/aizu-park-map/map.json";
     string address = "0.0.0.0:50051";
 
     if (argc > 1) map_path = argv[1];

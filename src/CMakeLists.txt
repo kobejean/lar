@@ -6,5 +6,5 @@ endif()
 add_subdirectory(tracking)
 
 if(LAR_BUILD_SERVER)
-  add_subdirectory(server)
+  add_subdirectory(service)
 endif()
