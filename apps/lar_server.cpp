@@ -26,8 +26,7 @@ int main(int argc, const char* argv[]) {
 
     nlohmann::json map_data = nlohmann::json::parse(map_ifs);
     lar::Map map = map_data;
-    cout << "Loaded map with " << map.anchors.size() << " anchors and "
-         << map.edges.size() << " edge lists" << endl;
+    cout << "Loaded map with " << map.anchors.size() << " anchors" << endl;
 
     // Enable gRPC reflection for grpcurl/debugging
     grpc::reflection::InitProtoReflectionServerBuilderPlugin();
