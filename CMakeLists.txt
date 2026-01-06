@@ -51,6 +51,48 @@ find_package(OpenCV 4.5.4 REQUIRED core calib3d features2d imgcodecs imgproc)
 find_package(nlohmann_json 3.11.3 REQUIRED)
 find_package(g2o 1.0.0 REQUIRED)
 
+# gRPC and Protobuf (optional, for server build)
+option(LAR_BUILD_SERVER "Whether or not the gRPC server should be built" OFF)
+if(LAR_BUILD_SERVER)
+  find_package(protobuf CONFIG REQUIRED)
+  find_package(gRPC CONFIG REQUIRED)
+
+  # Proto compilation setup
+  set(PROTO_DIR ${PROJECT_SOURCE_DIR}/proto)
+  set(PROTO_GEN_DIR ${PROJECT_BINARY_DIR}/generated)
+  file(MAKE_DIRECTORY ${PROTO_GEN_DIR})
+
+  # Find protoc and grpc_cpp_plugin
+  get_target_property(PROTOC_EXECUTABLE protobuf::protoc LOCATION)
+  get_target_property(GRPC_CPP_PLUGIN gRPC::grpc_cpp_plugin LOCATION)
+
+  # Generate proto sources
+  set(PROTO_SRCS ${PROTO_GEN_DIR}/pathfinding.pb.cc)
+  set(PROTO_HDRS ${PROTO_GEN_DIR}/pathfinding.pb.h)
+  set(GRPC_SRCS ${PROTO_GEN_DIR}/pathfinding.grpc.pb.cc)
+  set(GRPC_HDRS ${PROTO_GEN_DIR}/pathfinding.grpc.pb.h)
+
+  add_custom_command(
+    OUTPUT ${PROTO_SRCS} ${PROTO_HDRS} ${GRPC_SRCS} ${GRPC_HDRS}
+    COMMAND ${PROTOC_EXECUTABLE}
+      --cpp_out=${PROTO_GEN_DIR}
+      --grpc_out=${PROTO_GEN_DIR}
+      --plugin=protoc-gen-grpc=${GRPC_CPP_PLUGIN}
+      -I${PROTO_DIR}
+      ${PROTO_DIR}/pathfinding.proto
+    DEPENDS ${PROTO_DIR}/pathfinding.proto
+    COMMENT "Generating gRPC/protobuf sources"
+  )
+
+  # Create proto library
+  add_library(lar_proto STATIC ${PROTO_SRCS} ${GRPC_SRCS})
+  target_link_libraries(lar_proto PUBLIC
+    protobuf::libprotobuf
+    gRPC::grpc++
+  )
+  target_include_directories(lar_proto PUBLIC ${PROTO_GEN_DIR})
+endif()
+
 # Add g2o library directory to linker search path
 if(g2o_DIR)
     get_filename_component(G2O_LIB_DIR "${g2o_DIR}/../../" ABSOLUTE)

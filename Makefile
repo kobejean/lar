@@ -47,6 +47,10 @@ profile: CMAKE_ARGS = -DCMAKE_BUILD_TYPE=RelWithDebInfo
 profile: configure
 	$(MAKE) $(QUIET) -C build -j 8
 
+server: CMAKE_ARGS = -DLAR_BUILD_SERVER=ON -DCMAKE_BUILD_TYPE=Release
+server: configure
+	$(MAKE) $(QUIET) -C build -j 8
+
 clean: CMAKE_ARGS =
 clean: configure
 	$(MAKE) $(QUIET) -C build clean
@@ -63,4 +67,4 @@ configure:
 	cd build && cmake .. $(CMAKE_COMPILER_ARGS) $(CMAKE_ARGS); \
 	cd -
 
-.PHONY: all compact fast tests debug clean artifacts frameworks configure
+.PHONY: all compact fast tests debug profile server clean artifacts frameworks configure
