@@ -5,6 +5,6 @@ if (NOT LAR_COMPACT_BUILD)
 endif()
 add_subdirectory(tracking)
 
-if(LAR_BUILD_SERVER)
+if(LAR_BUILD_SERVICE)
   add_subdirectory(service)
 endif()

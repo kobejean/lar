@@ -43,7 +43,7 @@ set_target_properties(lar_rtree
   # EXCLUDE_FROM_ALL ON
 )
 
-if(LAR_BUILD_SERVER)
+if(LAR_BUILD_SERVICE)
   add_executable(lar_server lar_server.cpp)
   target_link_libraries(lar_server
     lar_service
