@@ -48,6 +48,7 @@ if(LAR_BUILD_SERVER)
   target_link_libraries(lar_server
     lar_service
     lar_core
+    gRPC::grpc++_reflection
   )
   set_target_properties(lar_server
     PROPERTIES

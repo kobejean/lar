@@ -1,6 +1,7 @@
 #include <iostream>
 #include <fstream>
 #include <grpcpp/grpcpp.h>
+#include <grpcpp/ext/proto_server_reflection_plugin.h>
 
 #include "lar/core/utils/json.h"
 #include "lar/core/map.h"
@@ -27,6 +28,9 @@ int main(int argc, const char* argv[]) {
     lar::Map map = map_data;
     cout << "Loaded map with " << map.anchors.size() << " anchors and "
          << map.edges.size() << " edge lists" << endl;
+
+    // Enable gRPC reflection for grpcurl/debugging
+    grpc::reflection::InitProtoReflectionServerBuilderPlugin();
 
     // Start gRPC server
     lar::PathfindingServiceImpl service(map);
