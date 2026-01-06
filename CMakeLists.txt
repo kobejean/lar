@@ -54,8 +54,12 @@ find_package(g2o 1.0.0 REQUIRED)
 # gRPC and Protobuf (optional, for service build)
 option(LAR_BUILD_SERVICE "Whether or not the gRPC service should be built" ON)
 if(LAR_BUILD_SERVICE)
-  # Try CONFIG mode first (works with Homebrew/vcpkg), fall back to MODULE mode (Ubuntu apt)
-  find_package(Protobuf REQUIRED)
+  # Try CONFIG mode first (Homebrew/vcpkg), fall back to MODULE mode (Ubuntu apt)
+  # Must use CONFIG on macOS to avoid conflicts with gRPC's find_dependency
+  find_package(Protobuf CONFIG QUIET)
+  if(NOT Protobuf_FOUND)
+    find_package(Protobuf MODULE REQUIRED)
+  endif()
   find_package(gRPC CONFIG REQUIRED)
 
   # Proto compilation setup

@@ -19,13 +19,6 @@ endif()
 set(DEPENDENCIES)
 set(EXTRA_CMAKE_ARGS)
 
-# Forward CMAKE_PREFIX_PATH if set (needed for finding system protobuf/gRPC)
-if(DEFINED CMAKE_PREFIX_PATH)
-  list(APPEND EXTRA_CMAKE_ARGS -DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH})
-elseif(DEFINED ENV{CMAKE_PREFIX_PATH})
-  list(APPEND EXTRA_CMAKE_ARGS -DCMAKE_PREFIX_PATH=$ENV{CMAKE_PREFIX_PATH})
-endif()
-
 # Platform-specific toolchain settings
 if(APPLE)
   set(COMMON_TOOLCHAIN_ARGS
