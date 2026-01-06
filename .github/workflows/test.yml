@@ -39,7 +39,9 @@ jobs:
           git \
           libgrpc++-dev \
           libprotobuf-dev \
-          protobuf-compiler-grpc
+          protobuf-compiler \
+          protobuf-compiler-grpc \
+          libabsl-dev
 
     - name: Install dependencies (macOS)
       if: runner.os == 'macOS'
