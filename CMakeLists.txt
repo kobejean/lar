@@ -54,7 +54,8 @@ find_package(g2o 1.0.0 REQUIRED)
 # gRPC and Protobuf (optional, for service build)
 option(LAR_BUILD_SERVICE "Whether or not the gRPC service should be built" ON)
 if(LAR_BUILD_SERVICE)
-  find_package(protobuf CONFIG REQUIRED)
+  # Try CONFIG mode first (works with Homebrew/vcpkg), fall back to MODULE mode (Ubuntu apt)
+  find_package(Protobuf REQUIRED)
   find_package(gRPC CONFIG REQUIRED)
 
   # Proto compilation setup
@@ -62,8 +63,12 @@ if(LAR_BUILD_SERVICE)
   set(PROTO_GEN_DIR ${PROJECT_BINARY_DIR}/generated)
   file(MAKE_DIRECTORY ${PROTO_GEN_DIR})
 
-  # Find protoc and grpc_cpp_plugin
-  get_target_property(PROTOC_EXECUTABLE protobuf::protoc LOCATION)
+  # Find protoc - handle both CONFIG mode (protobuf::protoc) and MODULE mode (Protobuf_PROTOC_EXECUTABLE)
+  if(TARGET protobuf::protoc)
+    get_target_property(PROTOC_EXECUTABLE protobuf::protoc LOCATION)
+  else()
+    set(PROTOC_EXECUTABLE ${Protobuf_PROTOC_EXECUTABLE})
+  endif()
   get_target_property(GRPC_CPP_PLUGIN gRPC::grpc_cpp_plugin LOCATION)
 
   # Generate proto sources
@@ -84,12 +89,14 @@ if(LAR_BUILD_SERVICE)
     COMMENT "Generating gRPC/protobuf sources"
   )
 
-  # Create proto library
+  # Create proto library - handle both CONFIG and MODULE mode targets
   add_library(lar_proto STATIC ${PROTO_SRCS} ${GRPC_SRCS})
-  target_link_libraries(lar_proto PUBLIC
-    protobuf::libprotobuf
-    gRPC::grpc++
-  )
+  if(TARGET protobuf::libprotobuf)
+    target_link_libraries(lar_proto PUBLIC protobuf::libprotobuf gRPC::grpc++)
+  else()
+    target_link_libraries(lar_proto PUBLIC ${Protobuf_LIBRARIES} gRPC::grpc++)
+    target_include_directories(lar_proto PUBLIC ${Protobuf_INCLUDE_DIRS})
+  endif()
   target_include_directories(lar_proto PUBLIC ${PROTO_GEN_DIR})
 endif()
 
