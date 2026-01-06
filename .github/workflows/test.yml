@@ -52,8 +52,20 @@ jobs:
     - name: Update Submodules
       run: git submodule update --init --recursive
 
+    - name: Verify protobuf/gRPC (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        echo "=== Protobuf CMake config locations ==="
+        find /usr -name "protobuf*.cmake" 2>/dev/null || echo "No protobuf cmake files found in /usr"
+        echo "=== gRPC CMake config locations ==="
+        find /usr -name "gRPC*.cmake" 2>/dev/null || echo "No gRPC cmake files found in /usr"
+        echo "=== protoc version ==="
+        protoc --version || echo "protoc not found"
+
     - name: Build
       run: make tests
+      env:
+        CMAKE_PREFIX_PATH: /usr/lib/x86_64-linux-gnu/cmake
 
     - name: Test
       run: ./bin/lar_test

@@ -19,6 +19,13 @@ endif
 
 CMAKE_ARGS=
 
+# Allow CMAKE_PREFIX_PATH from environment
+ifdef CMAKE_PREFIX_PATH
+CMAKE_PREFIX_PATH_ARG = -DCMAKE_PREFIX_PATH=$(CMAKE_PREFIX_PATH)
+else
+CMAKE_PREFIX_PATH_ARG =
+endif
+
 all: CMAKE_ARGS = -DCMAKE_BUILD_TYPE=Release
 all: configure
 	$(MAKE) $(QUIET) -C build
@@ -64,7 +71,7 @@ frameworks:
 configure:
 	@echo "Running cmake to generate Makefile"; \
 	mkdir -p build; \
-	cd build && cmake .. $(CMAKE_COMPILER_ARGS) $(CMAKE_ARGS); \
+	cd build && cmake .. $(CMAKE_COMPILER_ARGS) $(CMAKE_PREFIX_PATH_ARG) $(CMAKE_ARGS); \
 	cd -
 
 .PHONY: all compact fast tests debug profile service clean artifacts frameworks configure
