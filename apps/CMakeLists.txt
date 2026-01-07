@@ -42,3 +42,16 @@ set_target_properties(lar_rtree
   XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER com.local-ar.rtree
   # EXCLUDE_FROM_ALL ON
 )
+
+if(LAR_BUILD_SERVICE)
+  add_executable(lar_server lar_server.cpp)
+  target_link_libraries(lar_server
+    lar_service
+    lar_core
+    gRPC::grpc++_reflection
+  )
+  set_target_properties(lar_server
+    PROPERTIES
+    XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER com.local-ar.server
+  )
+endif()

@@ -51,6 +51,59 @@ find_package(OpenCV 4.5.4 REQUIRED core calib3d features2d imgcodecs imgproc)
 find_package(nlohmann_json 3.11.3 REQUIRED)
 find_package(g2o 1.0.0 REQUIRED)
 
+# gRPC and Protobuf (optional, for service build)
+option(LAR_BUILD_SERVICE "Whether or not the gRPC service should be built" ON)
+if(LAR_BUILD_SERVICE)
+  # Try CONFIG mode first (Homebrew/vcpkg), fall back to MODULE mode (Ubuntu apt)
+  # Must use CONFIG on macOS to avoid conflicts with gRPC's find_dependency
+  find_package(Protobuf CONFIG QUIET)
+  if(NOT Protobuf_FOUND)
+    find_package(Protobuf MODULE REQUIRED)
+  endif()
+  find_package(gRPC CONFIG REQUIRED)
+
+  # Proto compilation setup
+  set(PROTO_DIR ${PROJECT_SOURCE_DIR}/proto)
+  set(PROTO_GEN_DIR ${PROJECT_BINARY_DIR}/generated)
+  file(MAKE_DIRECTORY ${PROTO_GEN_DIR})
+
+  # Find protoc - handle both CONFIG mode (protobuf::protoc) and MODULE mode (Protobuf_PROTOC_EXECUTABLE)
+  if(TARGET protobuf::protoc)
+    get_target_property(PROTOC_EXECUTABLE protobuf::protoc LOCATION)
+  else()
+    set(PROTOC_EXECUTABLE ${Protobuf_PROTOC_EXECUTABLE})
+  endif()
+  get_target_property(GRPC_CPP_PLUGIN gRPC::grpc_cpp_plugin LOCATION)
+
+  # Generate proto sources
+  set(PROTO_SRCS ${PROTO_GEN_DIR}/navigation.pb.cc)
+  set(PROTO_HDRS ${PROTO_GEN_DIR}/navigation.pb.h)
+  set(GRPC_SRCS ${PROTO_GEN_DIR}/navigation.grpc.pb.cc)
+  set(GRPC_HDRS ${PROTO_GEN_DIR}/navigation.grpc.pb.h)
+
+  add_custom_command(
+    OUTPUT ${PROTO_SRCS} ${PROTO_HDRS} ${GRPC_SRCS} ${GRPC_HDRS}
+    COMMAND ${PROTOC_EXECUTABLE}
+      --cpp_out=${PROTO_GEN_DIR}
+      --grpc_out=${PROTO_GEN_DIR}
+      --plugin=protoc-gen-grpc=${GRPC_CPP_PLUGIN}
+      -I${PROTO_DIR}
+      ${PROTO_DIR}/navigation.proto
+    DEPENDS ${PROTO_DIR}/navigation.proto
+    COMMENT "Generating gRPC/protobuf sources"
+  )
+
+  # Create proto library - handle both CONFIG and MODULE mode targets
+  add_library(lar_proto STATIC ${PROTO_SRCS} ${GRPC_SRCS})
+  if(TARGET protobuf::libprotobuf)
+    target_link_libraries(lar_proto PUBLIC protobuf::libprotobuf gRPC::grpc++)
+  else()
+    target_link_libraries(lar_proto PUBLIC ${Protobuf_LIBRARIES} gRPC::grpc++)
+    target_include_directories(lar_proto PUBLIC ${Protobuf_INCLUDE_DIRS})
+  endif()
+  target_include_directories(lar_proto PUBLIC ${PROTO_GEN_DIR})
+endif()
+
 # Add g2o library directory to linker search path
 if(g2o_DIR)
     get_filename_component(G2O_LIB_DIR "${g2o_DIR}/../../" ABSOLUTE)

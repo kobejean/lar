@@ -6,9 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Building
 - `make all` - Standard build (Release mode)
-- `make fast` - Parallel build (Release mode, -j 8) 
+- `make fast` - Parallel build (Release mode, -j 8)
 - `make debug` - Debug build
 - `make compact` - Minimal build with LAR_COMPACT_BUILD=ON
+- `make service` - Build with gRPC service (LAR_BUILD_SERVICE=ON)
 - `make clean` - Clean build directory
 
 ### Testing
@@ -25,6 +26,7 @@ Built applications are in `bin/`:
 - `lar_localize` - Localizes poses within existing maps
 - `lar_refine_colmap` - COLMAP integration for map refinement
 - `lar_rtree` - Spatial indexing utilities
+- `lar_server` - gRPC navigation server
 
 ## Architecture Overview
 
@@ -62,11 +64,20 @@ LAR is structured around a 4-stage computer vision pipeline:
 3. Map exported as JSON with landmarks in spatial index
 4. Tracker loads map and localizes new images via feature matching
 
+### Service Module (`lar/service/`)
+gRPC service layer exposing LAR functionality over the network:
+- **NavigationService** - Exposes `Map::getPath` A* pathfinding via gRPC
+- Proto definitions in `proto/navigation.proto`
+- Built with `LAR_BUILD_SERVICE=ON` (enabled by default)
+- Supports gRPC reflection for debugging with `grpcurl`
+
 ## Key Dependencies
 - **OpenCV 4.5.4+** - Feature extraction, image processing
-- **Eigen3 3.4.90+** - Linear algebra and transformations  
+- **Eigen3 3.4.90+** - Linear algebra and transformations
 - **g2o 1.0.0+** - Graph optimization for bundle adjustment
 - **nlohmann_json 3.11.3+** - JSON serialization
+- **gRPC** - Remote procedure calls for service module
+- **protobuf** - Protocol buffer serialization for gRPC
 - **COLMAP** (optional) - External photogrammetry pipeline integration
 
 ## COLMAP Integration

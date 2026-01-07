@@ -36,12 +36,18 @@ jobs:
           pkg-config \
           build-essential \
           cmake \
-          git
+          git \
+          libgrpc++-dev \
+          libprotobuf-dev \
+          protobuf-compiler \
+          protobuf-compiler-grpc \
+          libabsl-dev
+
     - name: Install dependencies (macOS)
       if: runner.os == 'macOS'
       run: |
         brew update
-        brew install eigen suite-sparse
+        brew install eigen suite-sparse grpc protobuf
 
     - name: Update Submodules
       run: git submodule update --init --recursive

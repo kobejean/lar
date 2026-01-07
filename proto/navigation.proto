@@ -1,0 +1,23 @@
+syntax = "proto3";
+package lar.proto;
+
+service NavigationService {
+  rpc GetPath(GetPathRequest) returns (GetPathResponse);
+}
+
+message GetPathRequest {
+  uint64 start_id = 1;
+  uint64 goal_id = 2;
+}
+
+message GetPathResponse {
+  repeated Anchor path = 1;
+  bool found = 2;
+}
+
+message Anchor {
+  uint64 id = 1;
+  double x = 2;
+  double y = 3;
+  double z = 4;
+}
