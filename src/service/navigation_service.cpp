@@ -1,4 +1,5 @@
 #include "lar/service/navigation_service.h"
+#include "lar/core/spatial/rect.h"
 
 namespace lar {
 
@@ -19,6 +20,41 @@ grpc::Status NavigationServiceImpl::GetPath(
         proto_anchor->set_x(anchor->transform.translation().x());
         proto_anchor->set_y(anchor->transform.translation().y());
         proto_anchor->set_z(anchor->transform.translation().z());
+    }
+
+    return grpc::Status::OK;
+}
+
+grpc::Status NavigationServiceImpl::GetLandmarks(
+    grpc::ServerContext* /*context*/,
+    const proto::GetLandmarksRequest* request,
+    proto::GetLandmarksResponse* response) {
+
+    // Convert proto Rect to lar::Rect
+    Rect query(
+        request->query().lower().x(), request->query().lower().y(),
+        request->query().upper().x(), request->query().upper().y()
+    );
+
+    // Find landmarks in the query region
+    std::vector<Landmark*> results;
+    map_.landmarks.find(query, results, request->limit());
+
+    // Convert results to proto Landmark messages
+    for (const Landmark* landmark : results) {
+        auto* proto_landmark = response->add_landmarks();
+        proto_landmark->set_id(landmark->id);
+        proto_landmark->set_x(landmark->position.x());
+        proto_landmark->set_y(landmark->position.y());
+        proto_landmark->set_z(landmark->position.z());
+
+        // Only set descriptor if it's valid and non-empty
+        if (!landmark->desc.empty() && landmark->desc.isContinuous()) {
+            proto_landmark->set_desc(
+                landmark->desc.data,
+                landmark->desc.total() * landmark->desc.elemSize()
+            );
+        }
     }
 
     return grpc::Status::OK;

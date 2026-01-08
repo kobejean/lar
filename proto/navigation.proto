@@ -3,6 +3,34 @@ package lar.proto;
 
 service NavigationService {
   rpc GetPath(GetPathRequest) returns (GetPathResponse);
+  rpc GetLandmarks(GetLandmarksRequest) returns (GetLandmarksResponse);
+}
+
+message GetLandmarksRequest {
+  Rect query = 1;
+  int32 limit = 2;  // -1 for no limit
+}
+
+message GetLandmarksResponse {
+  repeated Landmark landmarks = 1;
+}
+
+message Rect {
+  Point lower = 1;
+  Point upper = 2;
+}
+
+message Point {
+  double x = 1;
+  double y = 2;
+}
+
+message Landmark {
+  uint64 id = 1;
+  double x = 2;
+  double y = 3;
+  double z = 4;
+  bytes desc = 5;
 }
 
 message GetPathRequest {
