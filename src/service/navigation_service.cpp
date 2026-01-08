@@ -47,10 +47,14 @@ grpc::Status NavigationServiceImpl::GetLandmarks(
         proto_landmark->set_x(landmark->position.x());
         proto_landmark->set_y(landmark->position.y());
         proto_landmark->set_z(landmark->position.z());
-        proto_landmark->set_desc(
-            landmark->desc.data,
-            landmark->desc.total() * landmark->desc.elemSize()
-        );
+
+        // Only set descriptor if it's valid and non-empty
+        if (!landmark->desc.empty() && landmark->desc.isContinuous()) {
+            proto_landmark->set_desc(
+                landmark->desc.data,
+                landmark->desc.total() * landmark->desc.elemSize()
+            );
+        }
     }
 
     return grpc::Status::OK;
