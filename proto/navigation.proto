@@ -30,7 +30,7 @@ message Landmark {
   double x = 2;
   double y = 3;
   double z = 4;
-  bytes descriptor = 5;
+  bytes desc = 5;
 }
 
 message GetPathRequest {

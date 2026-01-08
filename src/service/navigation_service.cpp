@@ -47,7 +47,7 @@ grpc::Status NavigationServiceImpl::GetLandmarks(
         proto_landmark->set_x(landmark->position.x());
         proto_landmark->set_y(landmark->position.y());
         proto_landmark->set_z(landmark->position.z());
-        proto_landmark->set_descriptor_(
+        proto_landmark->set_desc(
             landmark->desc.data,
             landmark->desc.total() * landmark->desc.elemSize()
         );
