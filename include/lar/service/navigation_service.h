@@ -15,6 +15,10 @@ public:
                          const proto::GetPathRequest* request,
                          proto::GetPathResponse* response) override;
 
+    grpc::Status GetLandmarks(grpc::ServerContext* context,
+                              const proto::GetLandmarksRequest* request,
+                              proto::GetLandmarksResponse* response) override;
+
 private:
     Map& map_;
 };
