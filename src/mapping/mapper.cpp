@@ -22,8 +22,10 @@ namespace lar {
     data->frames.push_back(frame);
     std::string path_prefix = data->getPathPrefix(frame.id).string();
     cv::imwrite(path_prefix + "image.jpeg", image);
-    cv::imwrite(path_prefix + "depth.pfm", depth);
-    cv::imwrite(path_prefix + "confidence.pfm", confidence);
+    // Depth/confidence (e.g. LiDAR) are optional: skip writing when not provided.
+    // The COLMAP-based pipeline derives depth geometrically and ignores these files.
+    if (!depth.empty()) cv::imwrite(path_prefix + "depth.pfm", depth);
+    if (!confidence.empty()) cv::imwrite(path_prefix + "confidence.pfm", confidence);
   }
 
   void Mapper::addPosition(Eigen::Vector3d position, long long timestamp) {
