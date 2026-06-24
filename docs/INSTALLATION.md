@@ -99,3 +99,46 @@ If that prints without error, you're ready to reconstruct maps — see
 The files `pyproject.toml`, `uv.lock`, and `.python-version` are committed to the
 repo — they define the canonical environment. Commit changes to them whenever you
 add/upgrade dependencies.
+
+## C++ tools (for refinement)
+
+The map **refinement** step (`lar_refine_colmap`, used in
+[RECONSTRUCTION.md → Step 5](RECONSTRUCTION.md)) and the other native apps are built
+from C++ via CMake. This is separate from the Python/uv setup above.
+
+### Dependencies (Homebrew)
+
+```sh
+brew install cmake eigen opencv ceres-solver nlohmann-json
+```
+
+The build also needs **g2o 1.0.0** (graph optimization for bundle adjustment),
+located via CMake `find_package`. It is vendored as source in `thirdparty/g2o` and
+must be built + installed once — see [INSTALL_G2O_VIEWER.md](INSTALL_G2O_VIEWER.md)
+for the build steps (the install lands under `/usr/local/lib/cmake/g2o`, where
+`find_package` picks it up).
+
+### Build
+
+```sh
+cd /path/to/lar
+make fast          # Release build, parallel (-j8) → binaries in ./bin/
+# make all         # single-threaded Release
+# make debug       # Debug build
+```
+
+On Apple Silicon the Makefile pins arm64 + Apple Clang automatically. If CMake can't
+find the Homebrew packages, pass the prefix explicitly:
+
+```sh
+make fast CMAKE_ARGS="-DCMAKE_PREFIX_PATH=$(brew --prefix)"
+```
+
+### Verify
+
+```sh
+./bin/lar_refine_colmap     # prints usage (input/output args)
+```
+
+You're then ready to refine reconstructions — see
+[RECONSTRUCTION.md → Step 5](RECONSTRUCTION.md).
