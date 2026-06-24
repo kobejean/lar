@@ -12,6 +12,19 @@ LocalizeARのC＋＋ライブラリーです。
 
 Swift版はこちら　→　[lar-swift](https://github.com/kobejean/lar-swift)
 
+## Map Reconstruction Pipeline
+
+Build maps from LARScan captures using COLMAP/GLOMAP. The Python environment is
+managed with [uv](https://docs.astral.sh/uv/) (the project standard).
+
+- **[docs/INSTALLATION.md](docs/INSTALLATION.md)** — toolchain setup (uv, COLMAP, GLOMAP)
+- **[docs/RECONSTRUCTION.md](docs/RECONSTRUCTION.md)** — capture with LARScan → transfer to Mac → reconstruct
+
+Quick run (after setup):
+```sh
+uv run python script/colmap/colmap.py input/<session> --use_glomap
+```
+
 # コンパイルする方法
 
 普通

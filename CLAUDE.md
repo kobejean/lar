@@ -87,6 +87,15 @@ The `script/colmap/` directory contains Python utilities for COLMAP integration:
 - ARKit integration for mobile data
 - Map export with coordinate alignment
 
+**The Python environment is managed with [uv](https://docs.astral.sh/uv/) — the
+standard for this project.** Run scripts via `uv run`, e.g.:
+```sh
+uv run python script/colmap/colmap.py input/<session> --use_glomap
+```
+Do not use system `pip`/`venv`/`conda`. Dependencies are pinned in `pyproject.toml` +
+`uv.lock`, Python version in `.python-version`. Setup: [docs/INSTALLATION.md](docs/INSTALLATION.md).
+Full capture→transfer→reconstruct workflow: [docs/RECONSTRUCTION.md](docs/RECONSTRUCTION.md).
+
 ## Platform Support
 - Primary development: macOS (ARM64/Apple Silicon)
 - CI testing: Ubuntu Latest, macOS Latest
