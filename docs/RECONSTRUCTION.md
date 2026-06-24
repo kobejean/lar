@@ -119,7 +119,7 @@ input/1782302260032/colmap/
   database.db        # COLMAP feature/match database
   sparse/0/          # reconstructed sparse model
   poses_txt/         # exported camera poses
-  map.json           # ← the final, metric-scaled map (the deliverable)
+  map.json           # ← metric-scaled map from COLMAP (refined further in Step 5)
 ```
 
 Inspect the reconstruction visually with the `colmap gui …` command the script prints
@@ -131,6 +131,51 @@ colmap gui \
   --import_path   input/1782302260032/colmap/sparse/0 \
   --image_path    input/1782302260032/colmap
 ```
+
+## Step 5 — Refine (global bundle adjustment)
+
+The COLMAP `map.json` from Step 4 is a solid initialization, but a final global
+bundle adjustment improves accuracy by jointly optimizing camera poses and
+landmarks while folding ARKit's high-quality relative poses in as **odometry
+constraints**. This is done by the native C++ tool `lar_refine_colmap`.
+
+### Build the C++ tools (one-time)
+
+This needs the native build toolchain — see
+[INSTALLATION.md → C++ tools for refinement](INSTALLATION.md#c-tools-for-refinement).
+
+```sh
+cd /path/to/lar
+make fast          # Release build (-j8); binaries land in ./bin/
+```
+
+### Run the refinement
+
+```sh
+# lar_refine_colmap <input_dir> [output_dir]
+./bin/lar_refine_colmap input/1782302260032
+# …or set an explicit output dir:
+./bin/lar_refine_colmap input/1782302260032 ./output/my-refined-map
+```
+
+It reads the session metadata and the COLMAP reconstruction under
+`<input_dir>/colmap/`, runs a staged optimization (pose-only, then full BA with
+odometry), and writes the refined map. If `output_dir` is omitted it defaults to
+`./output/<input-name>-refined`.
+
+### Output
+
+```
+output/1782302260032-refined/
+  map.json       # ← refined, metric-scaled map (the final deliverable)
+  map.g2o        # the optimization graph (for inspection/debugging)
+  frames.json
+  gps.json
+```
+
+**Success signal:** the average reprojection error should drop noticeably. On the
+sample 23-frame capture it went from ~1.3 px (COLMAP) to ~0.45 px after refinement,
+culling ~21k landmark outliers.
 
 ## Tips & troubleshooting
 
@@ -144,3 +189,7 @@ colmap gui \
   for matching.
 - **`colmap`/`glomap` not found:** confirm they're installed and on `PATH`
   (see [INSTALLATION.md](INSTALLATION.md)).
+- **`make fast` can't find OpenCV/Eigen/g2o:** the native build needs the C++
+  toolchain — see [INSTALLATION.md → C++ tools](INSTALLATION.md#c-tools-for-refinement).
+  If CMake misses Homebrew packages, retry with
+  `make fast CMAKE_ARGS="-DCMAKE_PREFIX_PATH=$(brew --prefix)"`.
