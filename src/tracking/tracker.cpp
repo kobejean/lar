@@ -1,5 +1,5 @@
 #include <iostream>
-#include <opencv2/calib3d.hpp>
+#include <opencv2/geometry.hpp>
 
 #include "lar/tracking/tracker.h"
 
@@ -143,8 +143,9 @@ namespace lar {
       this->matches.emplace_back(landmark, kpts[match.queryIdx]);
     }
     
-    // Store inliers (subset of matches)
-    for (int i = 0; i < inliers.rows; i++) {
+    // Store inliers (subset of matches). Use total() not rows: OpenCV 5's
+    // 1D vector->Mat change can yield a 1xN inliers vector instead of Nx1.
+    for (int i = 0; i < (int)inliers.total(); i++) {
       int match_idx = inliers.at<int>(i);
       auto& match = matches[match_idx];
       Landmark* landmark = local_landmarks[match.trainIdx];

@@ -6,6 +6,7 @@
 #include "lar/tracking/filtered_tracker_config.h"
 #include "lar/core/landmark.h"
 #include <opencv2/imgproc.hpp>
+#include <opencv2/geometry.hpp>  // cv::boundingRect moved imgproc -> geometry in OpenCV 5
 #include <algorithm>
 #include <iostream>
 

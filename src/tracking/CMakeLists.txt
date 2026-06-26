@@ -86,9 +86,9 @@ target_compile_options(lar_tracking PRIVATE
 target_link_libraries(lar_tracking
   PUBLIC
     opencv_core
-    opencv_calib3d
+    opencv_geometry    # solvePnPRansac / Rodrigues (was calib3d in OpenCV 4)
     opencv_imgproc
-    opencv_features2d  # For KeyPointsFilter utilities
+    opencv_features    # For KeyPointsFilter utilities (was features2d in OpenCV 4)
     opencv_flann       # For custom FlannMatcher
     lar_core
     lar_mapping
