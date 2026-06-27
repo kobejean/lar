@@ -47,7 +47,7 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/bin)
 
 find_package(Eigen3 3.4.90 REQUIRED)
-find_package(OpenCV 4.5.4 REQUIRED core calib3d features2d imgcodecs imgproc)
+find_package(OpenCV 5.0 REQUIRED core geometry features flann imgcodecs imgproc)
 find_package(nlohmann_json 3.11.3 REQUIRED)
 find_package(g2o 1.0.0 REQUIRED)
 

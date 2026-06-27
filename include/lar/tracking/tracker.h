@@ -3,7 +3,7 @@
 
 #include <Eigen/Core>
 #include <opencv2/core/types.hpp>
-#include <opencv2/calib3d.hpp>
+#include <opencv2/geometry.hpp>  // solvePnPRansac / Rodrigues (was calib3d in OpenCV 4)
 
 #include "lar/core/map.h"
 #include "lar/mapping/frame.h"
