@@ -3,6 +3,7 @@
 
 #include <memory>
 #include <chrono>
+#include <mutex>
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 #include <opencv2/core.hpp>
@@ -25,6 +26,23 @@ namespace lar {
  * - T_lar_from_camera: Camera pose IN LAR world coordinates (primary state)
  * - T_vio_from_camera: Camera pose IN VIO world coordinates
  * - T_lar_from_vio: Coordinate transform FROM VIO TO LAR world (output)
+ *
+ * THREAD SAFETY:
+ * The lightweight per-frame operations (updateVIOCameraPose, predictStep,
+ * getFilteredTransform, getPositionUncertainty, isInitialized, reset) are safe to call
+ * concurrently with measurementUpdate. They only touch the filter / VIO state, which is
+ * guarded by state_mutex_ and held for microseconds.
+ *
+ * measurementUpdate runs its expensive computer-vision localization (base_tracker_) WITHOUT
+ * holding state_mutex_, so a 0.5-2s localization never blocks the per-frame thread (e.g. the
+ * ARKit delegate). It only locks briefly to snapshot the prediction up front and to fuse the
+ * result at the end. Because per-frame predictStep keeps advancing the filter during the
+ * unlocked CV work, the measurement is time-aligned back to "now" using the VIO motion that
+ * elapsed during localization before it is fused (see measurementUpdate).
+ *
+ * CALLER CONTRACT: measurementUpdate touches base_tracker_, which is NOT mutex-guarded, so it
+ * must not be called concurrently with itself or with getBaseTracker() mutations such as
+ * configureImageSize(). Serialize those heavy/rare operations on a single background context.
  */
 class FilteredTracker {
 public:
@@ -59,7 +77,11 @@ private:
     // Timing
     std::chrono::steady_clock::time_point last_prediction_time_;
 
-    // Helper methods
+    // Guards the filter strategy, VIO pose state, timing and last_transform_result_.
+    // Deliberately NOT held during base_tracker_ localization (see measurementUpdate).
+    mutable std::mutex state_mutex_;
+
+    // Helper methods. NOTE: these assume state_mutex_ is already held by the caller.
     Eigen::Matrix4d computeMotionDelta();
     MeasurementResult computeCoordinateTransform(const Eigen::Matrix4d& T_lar_from_camera, double confidence);
 
