@@ -84,6 +84,8 @@ void FilteredTracker::updateVIOCameraPose(const Eigen::Matrix4d& T_vio_from_came
         return;
     }
 
+    std::lock_guard<std::mutex> lock(state_mutex_);
+
     // Update VIO pose tracking
     if (!has_vio_poses_) {
         // First pose - initialize both current and last
@@ -106,6 +108,8 @@ void FilteredTracker::updateVIOCameraPose(const Eigen::Matrix4d& T_vio_from_came
 // ============================================================================
 
 void FilteredTracker::predictStep() {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+
     auto current_time = std::chrono::steady_clock::now();
     double dt = std::chrono::duration<double>(current_time - last_prediction_time_).count();
     last_prediction_time_ = current_time;
@@ -140,20 +144,38 @@ FilteredTracker::MeasurementResult FilteredTracker::measurementUpdate(
     result.success = false;
     result.confidence = 0.0;
 
-    // Perform LAR localization (returns camera pose in LAR world)
+    // --- Phase 1: snapshot the prediction and the capture-time VIO pose (brief lock) ---
+    // We grab the current filter prediction to seed PnP and remember the VIO pose at the
+    // moment localization begins, so we can time-align the result later. We release the lock
+    // immediately so per-frame predict/getFilteredTransform keep running during the CV work.
+    bool was_initialized;
+    Eigen::Matrix4d predicted_pose_guess = Eigen::Matrix4d::Identity();
+    Eigen::Matrix4d vio_at_capture = Eigen::Matrix4d::Identity();
+    bool had_vio_at_capture;
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        was_initialized = filter_strategy_->isInitialized();
+        if (was_initialized) {
+            predicted_pose_guess = filter_strategy_->getState().toTransform();
+        }
+        had_vio_at_capture = has_vio_poses_;
+        vio_at_capture = current_vio_camera_pose_;
+    }
+
+    // --- Phase 2: expensive LAR localization, NO lock held ---
+    // base_tracker_ is not mutex-guarded (see CALLER CONTRACT); this is the 0.5-2s CV work
+    // that must never block the per-frame thread.
     Eigen::Matrix4d T_lar_from_camera_measured;
     bool localization_success;
 
-    if (filter_strategy_->isInitialized()) {
+    if (was_initialized) {
         // Use pose prediction as initial guess for RANSAC
-        Eigen::Matrix4d predicted_pose = filter_strategy_->getState().toTransform();
-
         if (config_.enable_debug_output) {
             std::cout << "Using prediction as initial guess for PnP" << std::endl;
         }
 
         localization_success = base_tracker_->localize(
-            image, frame, query_x, query_z, query_diameter, T_lar_from_camera_measured, predicted_pose, true);
+            image, frame, query_x, query_z, query_diameter, T_lar_from_camera_measured, predicted_pose_guess, true);
     } else {
         // No prediction available, use standard localization
         localization_success = base_tracker_->localize(
@@ -171,18 +193,36 @@ FilteredTracker::MeasurementResult FilteredTracker::measurementUpdate(
     result.success = true;
     result.matched_landmarks = base_tracker_->local_landmarks;
     result.inliers = base_tracker_->inliers;
+    size_t total_matches = base_tracker_->matches.size();
 
     if (config_.enable_debug_output) {
         std::cout << "LAR localization successful: " << result.inliers.size() << " inliers, "
                   << result.matched_landmarks.size() << " matches" << std::endl;
     }
 
+    // --- Phase 3: fuse the measurement into the filter (brief lock) ---
+    std::lock_guard<std::mutex> lock(state_mutex_);
+
+    // Time-align the measurement to "now". The filter kept predicting on the per-frame
+    // thread while CV ran, so its state advanced by the VIO motion that occurred during
+    // localization. Carry the measured pose forward by that same motion (assuming the
+    // VIO->LAR drift transform is ~constant over the localization window) so the measured
+    // pose and the predicted state refer to the same instant:
+    //   T_lar_from_camera(now) = T_lar_from_camera(capture) * vio(capture)^-1 * vio(now)
+    Eigen::Matrix4d measured_pose = T_lar_from_camera_measured;
+    if (had_vio_at_capture && has_vio_poses_) {
+        Eigen::Matrix4d vio_delta = vio_at_capture.inverse() * current_vio_camera_pose_;
+        if (utils::TransformUtils::validateTransformMatrix(vio_delta, "vio_delta_during_cv")) {
+            measured_pose = T_lar_from_camera_measured * vio_delta;
+        }
+    }
+
     // Create measurement context for pluggable components
     MeasurementContext context;
     context.inliers = std::make_shared<std::vector<std::pair<Landmark*, cv::KeyPoint>>>(result.inliers);
-    context.total_matches = base_tracker_->matches.size();
+    context.total_matches = total_matches;
     context.frame = &frame;
-    context.measured_pose = T_lar_from_camera_measured;
+    context.measured_pose = measured_pose;
     if (filter_strategy_->isInitialized()) {
         context.predicted_pose = filter_strategy_->getState().toTransform();
     }
@@ -194,6 +234,8 @@ FilteredTracker::MeasurementResult FilteredTracker::measurementUpdate(
     // Calculate measurement noise using context (compute once, use many times)
     context.measurement_noise = confidence_estimator_->calculateMeasurementNoise(context, config_);
 
+    // Re-check initialization under the lock: a concurrent reset() may have de-initialized
+    // the filter while CV was running.
     if (!filter_strategy_->isInitialized()) {
         // Initialize filter from first measurement
         if (config_.enable_debug_output) {
@@ -207,7 +249,7 @@ FilteredTracker::MeasurementResult FilteredTracker::measurementUpdate(
         Eigen::MatrixXd covariance = filter_strategy_->getCovariance();
 
         // Use enhanced outlier analysis with pattern detection
-        auto outlier_result = outlier_detector_->analyzeOutlier(T_lar_from_camera_measured, predicted_pose, covariance, result.confidence, config_);
+        auto outlier_result = outlier_detector_->analyzeOutlier(measured_pose, predicted_pose, covariance, result.confidence, config_);
 
         if (outlier_result.likely_bad_state) {
             if (config_.enable_debug_output) {
@@ -259,10 +301,12 @@ FilteredTracker::MeasurementResult FilteredTracker::measurementUpdate(
 // ============================================================================
 
 Eigen::Matrix4d FilteredTracker::getFilteredTransform() const {
+	std::lock_guard<std::mutex> lock(state_mutex_);
 	return current_vio_camera_pose_ * filter_strategy_->getState().toTransform().inverse();
 }
 
 double FilteredTracker::getPositionUncertainty() const {
+    std::lock_guard<std::mutex> lock(state_mutex_);
     if (!filter_strategy_->isInitialized()) {
         return std::numeric_limits<double>::infinity();
     }
@@ -270,10 +314,13 @@ double FilteredTracker::getPositionUncertainty() const {
 }
 
 bool FilteredTracker::isInitialized() const {
+    std::lock_guard<std::mutex> lock(state_mutex_);
     return filter_strategy_->isInitialized();
 }
 
 void FilteredTracker::reset() {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+
     if (config_.enable_debug_output) {
         std::cout << "Resetting FilteredTracker (all components)" << std::endl;
     }
