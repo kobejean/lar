@@ -141,6 +141,14 @@ public:
                                       double query_z,
                                       double query_diameter);
 
+    /// Interop-friendly overload: takes a grayscale image as a plain buffer view + a spatial
+    /// query struct (see lar/tracking/image_input.h and lar/core/spatial/spatial_query.h).
+    /// Wraps the buffer in a cv::Mat (no copy) and forwards to the cv::InputArray overload —
+    /// lets non-C++ callers (Obj-C/Swift) run a measurement update without touching opencv types.
+    MeasurementResult measurementUpdate(const LARImageInput& image,
+                                      const Frame& frame,
+                                      const LARSpatialQuery& query);
+
     /**
      * Get current filtered VIO → LAR map transform
      * This transform can be applied to VIO poses to get map-aligned poses

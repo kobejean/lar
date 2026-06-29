@@ -130,6 +130,15 @@ void FilteredTracker::predictStep() {
 // ============================================================================
 
 FilteredTracker::MeasurementResult FilteredTracker::measurementUpdate(
+    const LARImageInput& image,
+    const Frame& frame,
+    const LARSpatialQuery& query) {
+    // Wrap the caller's grayscale bytes in a cv::Mat (no copy) and forward.
+    cv::Mat imageMat(image.height, image.width, CV_8UC1, const_cast<void*>(image.data), static_cast<size_t>(image.bytesPerRow));
+    return measurementUpdate(imageMat, frame, query.x, query.z, query.diameter);
+}
+
+FilteredTracker::MeasurementResult FilteredTracker::measurementUpdate(
     cv::InputArray image,
     const Frame& frame,
     double query_x,
