@@ -24,7 +24,7 @@ namespace lar {
     vision.configureImageSize(imageSize);
   }
 
-  bool Tracker::localize(const LARImageInput &image, const Frame &frame, const LARSpatialQuery &query, Eigen::Matrix4d &result_transform, const Eigen::Matrix4d &initial_guess, bool use_initial_guess) {
+  bool Tracker::localize(const LARImage &image, const Frame &frame, const LARSpatialQuery &query, Eigen::Matrix4d &result_transform, const Eigen::Matrix4d &initial_guess, bool use_initial_guess) {
     // Wrap the caller's grayscale bytes in a cv::Mat (no copy) and forward.
     cv::Mat imageMat(image.height, image.width, CV_8UC1, const_cast<void*>(image.data), static_cast<size_t>(image.bytesPerRow));
     return localize(imageMat, frame, query.x, query.z, query.diameter, result_transform, initial_guess, use_initial_guess);
