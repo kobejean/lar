@@ -6,7 +6,9 @@
 #include <opencv2/geometry.hpp>  // solvePnPRansac / Rodrigues (was calib3d in OpenCV 4)
 
 #include "lar/core/map.h"
+#include "lar/core/spatial/spatial_query.h"
 #include "lar/mapping/frame.h"
+#include "lar/tracking/image_input.h"
 #include "lar/tracking/vision.h"
 
 namespace lar {
@@ -30,6 +32,12 @@ namespace lar {
 
       bool localize(cv::InputArray image, const Frame &frame, double query_x, double query_z, double query_diameter, Eigen::Matrix4d &result_transform, const Eigen::Matrix4d &initial_guess = Eigen::Matrix4d(), bool use_initial_guess = false);
       bool localize(cv::InputArray image, const cv::Mat& intrinsics, const cv::Mat& dist_coeffs, cv::Mat &rvec, cv::Mat &tvec, const cv::Mat &gvec, double query_x = 0.0, double query_z = 0.0, double query_diameter = 0.0);
+
+      /// Interop-friendly overload: takes a grayscale image as a plain buffer view + a spatial
+      /// query struct (see lar/tracking/image_input.h and lar/core/spatial/spatial_query.h).
+      /// Wraps the buffer in a cv::Mat (no copy) and forwards to the cv::InputArray overload —
+      /// lets non-C++ callers (Obj-C/Swift) localize without touching opencv types.
+      bool localize(const LARImageInput &image, const Frame &frame, const LARSpatialQuery &query, Eigen::Matrix4d &result_transform, const Eigen::Matrix4d &initial_guess = Eigen::Matrix4d(), bool use_initial_guess = false);
 
       // Getter for gravity angle difference from last localization
       double getLastGravityAngleDifference() const;
