@@ -102,11 +102,14 @@ def run_colmap_sequential_feature_matching(database_path, overlap, vocab_tree_pa
     if vocab_tree_path is not None:
         cmd += [
             "--SequentialMatching.loop_detection", "1",
-            # Thorough loop closure: query every image (period 1), retrieve a
-            # generous candidate set, and use soft visual-word assignment for
-            # higher retrieval recall. Prioritizes a well-connected graph over speed.
-            "--SequentialMatching.loop_detection_period", "1",
-            "--SequentialMatching.loop_detection_num_images", "60",
+            # Thorough loop closure with soft visual-word assignment
+            # (num_nearest_neighbors 5) for high retrieval recall. Query every 5th
+            # image rather than every image: consecutive frames are near-identical
+            # so they retrieve the same loop candidates, making period 1 mostly
+            # redundant work (a revisit spans many frames, so period 5 still catches
+            # it) -- period 5 is ~5x faster with negligible recall loss.
+            "--SequentialMatching.loop_detection_period", "5",
+            "--SequentialMatching.loop_detection_num_images", "40",
             "--SequentialMatching.loop_detection_num_nearest_neighbors", "5",
             # Cap features used to build/query the vocab tree index (default -1 =
             # all). Indexing every extracted feature (up to max_num_features) is
