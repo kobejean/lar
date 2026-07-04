@@ -91,6 +91,10 @@ def run_colmap_sequential_feature_matching(database_path, overlap, vocab_tree_pa
         "--SiftMatching.use_gpu", "1",
         "--SiftMatching.guided_matching", "1",
         "--SiftMatching.num_threads", "8",
+        # Tight geometric verification so the extra loop-closure candidate edges
+        # that survive are reliable, not spurious.
+        "--SiftMatching.max_ratio", "0.8",
+        "--TwoViewGeometry.min_num_inliers", "15",
         "--SequentialMatching.overlap", str(overlap),
         "--SequentialMatching.quadratic_overlap", "1",
     ]
@@ -98,8 +102,12 @@ def run_colmap_sequential_feature_matching(database_path, overlap, vocab_tree_pa
     if vocab_tree_path is not None:
         cmd += [
             "--SequentialMatching.loop_detection", "1",
-            "--SequentialMatching.loop_detection_period", "10",
-            "--SequentialMatching.loop_detection_num_images", "50",
+            # Thorough loop closure: query every image (period 1), retrieve a
+            # generous candidate set, and use soft visual-word assignment for
+            # higher retrieval recall. Prioritizes a well-connected graph over speed.
+            "--SequentialMatching.loop_detection_period", "1",
+            "--SequentialMatching.loop_detection_num_images", "60",
+            "--SequentialMatching.loop_detection_num_nearest_neighbors", "5",
             "--SequentialMatching.vocab_tree_path", str(vocab_tree_path),
         ]
         print(f"Running COLMAP sequential feature matching (overlap {overlap}, vocab tree loop detection)...")
