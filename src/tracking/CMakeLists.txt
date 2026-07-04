@@ -90,8 +90,7 @@ target_link_libraries(lar_tracking
     opencv_imgproc
     opencv_features    # For KeyPointsFilter utilities (was features2d in OpenCV 4)
     opencv_flann       # For custom FlannMatcher
-    lar_core
-    lar_mapping
+    lar_core           # Frame now lives here, so tracking no longer needs lar_mapping
   PRIVATE
     g2o_core
     g2o_types_sba

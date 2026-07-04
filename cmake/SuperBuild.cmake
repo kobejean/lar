@@ -61,7 +61,10 @@ ExternalProject_Add(opencv
     -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/install
     ${COMMON_TOOLCHAIN_ARGS}
     -DCMAKE_POLICY_DEFAULT_CMP0048=NEW
-    -DBUILD_LIST=core,geometry,features,imgcodecs,imgproc
+    # imgcodecs dropped: LAR uses lar_io (vendored stb JPEG + custom PFM) for all image I/O,
+    # so OpenCV no longer needs any image codec, libjpeg or zlib. flann is pulled in as a
+    # dependency of features/core.
+    -DBUILD_LIST=core,geometry,features,imgproc
     -DBUILD_SHARED_LIBS=OFF
     -DBUILD_DOCS=OFF
     -DBUILD_TESTS=OFF
@@ -69,7 +72,7 @@ ExternalProject_Add(opencv
     -DBUILD_EXAMPLES=OFF
     -DBUILD_opencv_apps=OFF
     -DBUILD_opencv_world=OFF
-    # Disable all image formats except JPEG
+    # No image codecs at all (handled by lar_io), so no third-party image libs and no zlib.
     -DWITH_PNG=OFF
     -DWITH_TIFF=OFF
     -DWITH_WEBP=OFF
@@ -77,24 +80,17 @@ ExternalProject_Add(opencv
     -DWITH_JASPER=OFF
     -DWITH_OPENEXR=OFF
     -DWITH_AVIF=OFF
-    -DWITH_IMGCODEC_HDR=OFF
-    -DWITH_IMGCODEC_SUNRASTER=OFF
-    -DWITH_IMGCODEC_PXM=OFF
-    -DWITH_IMGCODEC_PFM=ON
     -DWITH_SPNG=OFF
-    # Enable JPEG only
-    -DWITH_JPEG=ON
-    -DBUILD_JPEG=ON
-    # Disable build of third-party image libs
+    -DWITH_JPEG=OFF
+    -DBUILD_JPEG=OFF
     -DBUILD_PNG=OFF
     -DBUILD_TIFF=OFF
     -DBUILD_WEBP=OFF
     -DBUILD_OPENJPEG=OFF
     -DBUILD_JASPER=OFF
     -DBUILD_OPENEXR=OFF
-    # Keep zlib (JPEG needs it)
-    -DBUILD_ZLIB=ON
-    -DWITH_ZLIB=ON
+    -DBUILD_ZLIB=OFF
+    -DWITH_ZLIB=OFF
     # Disable other stuff you don't need
     -DWITH_PROTOBUF=OFF
     -DWITH_FLATBUFFERS=OFF

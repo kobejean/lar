@@ -3,6 +3,7 @@
 #include <opencv2/opencv.hpp>
 #include <Eigen/Core>
 
+#include "lar/io/image_io.h"
 #include "lar/core/utils/json.h"
 #include "lar/mapping/mapper.h"
 
@@ -10,9 +11,9 @@ using namespace lar;
 
 TEST(MapperTest, WriteMetadata) {
   // Given
-  cv::Mat image = cv::imread("./test/_fixture/raw_map_data/00000004_image.jpeg", cv::IMREAD_GRAYSCALE);
-  cv::Mat depth = cv::imread("./test/_fixture/raw_map_data/00000004_depth.pfm", cv::IMREAD_UNCHANGED);
-  cv::Mat confidence = cv::imread("./test/_fixture/raw_map_data/00000004_confidence.pfm", cv::IMREAD_UNCHANGED);
+  cv::Mat image = lar::io::imreadGray("./test/_fixture/raw_map_data/00000004_image.jpeg");
+  cv::Mat depth = lar::io::imreadPFM("./test/_fixture/raw_map_data/00000004_depth.pfm");
+  cv::Mat confidence = lar::io::imreadPFM("./test/_fixture/raw_map_data/00000004_confidence.pfm");
   Eigen::Matrix3d intrinsics;
   intrinsics << 1,4,7,
                 2,5,8,

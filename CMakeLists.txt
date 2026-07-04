@@ -28,6 +28,15 @@ include(ExternalProject)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -Wall -Wextra")
 set(CMAKE_CXX_STANDARD 17)
 
+# Per-function/data sections + linker dead-stripping so that code from unreferenced
+# modules (e.g. image I/O in a tracking-only binary) is dropped from the final executable.
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffunction-sections -fdata-sections")
+if(APPLE)
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-dead_strip")
+elseif(UNIX)
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--gc-sections")
+endif()
+
 # Options
 option(LAR_BUILD_APPS "Whether or not apps should be built" ON)
 option(LAR_BUILD_TESTS "Whether or not tests should be built" OFF)
@@ -47,7 +56,7 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/bin)
 
 find_package(Eigen3 3.4.90 REQUIRED)
-find_package(OpenCV 5.0 REQUIRED core geometry features flann imgcodecs imgproc)
+find_package(OpenCV 5.0 REQUIRED core geometry features flann imgproc)
 find_package(nlohmann_json 3.11.3 REQUIRED)
 find_package(g2o 1.0.0 REQUIRED)
 

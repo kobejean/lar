@@ -2,9 +2,9 @@
 #include <fstream>
 
 #include <Eigen/Core>
-#include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 
+#include "lar/io/image_io.h"
 #include "lar/core/landmark.h"
 #include "lar/processing/depth.h"
 #include "lar/processing/projection.h"
@@ -26,7 +26,7 @@ namespace lar {
 
     // Load image
     std::cout << "loading: " << img_filepath << std::endl;
-    cv::Mat image = cv::imread(img_filepath, cv::IMREAD_GRAYSCALE);
+    cv::Mat image = lar::io::imreadGray(img_filepath);
     std::cout << image.size() << std::endl;
 
     // Extract features

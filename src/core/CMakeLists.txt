@@ -7,11 +7,16 @@ set(HEADER_LIST
   "${PROJECT_SOURCE_DIR}/include/lar/core/landmark.h"
   "${PROJECT_SOURCE_DIR}/include/lar/core/landmark_database.h"
   "${PROJECT_SOURCE_DIR}/include/lar/core/map.h"
+  # Frame is a fundamental pose/intrinsics type; it lives in core so that tracking can
+  # use it without depending on lar_mapping (which pulls in image I/O). Header path is
+  # still include/lar/mapping/frame.h for source compatibility.
+  "${PROJECT_SOURCE_DIR}/include/lar/mapping/frame.h"
 )
 
 add_library(lar_core
   ${HEADER_LIST}
   anchor.cpp
+  frame.cpp
   landmark.cpp
   landmark_database.cpp
   map.cpp

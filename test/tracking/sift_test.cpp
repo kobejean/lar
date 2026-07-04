@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include <opencv2/opencv.hpp>
+#include "lar/io/image_io.h"
 #include "lar/tracking/sift/sift.h"
 
 class SIFTTest : public ::testing::Test {
@@ -7,7 +8,7 @@ protected:
     void SetUp() override {
         // Load real test image from fixtures
         std::string image_path = "./test/_fixture/raw_map_data/00000000_image.jpeg";
-        test_image = cv::imread(image_path, cv::IMREAD_GRAYSCALE);        
+        test_image = lar::io::imreadGray(image_path);
         ASSERT_FALSE(test_image.empty()) << "Test image could not be loaded";
     }
 
@@ -102,7 +103,7 @@ TEST_F(SIFTTest, MultipleRealImages) {
     lar::SIFT lar_sift(lar_config);
     
     for (const auto& path : image_paths) {
-        cv::Mat image = cv::imread(path, cv::IMREAD_GRAYSCALE);
+        cv::Mat image = lar::io::imreadGray(path);
         if (image.empty()) continue;  // Skip if image doesn't exist
         
         std::vector<cv::KeyPoint> cv_keypoints, lar_keypoints;

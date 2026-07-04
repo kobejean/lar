@@ -1,9 +1,9 @@
 #include <iostream>
 
 #include <opencv2/core.hpp>
-#include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 
+#include "lar/io/image_io.h"
 #include "lar/processing/depth.h"
 
 namespace lar {
@@ -92,11 +92,11 @@ namespace lar {
     
     // Load depth map
     std::cout << "loading: " << depth_filepath << std::endl;
-    _depth = cv::imread(depth_filepath, cv::IMREAD_UNCHANGED);
+    _depth = lar::io::imreadPFM(depth_filepath);
     
     // Load confidence map
     std::cout << "loading: " << confidence_filepath << std::endl;
-    cv::Mat confidence = cv::imread(confidence_filepath, cv::IMREAD_UNCHANGED);
+    cv::Mat confidence = lar::io::imreadPFM(confidence_filepath);
     
     _confidence = cv::Mat(confidence.size(), CV_32FC1);
     
