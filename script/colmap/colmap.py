@@ -108,6 +108,12 @@ def run_colmap_sequential_feature_matching(database_path, overlap, vocab_tree_pa
             "--SequentialMatching.loop_detection_period", "1",
             "--SequentialMatching.loop_detection_num_images", "60",
             "--SequentialMatching.loop_detection_num_nearest_neighbors", "5",
+            # Cap features used to build/query the vocab tree index (default -1 =
+            # all). Indexing every extracted feature (up to max_num_features) is
+            # the dominant cost; top-scale features dominate retrieval anyway, so
+            # this speeds indexing ~4-8x. Full pairwise matching still uses all
+            # features, so map density is unaffected.
+            "--SequentialMatching.loop_detection_max_num_features", "4096",
             "--SequentialMatching.vocab_tree_path", str(vocab_tree_path),
         ]
         print(f"Running COLMAP sequential feature matching (overlap {overlap}, vocab tree loop detection)...")
