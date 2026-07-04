@@ -63,6 +63,7 @@ COMMON_ARGS=(
     --without dnn --without gapi --without highgui --without ml
     --without objdetect --without photo --without stitching
     --without video --without videoio --without parallel
+    --without imgcodecs  # all image I/O handled by lar_io (vendored stb + PFM); drops libjpeg/zlib
     --without ptcloud  # unused; its objc VolumeType binding clashes with macOS Carbon OSType
     --macos_archs=arm64 --iphoneos_archs=arm64 --iphonesimulator_archs=arm64
     --catalyst_archs='' --disable-bitcode --build_only_specified_archs

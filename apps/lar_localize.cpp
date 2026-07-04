@@ -15,6 +15,7 @@
 #include <Eigen/Dense>
 #include <opencv2/opencv.hpp>
 
+#include "lar/io/image_io.h"
 #include "lar/core/utils/json.h"
 #include "lar/tracking/tracker.h"
 #include "lar/mapping/frame.h"
@@ -72,7 +73,7 @@ int main(int argc, const char* argv[]){
   for (size_t i = 0; i < frame_count; i++) {
     frame_data[i].frame = frames[i];
     std::string image_path = getPathPrefix(localize, frames[i].id) + "image.jpeg";
-    frame_data[i].image = cv::imread(image_path, cv::IMREAD_GRAYSCALE);
+    frame_data[i].image = lar::io::imreadGray(image_path);
 
     if (frame_data[i].image.empty()) {
       std::cerr << "Warning: Failed to load image for frame " << frames[i].id << std::endl;

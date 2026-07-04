@@ -20,7 +20,7 @@ add_library(lar_processing
   projection.cpp
   ${HEADER_LIST}
 )
-target_link_libraries(lar_processing 
+target_link_libraries(lar_processing
   g2o::types_sba g2o::types_slam3d g2o::solver_eigen
   opencv_core
   nlohmann_json::nlohmann_json
@@ -29,4 +29,5 @@ target_link_libraries(lar_processing
   lar_core
   lar_mapping
   lar_tracking
+  lar_io       # image reading (frame_processor.cpp, depth.cpp, colmap_refiner.cpp)
 )

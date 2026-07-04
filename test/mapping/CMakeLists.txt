@@ -5,7 +5,7 @@ set(LAR_MAPPING_TEST_SRCS
 )
 set(LAR_MAPPING_TEST_LIBS
   lar_mapping
-  opencv_imgcodecs
+  lar_io
   nlohmann_json::nlohmann_json
   Eigen3::Eigen
 )

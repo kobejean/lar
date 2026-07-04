@@ -12,8 +12,8 @@ set_target_properties(lar_create_map
 # Create lar_localize executable
 add_executable(lar_localize lar_localize.cpp)
 target_link_libraries(lar_localize
-  lar_tracking lar_mapping
-  opencv_core opencv_features opencv_imgcodecs
+  lar_tracking lar_mapping lar_io
+  opencv_core opencv_features
 )
 set_target_properties(lar_localize
   PROPERTIES

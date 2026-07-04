@@ -2,8 +2,9 @@
 #include <fstream>
 #include <iostream>
 
-#include <opencv2/imgcodecs.hpp>
 #include <nlohmann/json.hpp>
+
+#include "lar/io/image_io.h"
 
 #include "lar/core/utils/json.h"
 #include "lar/mapping/mapper.h"
@@ -21,11 +22,11 @@ namespace lar {
     frame.id = static_cast<int>(data->frames.size());
     data->frames.push_back(frame);
     std::string path_prefix = data->getPathPrefix(frame.id).string();
-    cv::imwrite(path_prefix + "image.jpeg", image);
+    lar::io::imwriteJpeg(path_prefix + "image.jpeg", image.getMat());
     // Depth/confidence (e.g. LiDAR) are optional: skip writing when not provided.
     // The COLMAP-based pipeline derives depth geometrically and ignores these files.
-    if (!depth.empty()) cv::imwrite(path_prefix + "depth.pfm", depth);
-    if (!confidence.empty()) cv::imwrite(path_prefix + "confidence.pfm", confidence);
+    if (!depth.empty()) lar::io::imwritePFM(path_prefix + "depth.pfm", depth.getMat());
+    if (!confidence.empty()) lar::io::imwritePFM(path_prefix + "confidence.pfm", confidence.getMat());
   }
 
   void Mapper::addPosition(Eigen::Vector3d position, long long timestamp) {

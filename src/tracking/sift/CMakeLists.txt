@@ -38,11 +38,18 @@ target_sources(lar_tracking PRIVATE
 if(LAR_USE_METAL_SIFT AND APPLE)
   find_library(METAL_LIBRARY Metal)
   find_library(METAL_PERFORMANCE_SHADERS MetalPerformanceShaders)
+  # Foundation supplies the Objective-C runtime (NSString, @try/@catch) used by
+  # sift_impl_metal.mm. It is linked PUBLIC because that .mm is compiled into
+  # lar_tracking.a, so any executable linking lar_tracking needs the ObjC runtime.
+  # (Previously this was satisfied incidentally via opencv_imgcodecs' transitive
+  # framework deps; that link is gone now that image I/O lives in lar_io.)
+  find_library(FOUNDATION_LIBRARY Foundation)
 
-  if(METAL_LIBRARY AND METAL_PERFORMANCE_SHADERS)
-    target_link_libraries(lar_tracking PRIVATE
+  if(METAL_LIBRARY AND METAL_PERFORMANCE_SHADERS AND FOUNDATION_LIBRARY)
+    target_link_libraries(lar_tracking PUBLIC
       ${METAL_LIBRARY}
       ${METAL_PERFORMANCE_SHADERS}
+      ${FOUNDATION_LIBRARY}
     )
     target_compile_definitions(lar_tracking PRIVATE LAR_USE_METAL_SIFT)
 

@@ -9,6 +9,7 @@
 
 #include <opencv2/opencv.hpp>
 
+#include "lar/io/image_io.h"
 #include "lar/processing/colmap_refiner.h"
 #include "lar/core/utils/json.h"
 #include "lar/core/utils/transform.h"
@@ -35,7 +36,7 @@ namespace lar {
       std::cout << std::endl << "LOCALIZING FRAME " << frame.id << std::endl;
       std::string path_prefix = data->getPathPrefix(frame.id).string();
       std::string img_filepath = path_prefix + "image.jpeg";
-      cv::Mat image = cv::imread(img_filepath, cv::IMREAD_GRAYSCALE);
+      cv::Mat image = lar::io::imreadGray(img_filepath);
       Eigen::Matrix4d extrinsics;
       // Use frame position for spatial query
       double query_x = frame.extrinsics(0, 3);
