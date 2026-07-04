@@ -19,6 +19,23 @@ from database_operations import create_colmap_database, export_poses, insert_two
 from arkit_integration import load_arkit_data, create_reference_file_from_arkit
 from map_export import export_aligned_map_json
 
+# Default vocab tree bundled alongside this script (Flickr100K, 32K words).
+BUNDLED_VOCAB_TREE = Path(__file__).resolve().parent / "vocab_tree.bin"
+
+def resolve_vocab_tree_path(source_dir):
+    """Resolve which vocab tree to use.
+
+    A per-session tree at <source_dir>/vocab_tree.bin takes precedence (lets you
+    override with one trained on your own data); otherwise fall back to the
+    bundled default committed next to this script. Returns None if neither exists.
+    """
+    session_tree = Path(source_dir) / "vocab_tree.bin"
+    if session_tree.exists():
+        return session_tree
+    if BUNDLED_VOCAB_TREE.exists():
+        return BUNDLED_VOCAB_TREE
+    return None
+
 def run_colmap_feature_matching(database_path):
     """Run COLMAP feature matching"""
     cmd = [
@@ -52,6 +69,43 @@ def run_colmap_vocab_tree_feature_matching(database_path, vocab_tree_path):
     ]
     
     print("Running COLMAP vocab tree feature matching...")
+    try:
+        subprocess.run(cmd, check=True, text=True)
+        print("Feature matching completed successfully")
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"Feature matching failed: {e}")
+        return False
+
+def run_colmap_sequential_feature_matching(database_path, overlap, vocab_tree_path=None):
+    """Run COLMAP sequential feature matching.
+
+    Matches each image against the next `overlap` images in filename order
+    (images are named `{frame_id:08d}_image.jpeg`, so lexicographic order is
+    capture order). When a vocab tree is available, loop detection is enabled to
+    additionally match images that are near in space but far apart in sequence.
+    """
+    cmd = [
+        "colmap", "sequential_matcher",
+        "--database_path", str(database_path),
+        "--SiftMatching.use_gpu", "1",
+        "--SiftMatching.guided_matching", "1",
+        "--SiftMatching.num_threads", "8",
+        "--SequentialMatching.overlap", str(overlap),
+        "--SequentialMatching.quadratic_overlap", "1",
+    ]
+
+    if vocab_tree_path is not None:
+        cmd += [
+            "--SequentialMatching.loop_detection", "1",
+            "--SequentialMatching.loop_detection_period", "10",
+            "--SequentialMatching.loop_detection_num_images", "50",
+            "--SequentialMatching.vocab_tree_path", str(vocab_tree_path),
+        ]
+        print(f"Running COLMAP sequential feature matching (overlap {overlap}, vocab tree loop detection)...")
+    else:
+        print(f"Running COLMAP sequential feature matching (overlap {overlap}, window only)...")
+
     try:
         subprocess.run(cmd, check=True, text=True)
         print("Feature matching completed successfully")
@@ -222,9 +276,24 @@ def extract_features(args, work_dir, database_path):
             exit(1)
 
 def feature_matching(args, database_path):
-    if args.use_vocab_tree:
+    if args.use_sequential:
+        print("\nRunning sequential feature matching...")
+        vocab_tree_path = resolve_vocab_tree_path(args.source_dir)
+        if vocab_tree_path is None:
+            print("No vocab tree found, running window-only sequential matching (no loop detection)")
+        else:
+            print(f"Using vocab tree: {vocab_tree_path}")
+        if not run_colmap_sequential_feature_matching(database_path, args.sequential_overlap, vocab_tree_path):
+            print("COLMAP pipeline failed at sequential feature matching")
+            exit(1)
+    elif args.use_vocab_tree:
         print("\nRunning vocab tree feature matching...")
-        if not run_colmap_vocab_tree_feature_matching(database_path, Path(args.source_dir) / "vocab_tree.bin"):
+        vocab_tree_path = resolve_vocab_tree_path(args.source_dir)
+        if vocab_tree_path is None:
+            print("No vocab tree found (looked in source_dir and next to script)")
+            exit(1)
+        print(f"Using vocab tree: {vocab_tree_path}")
+        if not run_colmap_vocab_tree_feature_matching(database_path, vocab_tree_path):
             print("COLMAP pipeline failed at vocab tree feature matching")
             exit(1)
     else:
@@ -301,6 +370,12 @@ def main():
                        help="Maximum error threshold for model alignment (default: 0.1)")
     parser.add_argument("--use_vocab_tree", action="store_true",
                        help="Use vocabulary tree matching instead of exhaustive matching")
+    parser.add_argument("--use_sequential", action="store_true",
+                       help="Use sequential (sliding-window) matching, with vocab tree loop detection. "
+                            "Uses <source_dir>/vocab_tree.bin if present, else the bundled default. "
+                            "Best for sequential captures.")
+    parser.add_argument("--sequential_overlap", type=int, default=10,
+                       help="Number of subsequent images to match per image for sequential matching (default: 10)")
     parser.add_argument("--use_glomap", action="store_true",
                        help="Use GLOMAP for reconstruction instead of COLMAP (faster, global SfM)")
 
@@ -337,7 +412,8 @@ def main():
 
     print(f"\n✅ Processing completed successfully!")
     print(f"Feature extraction method: {'COLMAP' if args.use_colmap_sift else 'OpenCV'}")
-    print(f"Matching method: {'Vocabulary Tree' if args.use_vocab_tree else 'Exhaustive'}")
+    matching_method = "Sequential" if args.use_sequential else ("Vocabulary Tree" if args.use_vocab_tree else "Exhaustive")
+    print(f"Matching method: {matching_method}")
     print(f"Reconstruction method: {'GLOMAP' if args.use_glomap else 'COLMAP'}")
     print(f"Model alignment: Applied in place")
     print(f"Final map: {map_json_file}")
