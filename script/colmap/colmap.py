@@ -163,6 +163,43 @@ def run_colmap_mapping(database_path, output_dir):
         print(f"Sparse reconstruction failed: {e}")
         return False
 
+def run_colmap_pose_prior_mapping(database_path, output_dir):
+    """Run COLMAP incremental reconstruction using ARKit position pose priors.
+
+    Unlike `colmap mapper` / `glomap mapper` (which ignore the pose_priors table),
+    pose_prior_mapper uses the per-image ARKit positions to register cameras where
+    visual matching alone is too sparse -- this is what bridges otherwise
+    disconnected components. A robust loss on the prior position tolerates ARKit
+    drift/outliers; the per-image covariance from the database is used as-is.
+    """
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    cmd = [
+        "colmap", "pose_prior_mapper",
+        "--database_path", str(database_path),
+        "--image_path", str(Path(database_path).parent),
+        "--output_path", str(output_path),
+        "--use_robust_loss_on_prior_position", "1",
+        # Mirror the intrinsics-fixed settings of run_colmap_mapping (we trust
+        # ARKit calibration and do not want BA to drift the intrinsics).
+        "--Mapper.ba_refine_focal_length", "0",
+        "--Mapper.ba_refine_principal_point", "0",
+        "--Mapper.ba_refine_extra_params", "0",
+        "--Mapper.extract_colors", "0",
+        "--Mapper.num_threads", "8",
+        "--Mapper.multiple_models", "0", # default: 1
+    ]
+
+    print("Running COLMAP pose-prior sparse reconstruction...")
+    try:
+        subprocess.run(cmd, check=True, text=True)
+        print("Sparse reconstruction completed successfully")
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"Sparse reconstruction failed: {e}")
+        return False
+
 def run_glomap_mapping(database_path, output_dir):
     """Run GLOMAP global structure-from-motion (faster alternative to COLMAP)"""
     output_path = Path(output_dir)
@@ -326,7 +363,12 @@ def insert_arkit_odometry(arkit_frames, database_path):
     print(f"Added {count} relative pose constraints from ARKit VIO")
 
 def sparse_reconstruction(args, database_path, sparse_dir):
-    if args.use_glomap:
+    if args.use_pose_prior:
+        print("\nRunning pose-prior reconstruction with COLMAP...")
+        if not run_colmap_pose_prior_mapping(database_path, sparse_dir):
+            print("COLMAP pipeline failed at pose-prior reconstruction")
+            exit(1)
+    elif args.use_glomap:
         print("\nRunning global reconstruction with GLOMAP...")
         if not run_glomap_mapping(database_path, sparse_dir):
             print("GLOMAP pipeline failed at reconstruction")
@@ -395,6 +437,11 @@ def main():
                        help="Number of subsequent images to match per image for sequential matching (default: 10)")
     parser.add_argument("--use_glomap", action="store_true",
                        help="Use GLOMAP for reconstruction instead of COLMAP (faster, global SfM)")
+    parser.add_argument("--use_pose_prior", action="store_true",
+                       help="Reconstruct with COLMAP pose_prior_mapper, using the ARKit position "
+                            "pose priors in the database to register cameras where visual matching "
+                            "is sparse. Helps connect otherwise disconnected components. Takes "
+                            "precedence over --use_glomap.")
 
     args = parser.parse_args()
     work_dir = Path(args.source_dir) / "colmap"
@@ -431,7 +478,8 @@ def main():
     print(f"Feature extraction method: {'COLMAP' if args.use_colmap_sift else 'OpenCV'}")
     matching_method = "Sequential" if args.use_sequential else ("Vocabulary Tree" if args.use_vocab_tree else "Exhaustive")
     print(f"Matching method: {matching_method}")
-    print(f"Reconstruction method: {'GLOMAP' if args.use_glomap else 'COLMAP'}")
+    reconstruction_method = "COLMAP (pose prior)" if args.use_pose_prior else ("GLOMAP" if args.use_glomap else "COLMAP")
+    print(f"Reconstruction method: {reconstruction_method}")
     print(f"Model alignment: Applied in place")
     print(f"Final map: {map_json_file}")
     print(f"Launch gui with: colmap gui --database_path {database_path} --import_path {reconstruction_path} --image_path {work_dir}")
