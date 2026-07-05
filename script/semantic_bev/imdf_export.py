@@ -128,6 +128,30 @@ def mask_to_polygons(binary: np.ndarray, meta: dict, simplify_m: float = 0.5,
     return polys
 
 
+def smooth_polygon(poly: Polygon, radius: float, simplify_m: float,
+                   min_hole_m2: float = 2.0) -> list[Polygon]:
+    """Cartographic smoothing: rounded morphological open+close (removes pixel-staircase and
+    thin protrusions/nicks), then simplify vertices and drop tiny holes. Returns 0+ polygons."""
+    p = (poly.buffer(-radius, join_style=1)      # open: erode+dilate -> drop protrusions
+         .buffer(2 * radius, join_style=1)        # ...then close: dilate+erode -> fill nicks
+         .buffer(-radius, join_style=1))          # (round joins => smooth curves)
+    if p.is_empty:
+        return []
+    out = []
+    for q in (p.geoms if p.geom_type == "MultiPolygon" else [p]):
+        q = q.simplify(simplify_m, preserve_topology=True)
+        if not q.is_valid:
+            q = q.buffer(0)
+        for r in (q.geoms if q.geom_type == "MultiPolygon" else [q]):
+            if r.geom_type != "Polygon" or r.is_empty:
+                continue
+            holes = [h for h in r.interiors if Polygon(h).area >= min_hole_m2]
+            r = Polygon(r.exterior, holes)
+            if r.is_valid and r.area > 0:
+                out.append(orient(r, sign=1.0))
+    return out
+
+
 # ---- IMDF assembly ------------------------------------------------------------------
 
 def _feature(feature_type: str, geometry, props: dict) -> dict:
@@ -156,7 +180,7 @@ def _geom_wgs84(poly: Polygon, to_wgs84) -> dict:
 def build_imdf(level_dir: str | Path, model_dir: str | Path, frames_path: str | Path,
                gps_path: str | Path, venue_name: str = "Maguro Park",
                venue_category: str = "themepark", locality: str = "Tokyo",
-               country: str = "JP", log=print) -> dict:
+               country: str = "JP", smooth: bool = True, log=print) -> dict:
     d = Path(level_dir)
     meta = json.load(open(d / "level0.meta.json"))
     npz = np.load(d / "level0.npz")
@@ -178,13 +202,19 @@ def build_imdf(level_dir: str | Path, model_dir: str | Path, frames_path: str | 
                         "province": locality, "country": country, "postal_code": None,
                         "postal_code_ext": None, "postal_code_vanity": None})
 
+    cs = meta["cell_size"]
+    smooth_r, simp_m = 1.4 * cs, 0.8 * cs             # smoothing radius / simplify tol in metres
+
     # venue / level boundary = outer boundary of observed coverage (gaps closed)
     cov = cv2.morphologyEx(coverage.astype(np.uint8), cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
     boundary_polys = mask_to_polygons(cov, meta, simplify_m=1.0, min_area_m2=20.0)
     if not boundary_polys:
         raise ValueError("no coverage to form a venue boundary")
-    venue_poly = max(boundary_polys, key=lambda p: p.area)
-    venue_poly = Polygon(venue_poly.exterior)          # venue has no holes
+    venue_poly = Polygon(max(boundary_polys, key=lambda p: p.area).exterior)  # no holes
+    if smooth:
+        parts = smooth_polygon(venue_poly, smooth_r * 2, simp_m * 2)
+        if parts:
+            venue_poly = Polygon(max(parts, key=lambda p: p.area).exterior)
 
     venue = _feature("venue", _geom_wgs84(venue_poly, to_wgs84),
                      {"category": venue_category, "restriction": None, "name": _labels(venue_name),
@@ -204,17 +234,26 @@ def build_imdf(level_dir: str | Path, model_dir: str | Path, frames_path: str | 
             log(f"  skipping unit category '{category}' (not in IMDF enum)")
             continue
         mask = (np.isin(semantic, klasses) & coverage).astype(np.uint8)
-        # consolidate before tracing: drop specks (open) then fill pinholes (close), so we get
-        # a few coherent units instead of hundreds of sliver polygons.
+        # consolidate before tracing: drop specks (open) then fill pinholes (close).
         k = np.ones((3, 3), np.uint8)
         mask = cv2.morphologyEx(cv2.morphologyEx(mask, cv2.MORPH_OPEN, k), cv2.MORPH_CLOSE, k)
         polys = mask_to_polygons(mask, meta, simplify_m=0.6, min_area_m2=5.0)
-        for poly in polys:
+
+        # merge touching pieces, then cartographically smooth each region
+        merged = unary_union(polys) if polys else None
+        parts = ([] if merged is None or merged.is_empty
+                 else list(merged.geoms) if merged.geom_type == "MultiPolygon" else [merged])
+        cat_polys = []
+        for part in parts:
+            cat_polys.extend(smooth_polygon(part, smooth_r, simp_m) if smooth else [part])
+        cat_polys = [p for p in cat_polys if p.area >= 5.0]
+
+        for poly in cat_polys:
             units.append(_feature("unit", _geom_wgs84(poly, to_wgs84),
                                   {"category": category, "restriction": None, "accessibility": None,
                                    "name": None, "alt_name": None, "display_point": None,
                                    "level_id": level["id"]}))
-        log(f"  {category}: {len(polys)} unit polygons")
+        log(f"  {category}: {len(cat_polys)} unit polygons")
 
     return {
         "manifest": {"version": "1.0.0", "created": datetime.now(timezone.utc).isoformat(),
@@ -295,10 +334,12 @@ def main() -> None:
     ap.add_argument("--out", default=None, help="archive dir (default <level>/imdf)")
     ap.add_argument("--venue-name", default="Maguro Park")
     ap.add_argument("--venue-category", default="themepark", choices=sorted(VENUE_CATEGORIES))
+    ap.add_argument("--no-smooth", action="store_true", help="disable cartographic smoothing")
     args = ap.parse_args()
 
     imdf = build_imdf(args.level, args.model, args.frames, args.gps,
-                      venue_name=args.venue_name, venue_category=args.venue_category)
+                      venue_name=args.venue_name, venue_category=args.venue_category,
+                      smooth=not args.no_smooth)
     ok = validate(imdf)
     write_archive(imdf, args.out or (Path(args.level) / "imdf"))
     if not ok:
