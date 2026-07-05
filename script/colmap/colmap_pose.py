@@ -54,35 +54,6 @@ def extract_rotation_translation_from_extrinsics(extrinsics, apply_colmap_conver
 
     return R_c2w, C
 
-def compute_relative_pose_from_arkit(extrinsics1, extrinsics2, for_colmap=False):
-    """
-    Compute relative pose from camera1 to camera2 from ARKit extrinsics.
-
-    Given two camera-from-world transforms T1 and T2, compute the
-    camera2-from-camera1 transform: T_rel = T2 * T1^-1
-
-    Args:
-        extrinsics1: ARKit extrinsics for camera 1
-        extrinsics2: ARKit extrinsics for camera 2
-        for_colmap: If True, work in COLMAP coordinate system (Y/Z flipped)
-
-    Returns:
-        (R_rel, t_rel): Relative rotation matrix and translation vector
-    """
-    # Extract poses (convert to COLMAP coordinates if needed)
-    R1, t1 = extract_rotation_translation_from_extrinsics(extrinsics1, apply_colmap_conversion=for_colmap)
-    R2, t2 = extract_rotation_translation_from_extrinsics(extrinsics2, apply_colmap_conversion=for_colmap)
-
-    # Compute world-from-camera1 (invert T1)
-    R1_inv = R1.T
-    t1_inv = -R1.T @ t1
-
-    # Compute camera2-from-camera1: T2 * T1^-1
-    R_rel = R2 @ R1_inv
-    t_rel = R2 @ t1_inv + t2
-
-    return R_rel, t_rel
-
 
 # ============================================================================
 # Quaternion and Rotation Matrix Conversions

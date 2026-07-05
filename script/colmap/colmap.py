@@ -15,7 +15,7 @@ import argparse
 import glob
 from pathlib import Path
 from feature_extraction import extract_colmap_sift_features, extract_opencv_sift_features
-from database_operations import create_colmap_database, export_poses, insert_two_view_geometries_from_arkit, create_arkit_seed_model
+from database_operations import create_colmap_database, export_poses, create_arkit_seed_model
 from arkit_integration import load_arkit_data, create_reference_file_from_arkit
 from map_export import export_aligned_map_json
 
@@ -155,43 +155,6 @@ def run_colmap_mapping(database_path, output_dir):
     ]
 
     print("Running COLMAP sparse reconstruction...")
-    try:
-        subprocess.run(cmd, check=True, text=True)
-        print("Sparse reconstruction completed successfully")
-        return True
-    except subprocess.CalledProcessError as e:
-        print(f"Sparse reconstruction failed: {e}")
-        return False
-
-def run_colmap_pose_prior_mapping(database_path, output_dir):
-    """Run COLMAP incremental reconstruction using ARKit position pose priors.
-
-    Unlike `colmap mapper` / `glomap mapper` (which ignore the pose_priors table),
-    pose_prior_mapper uses the per-image ARKit positions to register cameras where
-    visual matching alone is too sparse -- this is what bridges otherwise
-    disconnected components. A robust loss on the prior position tolerates ARKit
-    drift/outliers; the per-image covariance from the database is used as-is.
-    """
-    output_path = Path(output_dir)
-    output_path.mkdir(parents=True, exist_ok=True)
-
-    cmd = [
-        "colmap", "pose_prior_mapper",
-        "--database_path", str(database_path),
-        "--image_path", str(Path(database_path).parent),
-        "--output_path", str(output_path),
-        "--use_robust_loss_on_prior_position", "1",
-        # Mirror the intrinsics-fixed settings of run_colmap_mapping (we trust
-        # ARKit calibration and do not want BA to drift the intrinsics).
-        "--Mapper.ba_refine_focal_length", "0",
-        "--Mapper.ba_refine_principal_point", "0",
-        "--Mapper.ba_refine_extra_params", "0",
-        "--Mapper.extract_colors", "0",
-        "--Mapper.num_threads", "8",
-        "--Mapper.multiple_models", "0", # default: 1
-    ]
-
-    print("Running COLMAP pose-prior sparse reconstruction...")
     try:
         subprocess.run(cmd, check=True, text=True)
         print("Sparse reconstruction completed successfully")
@@ -352,10 +315,10 @@ def copy_images(source_dir, work_dir):
 
 def setup(args, frames_json_path, database_path, work_dir):
     arkit_frames = load_arkit_data(frames_json_path)
-    # create_colmap_database(arkit_frames, database_path, work_dir)
-    # if not copy_images(args.source_dir, work_dir):
-    #     print("Failed to copy images. Exiting.")
-    #     exit()
+    create_colmap_database(arkit_frames, database_path, work_dir)
+    if not copy_images(args.source_dir, work_dir):
+        print("Failed to copy images. Exiting.")
+        exit()
     return arkit_frames
 
 def extract_features(args, work_dir, database_path):
@@ -405,12 +368,6 @@ def feature_matching(args, database_path):
             print("COLMAP pipeline failed at feature matching")
             exit(1)
 
-def insert_arkit_odometry(arkit_frames, database_path):
-    """Insert ARKit relative poses as odometry constraints for bundle adjustment"""
-    print("\nInserting ARKit VIO odometry constraints...")
-    count = insert_two_view_geometries_from_arkit(arkit_frames, database_path)
-    print(f"Added {count} relative pose constraints from ARKit VIO")
-
 def sparse_reconstruction(args, arkit_frames, database_path, sparse_dir):
     if args.use_arkit_poses:
         print("\nReconstructing by triangulating against ARKit poses...")
@@ -420,11 +377,6 @@ def sparse_reconstruction(args, arkit_frames, database_path, sparse_dir):
         # sparse/0 so the rest of the pipeline (which expects sparse/0) works.
         if not run_arkit_pose_triangulation(arkit_frames, database_path, work_dir, seed_dir, sparse_dir / "0"):
             print("COLMAP pipeline failed at ARKit-pose triangulation")
-            exit(1)
-    elif args.use_pose_prior:
-        print("\nRunning pose-prior reconstruction with COLMAP...")
-        if not run_colmap_pose_prior_mapping(database_path, sparse_dir):
-            print("COLMAP pipeline failed at pose-prior reconstruction")
             exit(1)
     elif args.use_glomap:
         print("\nRunning global reconstruction with GLOMAP...")
@@ -495,11 +447,6 @@ def main():
                        help="Number of subsequent images to match per image for sequential matching (default: 10)")
     parser.add_argument("--use_glomap", action="store_true",
                        help="Use GLOMAP for reconstruction instead of COLMAP (faster, global SfM)")
-    parser.add_argument("--use_pose_prior", action="store_true",
-                       help="Reconstruct with COLMAP pose_prior_mapper, using the ARKit position "
-                            "pose priors in the database to register cameras where visual matching "
-                            "is sparse. Helps connect otherwise disconnected components. Takes "
-                            "precedence over --use_glomap.")
     parser.add_argument("--use_arkit_poses", action="store_true",
                        help="Reconstruct by triangulating landmarks against fixed ARKit poses "
                             "(seed model + point_triangulator). Best when vision-only SfM cannot "
@@ -519,16 +466,13 @@ def main():
     # Step 1: Setup
     arkit_frames = setup(args, frames_json_path, database_path, work_dir)
 
-    # # Step 2: Extract SIFT features
-    # extract_features(args, work_dir, database_path)
+    # Step 2: Extract SIFT features
+    extract_features(args, work_dir, database_path)
 
     # Step 3: Feature matching
-    # feature_matching(args, database_path)
+    feature_matching(args, database_path)
 
-    # Step 4: Insert ARKit odometry constraints
-    # insert_arkit_odometry(arkit_frames, database_path)
-
-    # Step 5: Sparse reconstruction
+    # Step 4: Sparse reconstruction
     reconstruction_path = sparse_reconstruction(args, arkit_frames, database_path, sparse_dir)
     reconstruction_path = sparse_dir / "0"
 
@@ -548,8 +492,6 @@ def main():
     print(f"Matching method: {matching_method}")
     if args.use_arkit_poses:
         reconstruction_method = "ARKit-pose triangulation"
-    elif args.use_pose_prior:
-        reconstruction_method = "COLMAP (pose prior)"
     elif args.use_glomap:
         reconstruction_method = "GLOMAP"
     else:

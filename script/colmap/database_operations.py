@@ -7,7 +7,6 @@ from colmap_pose import (
     ColmapPose,
     rotation_matrix_to_quaternion,
     extract_rotation_translation_from_extrinsics,
-    compute_relative_pose_from_arkit
 )
 
 def create_colmap_database(frames, database_path, work_dir):
@@ -62,26 +61,7 @@ def create_colmap_database(frames, database_path, work_dir):
         ''', (image_name, camera_id))
         
         print(f"Added image {image_name} with camera {camera_id}")
-        
-        # Add pose prior: world-to-camera (R,t) -> camera center C = -R^T t
-        R_w2c, t_w2c = extract_rotation_translation_from_extrinsics(
-            frame['extrinsics'],
-            apply_colmap_conversion=True
-        )
-        position = -R_w2c.T @ t_w2c
-        position_blob = struct.pack('ddd', position[0], position[1], position[2])
-        pos_std = 10.0
-        covariance_blob = struct.pack('ddddddddd',
-            pos_std, 0, 0,
-            0, pos_std, 0,
-            0, 0, pos_std
-        )
-        image_id = frame['id']+1
-        cursor.execute('''
-            INSERT INTO pose_priors (image_id, position, coordinate_system, position_covariance)
-            VALUES (?, ?, ?, ?)
-        ''', (image_id, position_blob, 1, covariance_blob))
-    
+
     conn.commit()
     conn.close()
     
@@ -199,118 +179,3 @@ def create_arkit_seed_model(frames, database_path, seed_dir):
 
     print(f"Created ARKit seed model with {written} images at {seed_dir}")
     return written
-
-# ============================================================================
-# Two-View Geometry Operations for ARKit Integration
-# ============================================================================
-
-def image_ids_to_pair_id(image_id1, image_id2):
-    """
-    Convert two image IDs to a unique pair ID for COLMAP database.
-
-    Args:
-        image_id1, image_id2: Image IDs (1-indexed)
-
-    Returns:
-        Unique pair ID (row-major index in upper-triangular match matrix)
-    """
-    MAX_IMAGE_ID = 2147483647  # Maximum signed 32-bit integer
-    if image_id1 > image_id2:
-        image_id1, image_id2 = image_id2, image_id1
-    return image_id1 * MAX_IMAGE_ID + image_id2
-
-def array_to_blob(array):
-    """Convert numpy array to binary blob in float64 format for COLMAP database."""
-    return array.astype(np.float64).tobytes()
-
-def insert_two_view_geometries_from_arkit(frames, database_path, use_empty_matches=True):
-    """
-    Insert ARKit relative poses into COLMAP's two_view_geometries table.
-
-    This provides high-quality odometry constraints for global bundle adjustment
-    by inserting relative poses between sequential frames. These constraints help
-    COLMAP/GLOMAP optimize the reconstruction using ARKit's accurate VIO tracking.
-
-    The qvec and tvec are the key data that bundle adjustment uses. The F, E, H
-    matrices are set to identity as they're not needed for pose-only constraints.
-
-    Args:
-        frames: List of ARKit frame dictionaries with 'id' and 'extrinsics'
-        database_path: Path to COLMAP database
-        use_empty_matches: If True, insert minimal placeholder matches (recommended)
-
-    Returns:
-        Number of two-view geometries inserted
-    """
-    conn = sqlite3.connect(database_path)
-    cursor = conn.cursor()
-
-    # CALIBRATED config type (we have known intrinsics and metric poses)
-    CONFIG_CALIBRATED = 2
-
-    count = 0
-    for i in range(len(frames) - 1):
-        frame1 = frames[i]
-        frame2 = frames[i + 1]
-
-        # Image IDs in COLMAP (1-indexed, matching what we insert in create_colmap_database)
-        image_id1 = frame1['id'] + 1
-        image_id2 = frame2['id'] + 1
-
-        # Compute relative pose from frame1 to frame2 in COLMAP coordinates
-        # (COLMAP uses Y/Z flipped coordinates compared to ARKit)
-        R_rel, t_rel = compute_relative_pose_from_arkit(
-            frame1['extrinsics'],
-            frame2['extrinsics'],
-            for_colmap=True
-        )
-
-        # Convert rotation to quaternion (wxyz format) using existing function
-        qvec = rotation_matrix_to_quaternion(R_rel)
-
-        # Minimal placeholder matches (bundle adjustment doesn't need feature correspondences)
-        matches = np.array([[0, 0]], dtype=np.uint32) if use_empty_matches else np.array([], dtype=np.uint32).reshape(0, 2)
-
-        # Compute pair_id
-        pair_id = image_ids_to_pair_id(image_id1, image_id2)
-
-        # Check if this pair already has two-view geometry from feature matching
-        cursor.execute('SELECT pair_id FROM two_view_geometries WHERE pair_id = ?', (int(pair_id),))
-        existing = cursor.fetchone()
-
-        if existing:
-            # Skip - feature-based geometry already exists and is likely higher quality
-            continue
-
-        # Use identity matrices for F, E, H (not used by bundle adjustment)
-        F = np.eye(3)
-        E = np.eye(3)
-        H = np.eye(3)
-
-        # Insert into two_view_geometries table (only if no existing entry)
-        cursor.execute('''
-            INSERT INTO two_view_geometries
-            (pair_id, rows, cols, data, config, F, E, H, qvec, tvec)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            int(pair_id),
-            matches.shape[0],
-            matches.shape[1],
-            matches.tobytes(),
-            CONFIG_CALIBRATED,
-            array_to_blob(F),
-            array_to_blob(E),
-            array_to_blob(H),
-            array_to_blob(qvec),
-            array_to_blob(t_rel)
-        ))
-
-        count += 1
-        if (count % 100) == 0:
-            print(f"Inserted {count} two-view geometries...")
-
-    conn.commit()
-    conn.close()
-
-    print(f"Successfully inserted {count} ARKit relative poses into two_view_geometries")
-    return count
