@@ -240,18 +240,27 @@ def train(args):
         if args.preview_every and (step % args.preview_every == 0 or step == args.max_steps - 1):
             _save_preview(rgb, out / f"preview_{step:06d}.png")
 
-    # ----------------------------------------------------------------- export
-    ply_path = out / "point_cloud.ply"
-    n = gmodel.export_gaussian_ply(params, ply_path)
-    print(f"\nexported {n} Gaussians -> {ply_path}")
+        # Periodic checkpoint so a long train survives a late crash/OOM (don't wait
+        # until the very end to write anything to disk).
+        if args.save_every and step > 0 and step % args.save_every == 0:
+            save_outputs(params, out, args.semantic, color_lut, num_classes,
+                         label=f"checkpoint @ step {step}")
 
-    if args.semantic:
-        labels = gmodel.export_semantic(params, out / "point_cloud", color_lut)
-        print(f"exported semantic labels -> {out}/point_cloud_labels.npy "
-              f"(+ _semantic.ply); {np.bincount(labels, minlength=num_classes)} per class")
-
+    save_outputs(params, out, args.semantic, color_lut, num_classes, label="final")
     (out / "config.json").write_text(json.dumps(vars(args), indent=2, default=str))
     print(f"\n✅ done in {time.time() - t0:.1f}s -> {out}")
+
+
+def save_outputs(params, out: Path, semantic: bool, color_lut, num_classes, label: str):
+    """Write point_cloud.ply (+ semantic labels/ply if enabled). Overwrites in place."""
+    n = gmodel.export_gaussian_ply(params, out / "point_cloud.ply")
+    msg = f"[{label}] exported {n} Gaussians -> {out}/point_cloud.ply"
+    if semantic:
+        labels = gmodel.export_semantic(params, out / "point_cloud", color_lut)
+        counts = np.bincount(labels, minlength=num_classes)
+        msg += (f"\n  semantic labels -> point_cloud_labels.npy (+ _semantic.ply); "
+                f"per-class counts {counts.tolist()}")
+    print(msg)
 
 
 @torch.no_grad()
@@ -300,6 +309,9 @@ def main():
     p.add_argument("--log-every", type=int, default=100)
     p.add_argument("--preview-every", type=int, default=0,
                    help="save a render preview every N steps (0 = only at the end)")
+    p.add_argument("--save-every", type=int, default=5000,
+                   help="checkpoint the .ply (+ labels) every N steps so a long train "
+                        "survives a late crash (default 5000; 0 = only at the end)")
 
     args = p.parse_args()
     if args.preview_every == 0:

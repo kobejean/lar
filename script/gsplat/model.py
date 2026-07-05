@@ -91,13 +91,22 @@ def init_gaussians(
 # ------------------------------------------------------------------------------ export
 
 def _write_ply(path: Path, verts: np.ndarray, fields: list[str]) -> None:
-    from plyfile import PlyData, PlyElement
+    """Write an all-float32 binary PLY with only numpy.
 
-    dtype = [(f, "f4") for f in fields]
-    arr = np.empty(verts.shape[0], dtype=dtype)
-    for i, f in enumerate(fields):
-        arr[f] = verts[:, i]
-    PlyData([PlyElement.describe(arr, "vertex")], text=False).write(str(path))
+    Deliberately dependency-free: a multi-hour train must never be lost at the export
+    step because an optional package (e.g. plyfile) got pruned from the venv.
+    """
+    verts = np.ascontiguousarray(verts, dtype="<f4")
+    header = (
+        "ply\n"
+        "format binary_little_endian 1.0\n"
+        f"element vertex {verts.shape[0]}\n"
+        + "".join(f"property float {f}\n" for f in fields)
+        + "end_header\n"
+    )
+    with open(path, "wb") as f:
+        f.write(header.encode("ascii"))
+        verts.tofile(f)
 
 
 @torch.no_grad()

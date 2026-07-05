@@ -31,7 +31,6 @@ gsplat = [
     "torch>=2.7.0",
     "gsplat>=1.4.0",
     "scipy>=1.11.0",
-    "plyfile>=1.0.0",
     "tqdm>=4.66.0",
 ]
 
