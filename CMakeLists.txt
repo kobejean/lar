@@ -71,6 +71,22 @@ if(LAR_BUILD_SERVICE)
   endif()
   find_package(gRPC CONFIG REQUIRED)
 
+  # FindZLIB on macOS resolves ZLIB_INCLUDE_DIR to the SDK's usr/include, which
+  # protobuf/gRPC propagate transitively via ZLIB::ZLIB. Passed as an explicit
+  # -isystem <SDK>/usr/include, that dir lands ahead of libc++'s c++/v1 headers
+  # and breaks #include_next (the "<cstddef> tried including <stddef.h> but didn't
+  # find libc++'s <stddef.h>" cascade). CMake only auto-strips this when
+  # CMAKE_OSX_SYSROOT is set; it isn't here. It's a compiler-implicit dir, so
+  # remove it from the interface includes — zlib.h is still found via the default
+  # SDK search.
+  if(APPLE AND TARGET ZLIB::ZLIB)
+    get_target_property(_zlib_incs ZLIB::ZLIB INTERFACE_INCLUDE_DIRECTORIES)
+    if(_zlib_incs)
+      list(FILTER _zlib_incs EXCLUDE REGEX "MacOSX\\.sdk/usr/include$")
+      set_target_properties(ZLIB::ZLIB PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${_zlib_incs}")
+    endif()
+  endif()
+
   # Proto compilation setup
   set(PROTO_DIR ${PROJECT_SOURCE_DIR}/proto)
   set(PROTO_GEN_DIR ${PROJECT_BINARY_DIR}/generated)
