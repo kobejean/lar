@@ -182,8 +182,10 @@ def run_colmap_matches_importer(database_path, pairs_path):
         "--database_path", str(database_path),
         "--match_list_path", str(pairs_path),
         "--match_type", "pairs",
-        "--SiftMatching.use_gpu", "1",
-        "--SiftMatching.guided_matching", "1",
+        # COLMAP 4.0+: use_gpu/guided_matching live under FeatureMatching.*;
+        # max_ratio stays SIFT-specific under SiftMatching.*.
+        "--FeatureMatching.use_gpu", "1",
+        "--FeatureMatching.guided_matching", "1",
         # Same tight verification as the sequential loop-closure edges, so the
         # covisibility pairs that survive are reliable.
         "--SiftMatching.max_ratio", "0.8",
