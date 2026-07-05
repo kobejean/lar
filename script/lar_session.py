@@ -62,5 +62,10 @@ class Session:
     def gsplat_out(self, semantic: bool = False) -> Path:
         return self.root / "output" / f"{self.name}-gsplat{'-sem' if semantic else ''}"
 
-    def sbev_out(self, source: str = "colmap") -> Path:
-        return self.root / "output" / f"{self.name}-sbev{'-gsplat' if source == 'gsplat' else ''}"
+    def sbev_out(self, source: str = "colmap", tag: str | None = None) -> Path:
+        suffix = f"-{tag}" if tag else ("-gsplat" if source == "gsplat" else "")
+        return self.root / "output" / f"{self.name}-sbev{suffix}"
+
+    def depth_dir(self, backend: str) -> Path:
+        """Per-backend per-view depth maps for the depth bake-off (mvs/2dgs/mono/3dgs)."""
+        return self.root / "output" / f"{self.name}-depth-{backend}"

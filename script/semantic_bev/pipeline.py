@@ -49,6 +49,7 @@ def camera_centers(recon: Reconstruction) -> np.ndarray:
 
 def run(model_dir: str | None, image_dir: str | None, out_dir: str, *,
         source: str = "colmap", gsplat_dir: str | None = None, min_opacity: float = 0.1,
+        depth_dir: str | None = None, depth_stride: int = 4, depth_voxel: float = 0.05,
         segmenter_kind: str = "heuristic", cell_size: float = 0.5,
         up_axis: int | None = None, up_sign: float | None = None,
         limit: int | None = None, clip_threshold: float = 0.30,
@@ -58,7 +59,32 @@ def run(model_dir: str | None, image_dir: str | None, out_dir: str, *,
     store = None
     image_ids = None
 
-    if source == "gsplat":
+    if source == "depth":
+        # Back-project labelled pixels through per-view metric depth. Needs the same masks
+        # as the colmap source; only the geometry (points) comes from depth, not tracks.
+        mask_dir = out / "masks"
+        log(f"[1/4] reading COLMAP model: {model_dir}")
+        recon = read_model(model_dir)
+        image_ids = sorted(recon.images)
+        if limit is not None:
+            image_ids = image_ids[:limit]
+        log(f"[2/4] segmenting ({segmenter_kind}) -> {mask_dir}")
+        seg_kw = {"threshold": clip_threshold} if segmenter_kind == "clipseg" else {}
+        segmenter = make_segmenter(segmenter_kind, **seg_kw)
+        store = MaskStore(mask_dir)
+        segment_and_cache(recon, image_dir, segmenter, store, image_ids,
+                          overwrite=overwrite_masks, log=log)
+        log(f"[3/4] back-projecting depth: {depth_dir}")
+        from depth_backproject import backproject_labeled_points
+        positions, labels, conf = backproject_labeled_points(
+            recon, store, depth_dir, image_ids,
+            stride=depth_stride, voxel=depth_voxel, log=log)
+        labeled = int((labels != int(Klass.UNKNOWN)).sum())
+        log(f"      {labeled}/{len(labels)} points labelled "
+            f"({100 * labeled / max(len(labels), 1):.1f}%)")
+        _log_class_histogram(labels, log)
+        semantic_mode = "vote"  # dense-mask projection is COLMAP-only
+    elif source == "gsplat":
         log(f"[1/4] loading semantic 3DGS points: {gsplat_dir}")
         from gsplat_source import load_gsplat_points
         positions, labels, conf = load_gsplat_points(gsplat_dir, min_opacity=min_opacity, log=log)
@@ -143,13 +169,23 @@ def main() -> None:
     ap.add_argument("--session", default=None,
                     help="LAR session name: fills --model/--images/--gsplat-dir/--out from the "
                          "canonical layout (script/lar_session.py). Explicit flags override.")
-    ap.add_argument("--source", default="colmap", choices=["colmap", "gsplat"],
-                    help="geometry source: 'colmap' sparse points + segmentation (default), or "
-                         "'gsplat' a trained semantic 3DGS export (denser, pre-labelled)")
+    ap.add_argument("--source", default="colmap", choices=["colmap", "gsplat", "depth"],
+                    help="geometry source: 'colmap' sparse points + segmentation (default); "
+                         "'gsplat' a trained semantic 3DGS export; 'depth' back-projected "
+                         "per-view metric depth (MVS/2DGS/mono/3DGS bake-off)")
     ap.add_argument("--gsplat-dir", default=None,
                     help="semantic 3DGS export dir (script/gsplat --out); required for --source gsplat")
     ap.add_argument("--min-opacity", type=float, default=0.1,
                     help="drop Gaussians below this opacity when using --source gsplat")
+    ap.add_argument("--depth-backend", default=None,
+                    help="depth backend name (mvs/2dgs/mono/3dgs); with --session derives "
+                         "--depth-dir and the output tag")
+    ap.add_argument("--depth-dir", default=None,
+                    help="dir of per-view metric depth maps (<stem>.npy); required for --source depth")
+    ap.add_argument("--stride", type=int, default=4,
+                    help="pixel subsample stride for depth back-projection (--source depth)")
+    ap.add_argument("--voxel", type=float, default=0.05,
+                    help="voxel size in metres for depth-point dedup (--source depth)")
     ap.add_argument("--model", default=None,
                     help="COLMAP text model dir. Required for --source colmap; for --source gsplat "
                          "it supplies camera orientations for gravity (unless --up-axis/--up-sign given)")
@@ -170,23 +206,33 @@ def main() -> None:
         sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
         from lar_session import Session
         s = Session(args.session)
-        args.model = args.model or str(s.best_model())  # geometry (colmap) or gravity (gsplat)
-        args.out = args.out or str(s.sbev_out(args.source))
+        args.model = args.model or str(s.best_model())  # geometry (colmap) or gravity (gsplat/depth)
         if args.source == "gsplat":
             args.gsplat_dir = args.gsplat_dir or str(s.gsplat_out(semantic=True))
+            args.out = args.out or str(s.sbev_out("gsplat"))
+        elif args.source == "depth":
+            args.images = args.images or str(s.images)
+            if args.depth_backend:
+                args.depth_dir = args.depth_dir or str(s.depth_dir(args.depth_backend))
+                args.out = args.out or str(s.sbev_out("depth", tag=args.depth_backend))
         else:
             args.images = args.images or str(s.images)
+            args.out = args.out or str(s.sbev_out("colmap"))
         print(f"session '{args.session}': source={args.source} out={args.out}")
 
     if not args.out:
-        ap.error("need --session or --out")
+        ap.error("need --session (+ --depth-backend for depth) or --out")
     if args.source == "colmap" and (not args.model or not args.images):
         ap.error("--source colmap requires --model and --images (or --session)")
     if args.source == "gsplat" and not args.gsplat_dir:
         ap.error("--source gsplat requires --gsplat-dir (or --session)")
+    if args.source == "depth" and (not args.depth_dir or not args.model or not args.images):
+        ap.error("--source depth requires --depth-dir, --model, --images "
+                 "(or --session + --depth-backend)")
 
     run(args.model, args.images, args.out, source=args.source, gsplat_dir=args.gsplat_dir,
-        min_opacity=args.min_opacity, segmenter_kind=args.segmenter,
+        min_opacity=args.min_opacity, depth_dir=args.depth_dir, depth_stride=args.stride,
+        depth_voxel=args.voxel, segmenter_kind=args.segmenter,
         cell_size=args.cell_size, up_axis=args.up_axis, up_sign=args.up_sign,
         limit=args.limit, clip_threshold=args.clip_threshold,
         overwrite_masks=args.overwrite_masks, semantic_mode=args.semantic_mode)
