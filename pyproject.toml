@@ -34,3 +34,9 @@ gsplat = [
     "plyfile>=1.0.0",
     "tqdm>=4.66.0",
 ]
+
+# IMDF vectorisation (script/semantic_bev/imdf_export.py): raster BEV -> schema-valid
+# IMDF GeoJSON. shapely for robust polygonisation (validity, holes, winding, simplify).
+imdf = [
+    "shapely>=2.0.0",
+]
