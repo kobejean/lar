@@ -135,7 +135,16 @@ ExternalProject_Add(g2o
     -DEIGEN3_INCLUDE_DIR=${CMAKE_BINARY_DIR}/install/include/eigen3
     ${COMMON_TOOLCHAIN_ARGS}
     -DG2O_USE_VENDORED_CERES=ON
-    -DG2O_USE_OPENGL=ON
+    # OpenGL only drives g2o's interactive viewer, which this project never uses.
+    # Keeping it ON makes g2oConfig.cmake `find_dependency(OpenGL)`, forcing every
+    # consumer to have OpenGL dev files — a needless dependency that breaks headless
+    # Linux builds. OFF drops it entirely (no g2o code here references GL symbols).
+    -DG2O_USE_OPENGL=OFF
+    # g2o unconditionally does find_package(QGLViewer) for its GUI, which drags in
+    # Qt5 -> OpenGL headers. We never build the GUI (G2O_BUILD_APPS=OFF), so disable
+    # the search outright; otherwise a stray Qt5 on CMAKE_PREFIX_PATH reintroduces
+    # the OpenGL requirement we just removed.
+    -DCMAKE_DISABLE_FIND_PACKAGE_QGLViewer=ON
     -DBUILD_SHARED_LIBS=OFF
     -DG2O_BUILD_APPS=OFF
     -DG2O_BUILD_EXAMPLES=OFF
@@ -149,7 +158,10 @@ ExternalProject_Add(g2o
 list(APPEND EXTRA_CMAKE_ARGS
   -Dg2o_DIR=${CMAKE_BINARY_DIR}/install/lib/cmake/g2o
   -DG2O_USE_VENDORED_CERES=ON
-  -DG2O_USE_OPENGL=ON
+  # Must match how g2o itself was built (OFF, above). g2oConfig.cmake gates
+  # find_dependency(OpenGL) on this value in the consumer, so ON here would force
+  # the lar build to require OpenGL even though g2o has no GL code.
+  -DG2O_USE_OPENGL=OFF
   -DBUILD_SHARED_LIBS=OFF
   ${COMMON_TOOLCHAIN_ARGS}
 )

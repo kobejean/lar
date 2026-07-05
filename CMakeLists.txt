@@ -135,19 +135,26 @@ if(g2o_DIR)
     link_directories(${G2O_LIB_DIR})
 endif()
 
-# Find OpenGL for g2o visualization support
+# OpenGL/GLUT are optional: they only exist for g2o's interactive viewer (built
+# with G2O_USE_OPENGL, now OFF — see cmake/SuperBuild.cmake). Nothing in the apps
+# links them; only test targets do, and those are already guarded by
+# if(OPENGL_LIBRARIES). Not REQUIRED, so headless builds without OpenGL dev files
+# still configure. If present, OPENGL_LIBRARIES is populated for the tests.
 if(APPLE)
-    find_library(OPENGL_FRAMEWORK OpenGL REQUIRED)
+    find_library(OPENGL_FRAMEWORK OpenGL)
     find_library(GLUT_FRAMEWORK GLUT)
-    set(OPENGL_LIBRARIES ${OPENGL_FRAMEWORK})
-    if(GLUT_FRAMEWORK)
-        list(APPEND OPENGL_LIBRARIES ${GLUT_FRAMEWORK})
+    if(OPENGL_FRAMEWORK)
+        set(OPENGL_LIBRARIES ${OPENGL_FRAMEWORK})
+        if(GLUT_FRAMEWORK)
+            list(APPEND OPENGL_LIBRARIES ${GLUT_FRAMEWORK})
+        endif()
     endif()
 elseif(UNIX AND NOT APPLE)
-    # Linux - use standard OpenGL packages
-    find_package(OpenGL REQUIRED)
-    find_package(GLUT REQUIRED)
-    set(OPENGL_LIBRARIES ${OPENGL_LIBRARIES} ${GLUT_LIBRARIES})
+    find_package(OpenGL)
+    find_package(GLUT)
+    if(OPENGL_FOUND)
+        set(OPENGL_LIBRARIES ${OPENGL_LIBRARIES} ${GLUT_LIBRARIES})
+    endif()
 endif()
 
 include_directories(${PROJECT_SOURCE_DIR}/include)
