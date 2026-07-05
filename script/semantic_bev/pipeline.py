@@ -47,37 +47,61 @@ def camera_centers(recon: Reconstruction) -> np.ndarray:
     return np.array([-_qvec2rotmat(im.qvec).T @ im.tvec for im in recon.images.values()])
 
 
-def run(model_dir: str, image_dir: str, out_dir: str, *,
+def run(model_dir: str | None, image_dir: str | None, out_dir: str, *,
+        source: str = "colmap", gsplat_dir: str | None = None, min_opacity: float = 0.1,
         segmenter_kind: str = "heuristic", cell_size: float = 0.5,
         up_axis: int | None = None, up_sign: float | None = None,
         limit: int | None = None, clip_threshold: float = 0.30,
         overwrite_masks: bool = False, semantic_mode: str = "vote", log=print) -> None:
     out = Path(out_dir)
-    mask_dir = out / "masks"
+    recon = None   # COLMAP model: geometry+labels in colmap mode; gravity only in gsplat mode
+    store = None
+    image_ids = None
 
-    log(f"[1/5] reading COLMAP model: {model_dir}")
-    recon = read_model(model_dir)
-    log(f"      {len(recon.images)} images, {recon.num_points} points")
+    if source == "gsplat":
+        log(f"[1/4] loading semantic 3DGS points: {gsplat_dir}")
+        from gsplat_source import load_gsplat_points
+        positions, labels, conf = load_gsplat_points(gsplat_dir, min_opacity=min_opacity, log=log)
+        labeled = int((labels != int(Klass.UNKNOWN)).sum())
+        log(f"      {labeled}/{len(labels)} points labelled "
+            f"({100 * labeled / max(len(labels), 1):.1f}%)")
+        _log_class_histogram(labels, log)
+        # Gravity/up needs camera orientations, which the Gaussians don't carry -- read the
+        # COLMAP model the gsplat run was trained from (same world coords).
+        if (up_axis is None or up_sign is None):
+            if not model_dir:
+                raise SystemExit("--source gsplat needs --model (for gravity) or explicit "
+                                 "--up-axis/--up-sign")
+            recon = read_model(model_dir)
+        if semantic_mode == "project":
+            log("      note: --semantic-mode project is COLMAP-only; using per-Gaussian labels")
+            semantic_mode = "vote"
+    else:
+        mask_dir = out / "masks"
+        log(f"[1/5] reading COLMAP model: {model_dir}")
+        recon = read_model(model_dir)
+        log(f"      {len(recon.images)} images, {recon.num_points} points")
 
-    image_ids = sorted(recon.images)
-    if limit is not None:
-        image_ids = image_ids[:limit]
-        log(f"      limiting to first {len(image_ids)} images")
+        image_ids = sorted(recon.images)
+        if limit is not None:
+            image_ids = image_ids[:limit]
+            log(f"      limiting to first {len(image_ids)} images")
 
-    log(f"[2/5] segmenting ({segmenter_kind}) -> {mask_dir}")
-    seg_kw = {"threshold": clip_threshold} if segmenter_kind == "clipseg" else {}
-    segmenter = make_segmenter(segmenter_kind, **seg_kw)
-    store = MaskStore(mask_dir)
-    segment_and_cache(recon, image_dir, segmenter, store, image_ids,
-                      overwrite=overwrite_masks, log=log)
+        log(f"[2/5] segmenting ({segmenter_kind}) -> {mask_dir}")
+        seg_kw = {"threshold": clip_threshold} if segmenter_kind == "clipseg" else {}
+        segmenter = make_segmenter(segmenter_kind, **seg_kw)
+        store = MaskStore(mask_dir)
+        segment_and_cache(recon, image_dir, segmenter, store, image_ids,
+                          overwrite=overwrite_masks, log=log)
 
-    log("[3/5] voting labels onto points")
-    point_ids, votes, _ = accumulate_votes(recon, store, image_ids)
-    labels, conf = resolve_labels(votes)
-    positions = np.array([recon.points3d[int(pid)].xyz for pid in point_ids])
-    labeled = int((labels != int(Klass.UNKNOWN)).sum())
-    log(f"      {labeled}/{len(labels)} points labelled ({100 * labeled / len(labels):.1f}%)")
-    _log_class_histogram(labels, log)
+        log("[3/5] voting labels onto points")
+        point_ids, votes, _ = accumulate_votes(recon, store, image_ids)
+        labels, conf = resolve_labels(votes)
+        positions = np.array([recon.points3d[int(pid)].xyz for pid in point_ids])
+        labeled = int((labels != int(Klass.UNKNOWN)).sum())
+        log(f"      {labeled}/{len(labels)} points labelled "
+            f"({100 * labeled / len(labels):.1f}%)")
+        _log_class_histogram(labels, log)
 
     if up_axis is None or up_sign is None:
         a, s, vec = detect_gravity_up(recon)
@@ -91,7 +115,7 @@ def run(model_dir: str, image_dir: str, out_dir: str, *,
         if above < 0:
             log("      WARNING: cameras sit BELOW ground along up-axis -- frame may be upside down!")
 
-    log("[4/5] building ground level")
+    log("[build] building ground level")
     level = build_level(positions, labels, conf, cell_size=cell_size,
                         up_axis=up_axis, up_sign=up_sign, log=log)
 
@@ -102,7 +126,7 @@ def run(model_dir: str, image_dir: str, out_dir: str, *,
         level.semantic = sem
         level.coverage = level.coverage | proj_cov  # projection reaches cells sparse points miss
 
-    log(f"[5/5] exporting -> {out}")
+    log(f"[export] -> {out}")
     save_level(level, out, prefix="level0")
     log("done.")
 
@@ -114,9 +138,19 @@ def _log_class_histogram(labels: np.ndarray, log) -> None:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Semantic BEV ground model from COLMAP + segmentation")
-    ap.add_argument("--model", required=True, help="COLMAP text model dir (cameras/images/points3D.txt)")
-    ap.add_argument("--images", required=True, help="directory of source images")
+    ap = argparse.ArgumentParser(description="Semantic BEV ground model from COLMAP points "
+                                             "or a semantic 3DGS export")
+    ap.add_argument("--source", default="colmap", choices=["colmap", "gsplat"],
+                    help="geometry source: 'colmap' sparse points + segmentation (default), or "
+                         "'gsplat' a trained semantic 3DGS export (denser, pre-labelled)")
+    ap.add_argument("--gsplat-dir", default=None,
+                    help="semantic 3DGS export dir (script/gsplat --out); required for --source gsplat")
+    ap.add_argument("--min-opacity", type=float, default=0.1,
+                    help="drop Gaussians below this opacity when using --source gsplat")
+    ap.add_argument("--model", default=None,
+                    help="COLMAP text model dir. Required for --source colmap; for --source gsplat "
+                         "it supplies camera orientations for gravity (unless --up-axis/--up-sign given)")
+    ap.add_argument("--images", default=None, help="directory of source images (--source colmap)")
     ap.add_argument("--out", required=True, help="output directory")
     ap.add_argument("--segmenter", default="heuristic", choices=list(SEGMENTER_KINDS))
     ap.add_argument("--cell-size", type=float, default=0.5, help="metres per grid cell")
@@ -128,8 +162,13 @@ def main() -> None:
     ap.add_argument("--semantic-mode", default="vote", choices=["vote", "project"],
                     help="vote: sparse point votes (fast); project: dense-mask projection (cleaner)")
     args = ap.parse_args()
+    if args.source == "colmap" and (not args.model or not args.images):
+        ap.error("--source colmap requires --model and --images")
+    if args.source == "gsplat" and not args.gsplat_dir:
+        ap.error("--source gsplat requires --gsplat-dir")
 
-    run(args.model, args.images, args.out, segmenter_kind=args.segmenter,
+    run(args.model, args.images, args.out, source=args.source, gsplat_dir=args.gsplat_dir,
+        min_opacity=args.min_opacity, segmenter_kind=args.segmenter,
         cell_size=args.cell_size, up_axis=args.up_axis, up_sign=args.up_sign,
         limit=args.limit, clip_threshold=args.clip_threshold,
         overwrite_masks=args.overwrite_masks, semantic_mode=args.semantic_mode)

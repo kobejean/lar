@@ -85,6 +85,27 @@ uv run python pipeline.py ... --segmenter clipseg --clip-threshold 0.3
 
 Add `--limit N` to process only the first N images while iterating.
 
+### Geometry source: COLMAP points (default) or semantic 3DGS
+
+`--source` selects where `(positions, labels, confidence)` come from. The default
+`colmap` path is above. `--source gsplat` instead consumes a trained **semantic 3DGS**
+export ([`../gsplat`](../gsplat/) `train.py --semantic`): every Gaussian already carries a
+class, so this skips segmentation/voting entirely and feeds a much denser, pre-labelled
+cloud straight into the *same* `build_level`. `--model` is still used (cameras only) to
+detect gravity/up, unless you pass `--up-axis`/`--up-sign`.
+
+```sh
+uv run python pipeline.py --source gsplat \
+  --gsplat-dir ../../output/<session>-gsplat-sem \
+  --model      ../../output/<session>-refined/colmap/sparse/0 \
+  --out        ../../output/<session>-sbev-gsplat \
+  --cell-size 0.5 --min-opacity 0.1
+```
+
+`--min-opacity` drops faint Gaussians (3DGS floaters) before rasterising. This is the
+optional "3DGS geometry source" tier: denser height/occupancy than sparse COLMAP tracks,
+at the cost of first training a semantic splat model.
+
 ## Output (`<out>/`)
 
 - `level0.npz` — `height` (m, nan=unobserved), `semantic` (Klass id), `occupancy`
