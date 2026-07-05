@@ -229,11 +229,14 @@ def run_arkit_pose_triangulation(frames, database_path, image_path, seed_dir, ou
         "--Mapper.ba_refine_focal_length", "0",
         "--Mapper.ba_refine_principal_point", "0",
         "--Mapper.ba_refine_extra_params", "0",
-        # Looser triangulation thresholds recover more/longer tracks given some
-        # ARKit VIO drift between frames.
-        "--Mapper.tri_complete_max_reproj_error", "6",
-        "--Mapper.tri_merge_max_reproj_error", "6",
-        "--Mapper.filter_max_reproj_error", "6",
+        # Looser triangulation thresholds recover more/longer tracks: ARKit VIO
+        # drift otherwise splits multi-view observations into separate 2-view
+        # points that later fail the >=3-sightings cull. Merging them into longer
+        # tracks roughly doubles the usable-landmark pool; the refiner's bundle
+        # adjustment + outlier removal then prunes any bad merges.
+        "--Mapper.tri_complete_max_reproj_error", "12",
+        "--Mapper.tri_merge_max_reproj_error", "12",
+        "--Mapper.filter_max_reproj_error", "12",
         "--Mapper.tri_min_angle", "1.0",
     ]
 
