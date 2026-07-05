@@ -14,14 +14,17 @@ def extract_colmap_sift_features(work_dir, database_path, max_num_features=8192)
         "--image_path", str(work_dir),
         "--ImageReader.camera_model", "PINHOLE",
         "--ImageReader.single_camera", "0",
-        "--SiftExtraction.use_gpu", "1",
+        # COLMAP 4.0+ renamed the generic feature options: use_gpu moved to the
+        # FeatureExtraction.* namespace and normalization became the top-level
+        # --descriptor_normalization. SIFT-specific options stay under SiftExtraction.*.
+        "--FeatureExtraction.use_gpu", "1",
+        "--descriptor_normalization", "l1_root",  # Required for vocab tree matcher
         "--SiftExtraction.max_num_features", str(max_num_features),
         "--SiftExtraction.first_octave", "-1",
         "--SiftExtraction.num_octaves", "4",
         "--SiftExtraction.octave_resolution", "3",
         "--SiftExtraction.peak_threshold", "0.00666667",
         "--SiftExtraction.edge_threshold", "10.0",
-        "--SiftExtraction.normalization", "l1_root"  # Required for vocab tree matcher
     ]
     
     print(f"Running COLMAP feature extraction (max {max_num_features} features per image)...")

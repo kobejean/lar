@@ -46,9 +46,9 @@ def run_colmap_feature_matching(database_path):
     cmd = [
         "colmap", "exhaustive_matcher",
         "--database_path", str(database_path),
-        "--SiftMatching.use_gpu", "1",
-        "--SiftMatching.guided_matching", "1",
-        "--SiftMatching.num_threads", "8",
+        "--FeatureMatching.use_gpu", "1",
+        "--FeatureMatching.guided_matching", "1",
+        "--FeatureMatching.num_threads", "8",
         # "--TwoViewGeometry.max_error", "6",
         # "--TwoViewGeometry.min_num_inliers", "12",
     ]
@@ -67,8 +67,8 @@ def run_colmap_vocab_tree_feature_matching(database_path, vocab_tree_path):
     cmd = [
         "colmap", "vocab_tree_matcher",
         "--database_path", str(database_path),
-        "--SiftMatching.guided_matching", "1",
-        "--SiftMatching.num_threads", "8",
+        "--FeatureMatching.guided_matching", "1",
+        "--FeatureMatching.num_threads", "8",
         "--VocabTreeMatching.num_nearest_neighbors", "10",
         "--VocabTreeMatching.vocab_tree_path", str(vocab_tree_path),
     ]
@@ -93,9 +93,9 @@ def run_colmap_sequential_feature_matching(database_path, overlap, vocab_tree_pa
     cmd = [
         "colmap", "sequential_matcher",
         "--database_path", str(database_path),
-        "--SiftMatching.use_gpu", "1",
-        "--SiftMatching.guided_matching", "1",
-        "--SiftMatching.num_threads", "8",
+        "--FeatureMatching.use_gpu", "1",
+        "--FeatureMatching.guided_matching", "1",
+        "--FeatureMatching.num_threads", "8",
         # Tight geometric verification so the extra loop-closure candidate edges
         # that survive are reliable, not spurious.
         "--SiftMatching.max_ratio", "0.8",
