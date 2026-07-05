@@ -1,0 +1,35 @@
+# Reproducible COLMAP 4.1 toolchain for the reconstruction pipeline (script/colmap/).
+#
+# This is an ALTERNATIVE to Homebrew for installing the COLMAP *binary*, and the
+# recommended way to get a pinned, CUDA-enabled COLMAP on Linux WITHOUT sudo:
+# conda-forge bundles the CUDA runtime, so only the NVIDIA driver is required.
+#
+# It does NOT replace `uv` — uv still manages the Python pipeline deps (numpy, cv2).
+# This env only provides the `colmap` CLI binary on PATH.
+#
+# Usage (micromamba shown; mamba/conda work too):
+#   micromamba create -f script/colmap/environment.colmap.yml
+#   micromamba run -n colmap colmap --version        # -> COLMAP 4.1.0 ... with CUDA
+#   # run the pipeline with this env's colmap on PATH plus the uv-managed python:
+#   micromamba run -n colmap uv run python script/colmap/colmap.py input/<session> ...
+#
+# Notes / gotchas (these pins are deliberate — see git history of the 4.1 migration):
+#   - The cuda_129 build needs an NVIDIA driver providing CUDA >= 12.9. Blackwell
+#     GPUs (sm_120, e.g. RTX 50-series) REQUIRE >= 12.8, so use this build, not an
+#     older one. On a machine with no NVIDIA GPU, swap to the CPU build:
+#         colmap=4.1.0=cpu_*        (and remove the libfaiss cuda pin below)
+#   - libfaiss is pinned to the *openblas* variant on purpose. The cuda*_mkl variant
+#     pulls Intel MKL, whose 2026 soname (.so.3) mismatches libfaiss (built vs .so.2)
+#     and also conflicts with OpenImageIO's tbb. openblas sidesteps the entire mess.
+#   - colmap 4.1's conda recipe under-declares its run deps (it links faiss + OIIO
+#     but lists flann + freeimage), so openimageio and libfaiss are pinned explicitly.
+#   - The standalone `glomap` package is intentionally EXCLUDED: it pins libcolmap
+#     3.13 and would silently downgrade colmap. GLOMAP is integrated into 4.x — use
+#     `colmap global_mapper` (the pipeline's --use_glomap path already does this).
+name: colmap
+channels:
+  - conda-forge
+dependencies:
+  - colmap=4.1.0=cuda_129*
+  - libfaiss=1.10.0=cuda129_openblas*
+  - openimageio=3.1.*

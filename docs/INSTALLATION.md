@@ -40,7 +40,9 @@ machines.
 
 ## 2. Install COLMAP and GLOMAP
 
-These are native binaries used for Structure-from-Motion reconstruction:
+These are native binaries used for Structure-from-Motion reconstruction.
+
+### macOS (Homebrew)
 
 ```sh
 brew install colmap glomap
@@ -55,6 +57,37 @@ glomap --help | head -1
 
 > If you already have `colmap`/`glomap` installed elsewhere (e.g. a manual build in
 > `/usr/local/bin`), that works too — the scripts just call them off your `PATH`.
+
+### Linux / CUDA / no-sudo (conda-forge)
+
+A pinned, CUDA-enabled COLMAP can be installed entirely in user space (no `sudo`)
+via conda-forge — the package bundles the CUDA runtime, so only the NVIDIA **driver**
+is needed. The exact pins (and the reasoning behind them — libfaiss variant, Blackwell
+CUDA build) live in [`script/colmap/environment.colmap.yml`](../script/colmap/environment.colmap.yml).
+
+```sh
+# one-time: install micromamba (or use an existing mamba/conda)
+"${SHELL}" <(curl -L micro.mamba.pm/install.sh)
+
+# create the pinned env and verify
+micromamba create -f script/colmap/environment.colmap.yml
+micromamba run -n colmap colmap --version       # -> COLMAP 4.1.0 ... with CUDA
+```
+
+Then run the pipeline with this env's `colmap` on `PATH` (still driven by `uv`):
+
+```sh
+micromamba run -n colmap uv run python script/colmap/colmap.py input/<session> --use_arkit_poses --use_sequential
+```
+
+> Blackwell GPUs (sm_120, RTX 50-series) require the CUDA 12.9 build pinned in the
+> env file. On a machine with no NVIDIA GPU, switch the colmap pin to the CPU build
+> (`colmap=4.1.0=cpu_*`) — see the comments in the env file.
+
+> ⚠️ This env pins **COLMAP 4.1** and deliberately omits the standalone `glomap`
+> package (it would downgrade libcolmap). GLOMAP is integrated into 4.x as
+> `colmap global_mapper`, so the standalone-`glomap` `--use_glomap` path won't be
+> available here — use `--use_arkit_poses` / the default incremental mapper instead.
 
 ## 3. Set up the Python environment
 
