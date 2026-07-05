@@ -6,3 +6,31 @@ dependencies = [
     "numpy>=2.5.0",
     "opencv-python>=4.13.0.92",
 ]
+
+[project.optional-dependencies]
+# Real open-vocab segmentation backend for script/semantic_bev (CLIPSeg via transformers).
+# Heavy (torch); kept optional so the core pipeline + heuristic backend need no GPU/model.
+#   uv sync --extra segmentation
+segmentation = [
+    "torch>=2.7.0",
+    "torchvision>=0.18.0",
+    "transformers>=4.44.0",
+    "pillow>=10.0.0",
+    "scipy>=1.11.0",
+]
+
+# 3D Gaussian Splatting from LAR/COLMAP reconstructions (script/gsplat).
+# Engine is gsplat (Apache-2.0): supports Blackwell GPUs and the MCMC strategy's
+# hard Gaussian-count cap, which is how we keep a coarse park-scale model inside a
+# fixed VRAM budget. The optional *semantic* head reuses the `segmentation` extra's
+# segmenters, so enable both together for semantic 3DGS:
+#   uv sync --extra gsplat --extra segmentation
+# gsplat compiles CUDA kernels at install/first-import, so a CUDA toolchain (nvcc)
+# matching the installed torch must be on PATH. See script/gsplat/README.md.
+gsplat = [
+    "torch>=2.7.0",
+    "gsplat>=1.4.0",
+    "scipy>=1.11.0",
+    "plyfile>=1.0.0",
+    "tqdm>=4.66.0",
+]
