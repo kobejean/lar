@@ -5,10 +5,15 @@
 #include <fstream>
 #include <sstream>
 #include <iostream>
+#include <iomanip>
 #include <algorithm>
+#include <array>
+#include <cstdio>
+#include <unordered_map>
 
 #include <Eigen/Geometry>
 
+#include "lar/io/image_io.h"
 #include "lar/processing/colmap_database.h"
 
 namespace lar {
@@ -256,6 +261,102 @@ namespace lar {
     Eigen::Vector3d C = extrinsics.block<3, 1>(0, 3);  // camera center (ARKit world)
     Eigen::Matrix3d R_w2c = F * R_c2w.transpose();
     return {R_w2c, -R_w2c * C};
+  }
+
+  void ColmapDatabase::writeSparseModel(
+      const std::string& model_dir,
+      const std::vector<Frame>& frames,
+      const std::vector<Landmark*>& landmarks,
+      const std::function<std::string(size_t)>& image_path_for_frame) {
+    namespace fs = std::filesystem;
+    fs::create_directories(model_dir);
+    const size_t n = frames.size();
+
+    // frame.id -> contiguous index (ids are 0..n-1 in practice; map to be safe).
+    std::unordered_map<size_t, size_t> id_to_index;
+    for (size_t i = 0; i < n; i++) id_to_index[frames[i].id] = i;
+
+    // Per-image POINTS2D lists and the landmark tracks that reference them by index.
+    struct Pt2D { float x, y; size_t point3d_id; };
+    std::vector<std::vector<Pt2D>> image_points2d(n);
+    std::unordered_map<size_t, std::vector<std::pair<size_t, size_t>>> tracks; // lm id -> [(image_id, point2d_idx)]
+
+    for (Landmark* lm : landmarks) {
+      for (const auto& obs : lm->obs) {
+        auto it = id_to_index.find(obs.frame_id);
+        if (it == id_to_index.end()) continue;
+        std::vector<Pt2D>& vec = image_points2d[it->second];
+        size_t image_id = obs.frame_id + 1;  // 1-indexed COLMAP image id
+        tracks[lm->id].push_back({image_id, vec.size()});
+        vec.push_back({obs.kpt.pt.x, obs.kpt.pt.y, lm->id});
+      }
+    }
+
+    std::unordered_map<size_t, std::array<int, 3>> colors;  // lm id -> RGB
+
+    std::ofstream fc(fs::path(model_dir) / "cameras.txt");
+    std::ofstream fi(fs::path(model_dir) / "images.txt");
+    fc << std::setprecision(9);
+    fi << std::setprecision(9);
+    fc << "# CAMERA_ID, MODEL, WIDTH, HEIGHT, PARAMS[]\n";
+    fi << "# IMAGE_ID, QW, QX, QY, QZ, TX, TY, TZ, CAMERA_ID, NAME\n"
+       << "#   POINTS2D[] as (X, Y, POINT3D_ID)\n";
+
+    for (size_t i = 0; i < n; i++) {
+      const Frame& frame = frames[i];
+      size_t image_id = frame.id + 1;
+
+      // Load the source image once: yields width/height + per-point color.
+      cv::Mat img = lar::io::imreadColor(image_path_for_frame(frame.id));  // BGR, empty on failure
+      const Eigen::Matrix3d& K = frame.intrinsics;
+      int w = img.empty() ? static_cast<int>(std::lround(K(0, 2) * 2.0)) : img.cols;
+      int h = img.empty() ? static_cast<int>(std::lround(K(1, 2) * 2.0)) : img.rows;
+
+      fc << image_id << " PINHOLE " << w << " " << h << " "
+         << K(0, 0) << " " << K(1, 1) << " " << K(0, 2) << " " << K(1, 2) << "\n";
+
+      // Refined ARKit camera-to-world -> COLMAP world-to-camera (shared SSOT helper).
+      auto [R_w2c, t] = arkitToColmapWorldToCamera(frame.extrinsics);
+      Eigen::Quaterniond q(R_w2c);
+      q.normalize();
+
+      char name[32];
+      std::snprintf(name, sizeof(name), "%08zu_image.jpeg", frame.id);
+      fi << image_id << " " << q.w() << " " << q.x() << " " << q.y() << " " << q.z()
+         << " " << t.x() << " " << t.y() << " " << t.z() << " " << image_id << " " << name << "\n";
+
+      const std::vector<Pt2D>& pts = image_points2d[i];
+      for (size_t k = 0; k < pts.size(); k++) {
+        const Pt2D& p = pts[k];
+        fi << p.x << " " << p.y << " " << p.point3d_id << (k + 1 < pts.size() ? " " : "");
+        if (!img.empty() && colors.find(p.point3d_id) == colors.end()) {
+          int px = static_cast<int>(std::lround(p.x)), py = static_cast<int>(std::lround(p.y));
+          if (px >= 0 && px < w && py >= 0 && py < h) {
+            const cv::Vec3b& bgr = img.at<cv::Vec3b>(py, px);
+            colors[p.point3d_id] = {bgr[2], bgr[1], bgr[0]};
+          }
+        }
+      }
+      fi << "\n";  // POINTS2D line (may be empty)
+    }
+
+    std::ofstream fp(fs::path(model_dir) / "points3D.txt");
+    fp << std::setprecision(9);
+    fp << "# POINT3D_ID, X, Y, Z, R, G, B, ERROR, TRACK[] as (IMAGE_ID, POINT2D_IDX)\n";
+    size_t written = 0;
+    for (Landmark* lm : landmarks) {
+      auto ct = tracks.find(lm->id);
+      if (ct == tracks.end()) continue;  // no surviving observations
+      std::array<int, 3> col = colors.count(lm->id) ? colors[lm->id] : std::array<int, 3>{180, 180, 180};
+      fp << lm->id << " " << lm->position.x() << " " << lm->position.y() << " " << lm->position.z()
+         << " " << col[0] << " " << col[1] << " " << col[2] << " 1.0";
+      for (const auto& [image_id, p2d_idx] : ct->second) fp << " " << image_id << " " << p2d_idx;
+      fp << "\n";
+      written++;
+    }
+
+    std::cout << "Wrote refined COLMAP model to " << model_dir
+              << " (" << n << " images, " << written << " points)" << std::endl;
   }
 
   Eigen::Matrix4d ColmapDatabase::colmapPoseToMatrix(const std::vector<double>& quat_trans) {

@@ -8,6 +8,7 @@
 #include <map>
 #include <vector>
 #include <utility>
+#include <functional>
 #include <sqlite3.h>
 
 #include <Eigen/Core>
@@ -54,6 +55,21 @@ namespace lar {
       const std::vector<Frame>& frames,
       std::vector<Landmark>& landmarks,
       const std::string& database_path
+    );
+
+    // Write a COLMAP sparse text model (cameras/images/points3D.txt) into
+    // model_dir from refined poses + landmarks. Counterpart to
+    // readSparseReconstruction. Poses are refined ARKit camera-to-world extrinsics
+    // (converted via arkitToColmapWorldToCamera); tracks + 2D points are rebuilt
+    // from each landmark's observations; colors are sampled from the source images
+    // resolved by image_path_for_frame(frame_id). Open the result with:
+    //   colmap gui --database_path <session>/colmap/database.db
+    //              --import_path <model_dir> --image_path <session>/colmap
+    void writeSparseModel(
+      const std::string& model_dir,
+      const std::vector<Frame>& frames,
+      const std::vector<Landmark*>& landmarks,
+      const std::function<std::string(size_t)>& image_path_for_frame
     );
 
   private:
