@@ -101,11 +101,25 @@ class CameraView:
 
 
 def read_images(path: Path, cameras: dict[int, CameraModel]) -> list[CameraView]:
-    """Header line carries the pose; the following keypoint line is skipped."""
+    """Two *physical* lines per image: a pose header, then a POINTS2D line.
+
+    The POINTS2D line can be **empty** (a refined image that kept its pose but has no
+    surviving 2D points — valid COLMAP). So we pair by physical line position rather than
+    filtering blanks first: a blank-skipping pass would drop those empty lines and desync
+    every subsequent pose. Comments only appear in the header block, never mid-record.
+    """
     views: list[CameraView] = []
-    it = _iter_data_lines(path)
-    for header in it:
-        next(it)  # discard the POINTS2D line -- unused for 3DGS
+    with open(path) as f:
+        lines = f.read().split("\n")
+
+    i, n = 0, len(lines)
+    while i < n:
+        header = lines[i].strip()
+        if not header or header.startswith("#"):
+            i += 1
+            continue
+        i += 2  # consume the header AND its POINTS2D line (which may be empty)
+
         h = header.split()
         image_id = int(h[0])
         qw, qx, qy, qz = (float(x) for x in h[1:5])
