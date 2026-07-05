@@ -63,11 +63,12 @@ def create_colmap_database(frames, database_path, work_dir):
         
         print(f"Added image {image_name} with camera {camera_id}")
         
-        # Add pose prior (using centralized function for consistency)
-        _, position = extract_rotation_translation_from_extrinsics(
+        # Add pose prior: world-to-camera (R,t) -> camera center C = -R^T t
+        R_w2c, t_w2c = extract_rotation_translation_from_extrinsics(
             frame['extrinsics'],
             apply_colmap_conversion=True
         )
+        position = -R_w2c.T @ t_w2c
         position_blob = struct.pack('ddd', position[0], position[1], position[2])
         pos_std = 10.0
         covariance_blob = struct.pack('ddddddddd',
@@ -143,6 +144,61 @@ def export_poses(sparse_dir, output_dir):
     except subprocess.CalledProcessError as e:
         print(f"Pose export failed: {e}")
         return False
+
+_COLMAP_CAMERA_MODEL_NAME = {0: "SIMPLE_PINHOLE", 1: "PINHOLE", 2: "SIMPLE_RADIAL"}
+
+def create_arkit_seed_model(frames, database_path, seed_dir):
+    """Write a COLMAP text model seeded with ARKit poses for point_triangulator.
+
+    Uses the (corrected) ARKit->COLMAP world-to-camera convention from
+    extract_rotation_translation_from_extrinsics. Cameras and image ids/names are
+    taken from the database so they line up with the extracted features. Points3D
+    is left empty; point_triangulator fills it using the fixed poses. Only frames
+    present in the database are written (e.g. tail frames with no ARKit pose or
+    removed from the db are skipped).
+
+    Returns the number of images written.
+    """
+    seed_dir = Path(seed_dir)
+    seed_dir.mkdir(parents=True, exist_ok=True)
+
+    conn = sqlite3.connect(str(database_path))
+    cur = conn.cursor()
+    db_images = {name: (image_id, camera_id)
+                 for image_id, name, camera_id in cur.execute("SELECT image_id, name, camera_id FROM images")}
+    db_cameras = {}
+    for camera_id, model, w, h, params in cur.execute("SELECT camera_id, model, width, height, params FROM cameras"):
+        db_cameras[camera_id] = (model, w, h, struct.unpack(f"{len(params)//8}d", params))
+    conn.close()
+
+    with open(seed_dir / "cameras.txt", "w") as f:
+        f.write("# Camera list with one line of data per camera:\n")
+        f.write("#   CAMERA_ID, MODEL, WIDTH, HEIGHT, PARAMS[]\n")
+        for cid, (model, w, h, params) in sorted(db_cameras.items()):
+            model_name = _COLMAP_CAMERA_MODEL_NAME.get(model, model)
+            f.write(f"{cid} {model_name} {w} {h} " + " ".join(f"{p:.12f}" for p in params) + "\n")
+
+    written = 0
+    with open(seed_dir / "images.txt", "w") as f:
+        f.write("# Image list with two lines of data per image:\n")
+        f.write("#   IMAGE_ID, QW, QX, QY, QZ, TX, TY, TZ, CAMERA_ID, NAME\n#   POINTS2D[] (empty; filled by triangulator)\n")
+        for frame in frames:
+            name = f"{frame['id']:08d}_image.jpeg"
+            if name not in db_images:
+                continue
+            image_id, camera_id = db_images[name]
+            R_w2c, t_w2c = extract_rotation_translation_from_extrinsics(
+                frame["extrinsics"], apply_colmap_conversion=True)
+            qw, qx, qy, qz = rotation_matrix_to_quaternion(R_w2c)
+            f.write(f"{image_id} {qw:.12f} {qx:.12f} {qy:.12f} {qz:.12f} "
+                    f"{t_w2c[0]:.12f} {t_w2c[1]:.12f} {t_w2c[2]:.12f} {camera_id} {name}\n\n")
+            written += 1
+
+    with open(seed_dir / "points3D.txt", "w") as f:
+        f.write("# 3D point list (empty; filled by point_triangulator)\n")
+
+    print(f"Created ARKit seed model with {written} images at {seed_dir}")
+    return written
 
 # ============================================================================
 # Two-View Geometry Operations for ARKit Integration

@@ -15,7 +15,7 @@ import argparse
 import glob
 from pathlib import Path
 from feature_extraction import extract_colmap_sift_features, extract_opencv_sift_features
-from database_operations import create_colmap_database, export_poses, insert_two_view_geometries_from_arkit
+from database_operations import create_colmap_database, export_poses, insert_two_view_geometries_from_arkit, create_arkit_seed_model
 from arkit_integration import load_arkit_data, create_reference_file_from_arkit
 from map_export import export_aligned_map_json
 
@@ -200,6 +200,52 @@ def run_colmap_pose_prior_mapping(database_path, output_dir):
         print(f"Sparse reconstruction failed: {e}")
         return False
 
+def run_arkit_pose_triangulation(frames, database_path, image_path, seed_dir, output_dir):
+    """Reconstruct by triangulating landmarks against fixed ARKit poses.
+
+    Vision-only SfM (incremental or GLOMAP) fails to cohere on wide-baseline /
+    low-parallax capture (e.g. park foliage) even with rich matches. Instead of
+    estimating poses from images, seed a COLMAP model with the trusted ARKit poses
+    for every frame and run point_triangulator to place landmarks. This yields a
+    fully-connected reconstruction over all posed frames -- poses never depend on
+    the visual view graph.
+    """
+    seed_dir = Path(seed_dir)
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    n = create_arkit_seed_model(frames, database_path, seed_dir)
+    if n == 0:
+        print("ARKit seed model is empty (no frames matched database images)")
+        return False
+
+    cmd = [
+        "colmap", "point_triangulator",
+        "--database_path", str(database_path),
+        "--image_path", str(image_path),
+        "--input_path", str(seed_dir),
+        "--output_path", str(output_path),
+        # Trust ARKit calibration + poses; don't let BA drift intrinsics.
+        "--Mapper.ba_refine_focal_length", "0",
+        "--Mapper.ba_refine_principal_point", "0",
+        "--Mapper.ba_refine_extra_params", "0",
+        # Looser triangulation thresholds recover more/longer tracks given some
+        # ARKit VIO drift between frames.
+        "--Mapper.tri_complete_max_reproj_error", "6",
+        "--Mapper.tri_merge_max_reproj_error", "6",
+        "--Mapper.filter_max_reproj_error", "6",
+        "--Mapper.tri_min_angle", "1.0",
+    ]
+
+    print("Running ARKit-pose triangulation (point_triangulator)...")
+    try:
+        subprocess.run(cmd, check=True, text=True)
+        print("Triangulation completed successfully")
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"Triangulation failed: {e}")
+        return False
+
 def run_glomap_mapping(database_path, output_dir):
     """Run GLOMAP global structure-from-motion (faster alternative to COLMAP)"""
     output_path = Path(output_dir)
@@ -303,10 +349,10 @@ def copy_images(source_dir, work_dir):
 
 def setup(args, frames_json_path, database_path, work_dir):
     arkit_frames = load_arkit_data(frames_json_path)
-    create_colmap_database(arkit_frames, database_path, work_dir)
-    if not copy_images(args.source_dir, work_dir):
-        print("Failed to copy images. Exiting.")
-        exit()
+    # create_colmap_database(arkit_frames, database_path, work_dir)
+    # if not copy_images(args.source_dir, work_dir):
+    #     print("Failed to copy images. Exiting.")
+    #     exit()
     return arkit_frames
 
 def extract_features(args, work_dir, database_path):
@@ -362,8 +408,17 @@ def insert_arkit_odometry(arkit_frames, database_path):
     count = insert_two_view_geometries_from_arkit(arkit_frames, database_path)
     print(f"Added {count} relative pose constraints from ARKit VIO")
 
-def sparse_reconstruction(args, database_path, sparse_dir):
-    if args.use_pose_prior:
+def sparse_reconstruction(args, arkit_frames, database_path, sparse_dir):
+    if args.use_arkit_poses:
+        print("\nReconstructing by triangulating against ARKit poses...")
+        work_dir = Path(database_path).parent
+        seed_dir = work_dir / "arkit_seed"
+        # point_triangulator writes the model directly into output_path; use
+        # sparse/0 so the rest of the pipeline (which expects sparse/0) works.
+        if not run_arkit_pose_triangulation(arkit_frames, database_path, work_dir, seed_dir, sparse_dir / "0"):
+            print("COLMAP pipeline failed at ARKit-pose triangulation")
+            exit(1)
+    elif args.use_pose_prior:
         print("\nRunning pose-prior reconstruction with COLMAP...")
         if not run_colmap_pose_prior_mapping(database_path, sparse_dir):
             print("COLMAP pipeline failed at pose-prior reconstruction")
@@ -442,6 +497,12 @@ def main():
                             "pose priors in the database to register cameras where visual matching "
                             "is sparse. Helps connect otherwise disconnected components. Takes "
                             "precedence over --use_glomap.")
+    parser.add_argument("--use_arkit_poses", action="store_true",
+                       help="Reconstruct by triangulating landmarks against fixed ARKit poses "
+                            "(seed model + point_triangulator). Best when vision-only SfM cannot "
+                            "cohere (wide-baseline / low-parallax capture). Produces a fully "
+                            "connected model in ARKit coordinates; skips model alignment. Takes "
+                            "precedence over the other reconstruction options.")
 
     args = parser.parse_args()
     work_dir = Path(args.source_dir) / "colmap"
@@ -456,20 +517,24 @@ def main():
     arkit_frames = setup(args, frames_json_path, database_path, work_dir)
 
     # # Step 2: Extract SIFT features
-    extract_features(args, work_dir, database_path)
+    # extract_features(args, work_dir, database_path)
 
     # Step 3: Feature matching
-    feature_matching(args, database_path)
+    # feature_matching(args, database_path)
 
     # Step 4: Insert ARKit odometry constraints
-    insert_arkit_odometry(arkit_frames, database_path)
+    # insert_arkit_odometry(arkit_frames, database_path)
 
     # Step 5: Sparse reconstruction
-    reconstruction_path = sparse_reconstruction(args, database_path, sparse_dir)
+    reconstruction_path = sparse_reconstruction(args, arkit_frames, database_path, sparse_dir)
     reconstruction_path = sparse_dir / "0"
 
-    # Step 6: Model alignment
-    reconstruction_path = model_alignment(args, arkit_frames, ref_coords_file, reconstruction_path, database_path)
+    # Step 6: Model alignment. Skipped for --use_arkit_poses: the model is already
+    # built directly in ARKit world coordinates, so there is nothing to align.
+    if args.use_arkit_poses:
+        print("\nSkipping model alignment (ARKit-pose model is already in ARKit coordinates)")
+    else:
+        reconstruction_path = model_alignment(args, arkit_frames, ref_coords_file, reconstruction_path, database_path)
 
     # Step 7: Export map
     export_map(args, database_path, map_json_file, arkit_frames, reconstruction_path, poses_dir)
@@ -478,9 +543,16 @@ def main():
     print(f"Feature extraction method: {'COLMAP' if args.use_colmap_sift else 'OpenCV'}")
     matching_method = "Sequential" if args.use_sequential else ("Vocabulary Tree" if args.use_vocab_tree else "Exhaustive")
     print(f"Matching method: {matching_method}")
-    reconstruction_method = "COLMAP (pose prior)" if args.use_pose_prior else ("GLOMAP" if args.use_glomap else "COLMAP")
+    if args.use_arkit_poses:
+        reconstruction_method = "ARKit-pose triangulation"
+    elif args.use_pose_prior:
+        reconstruction_method = "COLMAP (pose prior)"
+    elif args.use_glomap:
+        reconstruction_method = "GLOMAP"
+    else:
+        reconstruction_method = "COLMAP"
     print(f"Reconstruction method: {reconstruction_method}")
-    print(f"Model alignment: Applied in place")
+    print(f"Model alignment: {'Skipped (ARKit coords)' if args.use_arkit_poses else 'Applied in place'}")
     print(f"Final map: {map_json_file}")
     print(f"Launch gui with: colmap gui --database_path {database_path} --import_path {reconstruction_path} --image_path {work_dir}")
     return 0
