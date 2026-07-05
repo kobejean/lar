@@ -38,4 +38,5 @@ gsplat = [
 # IMDF GeoJSON. shapely for robust polygonisation (validity, holes, winding, simplify).
 imdf = [
     "shapely>=2.0.0",
+    "scikit-image>=0.22.0",
 ]
