@@ -27,6 +27,20 @@ pipelines. Output per Gaussian: an argmax class id (`_labels.npy`) + a taxonomy-
 `.ply`. That labelled point set is exactly the `(positions, labels, confidence)` geometry
 source `semantic_bev` is designed to consume, and a route into LAR localization.
 
+**Two-phase training (the reliable, canonical recipe).** Semantics is *not* trained jointly
+with geometry. Following LangSplat / Feature-3DGS / Gaussian Grouping:
+
+1. **Phase 1 (`--max-steps`)** — train RGB + geometry with MCMC densification. This is
+   identical to a plain RGB run; no semantic field exists yet.
+2. **Phase 2 (`--sem-steps`)** — attach a fresh semantic field to the *converged*
+   Gaussians and train only it, with the geometry **detached/frozen** (MCMC off). The 2D
+   masks are distilled onto fixed supports.
+
+Why: geometry from the dense photometric loss is far more reliable than the semantic CE,
+and freezing it means labelling becomes a clean multi-view fusion problem that **cannot
+move or degrade the reconstruction**. Phase 2 is cheap (a few thousand steps — no SSIM,
+no SH, no densification).
+
 ## Modules
 
 | file | role |
