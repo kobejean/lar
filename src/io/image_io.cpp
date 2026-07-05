@@ -64,6 +64,27 @@ cv::Mat imreadGray(const std::string& path) {
   return result;
 }
 
+cv::Mat imreadColor(const std::string& path) {
+  int w = 0, h = 0, channels_in_file = 0;
+  // Force 3 channels; stb decodes JPEG as RGB. We repack to BGR to match cv::imread.
+  uint8_t* data = stbi_load(path.c_str(), &w, &h, &channels_in_file, 3);
+  if (!data) {
+    return cv::Mat();  // match cv::imread: empty Mat on failure, callers check .empty()
+  }
+  cv::Mat result(h, w, CV_8UC3);
+  for (int y = 0; y < h; ++y) {
+    const uint8_t* src = data + static_cast<size_t>(y) * w * 3;
+    uint8_t* dst = result.ptr<uint8_t>(y);
+    for (int x = 0; x < w; ++x) {
+      dst[x * 3 + 0] = src[x * 3 + 2];  // B
+      dst[x * 3 + 1] = src[x * 3 + 1];  // G
+      dst[x * 3 + 2] = src[x * 3 + 0];  // R
+    }
+  }
+  stbi_image_free(data);
+  return result;
+}
+
 void imwriteJpeg(const std::string& path, const cv::Mat& image, int quality) {
   if (image.empty()) {
     throw std::runtime_error("lar::io::imwriteJpeg: empty image for '" + path + "'");

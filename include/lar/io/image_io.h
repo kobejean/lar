@@ -19,6 +19,10 @@ namespace io {
   // Returns an empty cv::Mat on failure, matching cv::imread's contract (callers check .empty()).
   cv::Mat imreadGray(const std::string& path);
 
+  // Read an 8-bit color JPEG into a CV_8UC3 Mat in BGR order (matches cv::imread(..., IMREAD_COLOR)).
+  // Returns an empty cv::Mat on failure, matching cv::imread's contract (callers check .empty()).
+  cv::Mat imreadColor(const std::string& path);
+
   // Write a Mat as a baseline JPEG. Accepts CV_8UC1, CV_8UC3 (BGR) or CV_8UC4 (BGRA),
   // matching OpenCV's channel convention; BGR(A) is converted to RGB for encoding.
   // quality is 1..100. Throws std::runtime_error on failure.
