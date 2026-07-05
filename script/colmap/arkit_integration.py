@@ -15,12 +15,12 @@ def create_reference_file_from_arkit(arkit_frames, output_file):
         for frame in arkit_frames:
             image_name = f"{frame['id']:08d}_image.jpeg"
 
-            # Extract camera position using centralized function with COLMAP coordinate conversion
-            # (COLMAP has opposite Y and Z axis from ARKit)
-            _, camera_position = extract_rotation_translation_from_extrinsics(
+            # world-to-camera (R,t) in COLMAP convention -> camera center C = -R^T t
+            R, t = extract_rotation_translation_from_extrinsics(
                 frame['extrinsics'],
                 apply_colmap_conversion=True
             )
+            camera_position = -R.T @ t
 
             # Write in format: image_name X Y Z
             f.write(f"{image_name} {camera_position[0]:.10f} {camera_position[1]:.10f} {camera_position[2]:.10f}\n")

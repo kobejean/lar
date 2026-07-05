@@ -87,24 +87,38 @@ locked environment, no manual venv activation):
 
 ```sh
 cd /path/to/lar
-uv run python script/colmap/colmap.py input/1782302260032 --use_glomap
+# Recommended for large / low-parallax capture (e.g. a park):
+uv run python script/colmap/colmap.py input/1782302260032 --use_sequential --use_arkit_poses
 ```
 
 Replace `1782302260032` with your session folder name. The pipeline:
 
 1. Copies images into a `colmap/` working dir
 2. Extracts SIFT features (OpenCV by default)
-3. Matches features (exhaustive by default)
-4. Inserts ARKit relative poses as odometry constraints
-5. Runs sparse reconstruction (GLOMAP or COLMAP)
-6. Aligns the model to ARKit metric scale + GPS
-7. Exports `map.json`
+3. Matches features (exhaustive, sequential, or vocab-tree)
+4. Runs sparse reconstruction (see options below)
+5. Aligns the model to ARKit metric scale + GPS (skipped for `--use_arkit_poses`,
+   which reconstructs directly in ARKit coordinates)
+6. Exports `map.json`
+
+### Which reconstruction path?
+
+Vision-only SfM (GLOMAP / COLMAP incremental) cannot cohere on wide-baseline,
+low-parallax capture such as a park — the view graph fragments (see
+`RECONSTRUCTION_CLEANUP_PLAN.md`). For that data use **`--use_arkit_poses`**, which
+seeds the reconstruction with the trusted ARKit poses and triangulates landmarks
+against them (`point_triangulator`), producing a fully connected model over every
+posed frame. Follow it with `lar_refine_colmap` (Step 5) for the final g2o bundle
+adjustment. For small, well-textured, high-parallax scenes, `--use_glomap` or the
+default incremental mapper are fine.
 
 ### Options
 
 | Flag | Effect |
 | --- | --- |
-| `--use_glomap` | Global SfM via GLOMAP — **faster**; good default first pass. Omit to use COLMAP's incremental mapper. |
+| `--use_arkit_poses` | Triangulate landmarks against fixed ARKit poses (seed + `point_triangulator`). Best for large / low-parallax capture; produces a connected model in ARKit coordinates and skips alignment. |
+| `--use_sequential` | Sequential (sliding-window) matching with vocab-tree loop detection — best for sequential captures. Uses the bundled `vocab_tree.bin`. |
+| `--use_glomap` | Global SfM via GLOMAP — fast; good for small high-parallax scenes. Omit to use COLMAP's incremental mapper. |
 | `--use_vocab_tree` | Vocabulary-tree matching instead of exhaustive (for large image sets). |
 | `--use_colmap_sift` | Use COLMAP's SIFT instead of OpenCV's. |
 | `--max_num_features N` | Max features per image (default `16384`). |

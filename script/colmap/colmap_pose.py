@@ -20,61 +20,39 @@ def parse_arkit_extrinsics(extrinsics):
     """
     return np.array(extrinsics).reshape(4, 4, order='F')
 
+# ARKit camera axes (x-right, y-up, looks down -z) -> COLMAP/OpenCV camera axes
+# (x-right, y-down, looks down +z). This is a CAMERA-side flip, applied on the
+# left of the (inverted) rotation. The world frame is kept as ARKit's.
+_ARKIT_TO_COLMAP_CAM = np.diag([1.0, -1.0, -1.0])
+
 def extract_rotation_translation_from_extrinsics(extrinsics, apply_colmap_conversion=False):
     """
-    Extract rotation matrix and translation vector from ARKit extrinsics.
+    Extract a world-to-camera pose from an ARKit extrinsics matrix.
+
+    ARKit `extrinsics` is a column-major 4x4 **camera-to-world** transform whose
+    translation column is the camera center C in ARKit world coordinates.
 
     Args:
-        extrinsics: 16-element array [R00, R10, R20, 0, R01, R11, R21, 0,
-                                       R02, R12, R22, 0, tx, ty, tz, 1]
-        apply_colmap_conversion: If True, apply Y/Z axis flip for COLMAP coordinate system
+        extrinsics: 16-element ARKit extrinsics (column-major camera-to-world)
+        apply_colmap_conversion: If True, return the COLMAP world-to-camera pose
+            (R_w2c, t_w2c) with R_w2c = F @ R_c2w^T, t_w2c = -R_w2c @ C, where
+            F flips the camera y/z axes. If False, return the raw ARKit
+            camera-to-world (R_c2w, C).
 
     Returns:
-        (R, t): 3x3 rotation matrix and 3-element translation vector
+        (R, t): 3x3 rotation and 3-vector. world-to-camera when
+        apply_colmap_conversion=True, else raw camera-to-world.
     """
     matrix = parse_arkit_extrinsics(extrinsics)
-    R = matrix[:3, :3]
-    t = matrix[:3, 3]
+    R_c2w = matrix[:3, :3]
+    C = matrix[:3, 3]  # camera center in ARKit world coordinates
 
     if apply_colmap_conversion:
-        # COLMAP has opposite Y and Z axis from ARKit
-        # Apply coordinate conversion to translation
-        t = np.array([t[0], -t[1], -t[2]])
-        # Apply coordinate conversion to rotation
-        R = R.copy()
-        R[:, 1] = -R[:, 1]  # Flip Y column
-        R[:, 2] = -R[:, 2]  # Flip Z column
+        R = _ARKIT_TO_COLMAP_CAM @ R_c2w.T  # world-to-camera (COLMAP camera axes)
+        t = -R @ C
+        return R, t
 
-    return R, t
-
-def compute_relative_pose_from_arkit(extrinsics1, extrinsics2, for_colmap=False):
-    """
-    Compute relative pose from camera1 to camera2 from ARKit extrinsics.
-
-    Given two camera-from-world transforms T1 and T2, compute the
-    camera2-from-camera1 transform: T_rel = T2 * T1^-1
-
-    Args:
-        extrinsics1: ARKit extrinsics for camera 1
-        extrinsics2: ARKit extrinsics for camera 2
-        for_colmap: If True, work in COLMAP coordinate system (Y/Z flipped)
-
-    Returns:
-        (R_rel, t_rel): Relative rotation matrix and translation vector
-    """
-    # Extract poses (convert to COLMAP coordinates if needed)
-    R1, t1 = extract_rotation_translation_from_extrinsics(extrinsics1, apply_colmap_conversion=for_colmap)
-    R2, t2 = extract_rotation_translation_from_extrinsics(extrinsics2, apply_colmap_conversion=for_colmap)
-
-    # Compute world-from-camera1 (invert T1)
-    R1_inv = R1.T
-    t1_inv = -R1.T @ t1
-
-    # Compute camera2-from-camera1: T2 * T1^-1
-    R_rel = R2 @ R1_inv
-    t_rel = R2 @ t1_inv + t2
-
-    return R_rel, t_rel
+    return R_c2w, C
 
 
 # ============================================================================
@@ -150,27 +128,26 @@ class ColmapPose:
 
     @property
     def camera_position(self):
-        """Get camera position in world coordinates (ARKit convention)"""
+        """Camera center C in world coordinates (= ARKit world frame)."""
         if self._camera_position is None:
-            # Camera position: -R^T * t
+            # world-to-camera (R,t) -> center C = -R^T t. World frame is ARKit's,
+            # so no extra axis flip is needed.
             self._camera_position = -self._rotation_matrix.T @ self.translation
-            self._camera_position[1] = -self._camera_position[1]
-            self._camera_position[2] = -self._camera_position[2]
         return self._camera_position
-    
+
     @property
     def camera_to_world_matrix(self):
-        """Get ARKit convention 4x4 camera-to-world transformation matrix"""
+        """Get ARKit convention 4x4 camera-to-world transformation matrix.
+
+        Inverse of extract_rotation_translation_from_extrinsics: given the COLMAP
+        world-to-camera R_w2c, the ARKit camera-to-world rotation is
+        R_c2w = R_w2c^T @ F (F flips the camera y/z axes back).
+        """
         if self._camera_to_world_matrix is None:
-            R = self._rotation_matrix
-            t = self.camera_position
-            self._camera_to_world_matrix = np.array(
-                [
-                    [ R[0,0], -R[1,0], -R[2,0],  t[0]],
-                    [-R[0,1],  R[1,1],  R[2,1],  t[1]],
-                    [-R[0,2],  R[1,2],  R[2,2],  t[2]],
-                    [      0,       0,       0,     1],
-                ],
-                dtype=np.float64
-            )
+            R_c2w = self._rotation_matrix.T @ _ARKIT_TO_COLMAP_CAM
+            C = self.camera_position
+            M = np.eye(4, dtype=np.float64)
+            M[:3, :3] = R_c2w
+            M[:3, 3] = C
+            self._camera_to_world_matrix = M
         return self._camera_to_world_matrix

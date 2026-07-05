@@ -71,11 +71,10 @@ namespace lar {
     for (const auto& point3d : points3d) {
       int point3d_id = point3d.point3d_id;
       
-      // Convert COLMAP coordinates to ARKit convention (y and z flipped)
-      Eigen::Vector3d position;
-      position.x() = point3d.position.x();
-      position.y() = -point3d.position.y();  // Flip Y
-      position.z() = -point3d.position.z();  // Flip Z
+      // Under the corrected ARKit<->COLMAP convention (camera-axis flip only,
+      // world frame kept as ARKit's), COLMAP 3D points are already in ARKit
+      // world coordinates, so use them as-is.
+      Eigen::Vector3d position = point3d.position;
 
       // Get descriptor for this 3D point from cached data
       cv::Mat descriptor = getDescriptorForPointCached(point3d);
@@ -262,30 +261,24 @@ namespace lar {
     Eigen::Quaternion<double> quat(qw, qx, qy, qz);
     Eigen::Matrix3d R = quat.toRotationMatrix();
     
-    // Calculate camera position: -R^T * t (COLMAP world-to-camera to camera position)
+    // Camera center in world coords (= ARKit world frame): C = -R^T t.
+    // World frame is kept as ARKit's, so no axis flip on the position.
     Eigen::Vector3d colmap_translation(tx, ty, tz);
     Eigen::Vector3d camera_pos = -R.transpose() * colmap_translation;
-    
-    // Apply coordinate system conversion (COLMAP to ARKit)
-    Eigen::Vector3d arkit_position;
-    arkit_position.x() = camera_pos.x();
-    arkit_position.y() = -camera_pos.y();  // Flip Y
-    arkit_position.z() = -camera_pos.z();  // Flip Z
-    
-    // Build ARKit convention camera-to-world matrix
-    // Following the Python implementation in camera_to_world_matrix property
+
+    // Build ARKit convention camera-to-world matrix.
+    // Mirrors Python colmap_pose.py::ColmapPose.camera_to_world_matrix:
+    // R_c2w = R_w2c^T * F, with F = diag(1,-1,-1) (ARKit<->COLMAP camera axes).
     Eigen::Matrix4d transform = Eigen::Matrix4d::Identity();
-    
-    // Set rotation part with coordinate system conversion
-    transform(0,0) =  R(0,0); transform(0,1) =  -R(1,0); transform(0,2) =  -R(2,0);
-    transform(1,0) =  -R(0,1); transform(1,1) =  R(1,1); transform(1,2) =  R(2,1);
-    transform(2,0) =  -R(0,2); transform(2,1) =  R(1,2); transform(2,2) =  R(2,2);
-    
-    // Set translation part
-    transform(0,3) = arkit_position.x();
-    transform(1,3) = arkit_position.y();
-    transform(2,3) = arkit_position.z();
-    
+
+    transform(0,0) = R(0,0); transform(0,1) = -R(1,0); transform(0,2) = -R(2,0);
+    transform(1,0) = R(0,1); transform(1,1) = -R(1,1); transform(1,2) = -R(2,1);
+    transform(2,0) = R(0,2); transform(2,1) = -R(1,2); transform(2,2) = -R(2,2);
+
+    transform(0,3) = camera_pos.x();
+    transform(1,3) = camera_pos.y();
+    transform(2,3) = camera_pos.z();
+
     return transform;
   }
 

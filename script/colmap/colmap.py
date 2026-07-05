@@ -15,9 +15,26 @@ import argparse
 import glob
 from pathlib import Path
 from feature_extraction import extract_colmap_sift_features, extract_opencv_sift_features
-from database_operations import create_colmap_database, export_poses, insert_two_view_geometries_from_arkit
+from database_operations import create_colmap_database, export_poses, create_arkit_seed_model
 from arkit_integration import load_arkit_data, create_reference_file_from_arkit
 from map_export import export_aligned_map_json
+
+# Default vocab tree bundled alongside this script (Flickr100K, 32K words).
+BUNDLED_VOCAB_TREE = Path(__file__).resolve().parent / "vocab_tree.bin"
+
+def resolve_vocab_tree_path(source_dir):
+    """Resolve which vocab tree to use.
+
+    A per-session tree at <source_dir>/vocab_tree.bin takes precedence (lets you
+    override with one trained on your own data); otherwise fall back to the
+    bundled default committed next to this script. Returns None if neither exists.
+    """
+    session_tree = Path(source_dir) / "vocab_tree.bin"
+    if session_tree.exists():
+        return session_tree
+    if BUNDLED_VOCAB_TREE.exists():
+        return BUNDLED_VOCAB_TREE
+    return None
 
 def run_colmap_feature_matching(database_path):
     """Run COLMAP feature matching"""
@@ -60,6 +77,60 @@ def run_colmap_vocab_tree_feature_matching(database_path, vocab_tree_path):
         print(f"Feature matching failed: {e}")
         return False
 
+def run_colmap_sequential_feature_matching(database_path, overlap, vocab_tree_path=None):
+    """Run COLMAP sequential feature matching.
+
+    Matches each image against the next `overlap` images in filename order
+    (images are named `{frame_id:08d}_image.jpeg`, so lexicographic order is
+    capture order). When a vocab tree is available, loop detection is enabled to
+    additionally match images that are near in space but far apart in sequence.
+    """
+    cmd = [
+        "colmap", "sequential_matcher",
+        "--database_path", str(database_path),
+        "--SiftMatching.use_gpu", "1",
+        "--SiftMatching.guided_matching", "1",
+        "--SiftMatching.num_threads", "8",
+        # Tight geometric verification so the extra loop-closure candidate edges
+        # that survive are reliable, not spurious.
+        "--SiftMatching.max_ratio", "0.8",
+        "--TwoViewGeometry.min_num_inliers", "15",
+        "--SequentialMatching.overlap", str(overlap),
+        "--SequentialMatching.quadratic_overlap", "1",
+    ]
+
+    if vocab_tree_path is not None:
+        cmd += [
+            "--SequentialMatching.loop_detection", "1",
+            # Thorough loop closure with soft visual-word assignment
+            # (num_nearest_neighbors 5) for high retrieval recall. Query every 5th
+            # image rather than every image: consecutive frames are near-identical
+            # so they retrieve the same loop candidates, making period 1 mostly
+            # redundant work (a revisit spans many frames, so period 5 still catches
+            # it) -- period 5 is ~5x faster with negligible recall loss.
+            "--SequentialMatching.loop_detection_period", "5",
+            "--SequentialMatching.loop_detection_num_images", "40",
+            "--SequentialMatching.loop_detection_num_nearest_neighbors", "5",
+            # Cap features used to build/query the vocab tree index (default -1 =
+            # all). Indexing every extracted feature (up to max_num_features) is
+            # the dominant cost; top-scale features dominate retrieval anyway, so
+            # this speeds indexing ~4-8x. Full pairwise matching still uses all
+            # features, so map density is unaffected.
+            "--SequentialMatching.loop_detection_max_num_features", "4096",
+            "--SequentialMatching.vocab_tree_path", str(vocab_tree_path),
+        ]
+        print(f"Running COLMAP sequential feature matching (overlap {overlap}, vocab tree loop detection)...")
+    else:
+        print(f"Running COLMAP sequential feature matching (overlap {overlap}, window only)...")
+
+    try:
+        subprocess.run(cmd, check=True, text=True)
+        print("Feature matching completed successfully")
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"Feature matching failed: {e}")
+        return False
+
 def run_colmap_mapping(database_path, output_dir):
     """Run COLMAP sparse reconstruction (mapping)"""
     output_path = Path(output_dir)
@@ -90,6 +161,55 @@ def run_colmap_mapping(database_path, output_dir):
         return True
     except subprocess.CalledProcessError as e:
         print(f"Sparse reconstruction failed: {e}")
+        return False
+
+def run_arkit_pose_triangulation(frames, database_path, image_path, seed_dir, output_dir):
+    """Reconstruct by triangulating landmarks against fixed ARKit poses.
+
+    Vision-only SfM (incremental or GLOMAP) fails to cohere on wide-baseline /
+    low-parallax capture (e.g. park foliage) even with rich matches. Instead of
+    estimating poses from images, seed a COLMAP model with the trusted ARKit poses
+    for every frame and run point_triangulator to place landmarks. This yields a
+    fully-connected reconstruction over all posed frames -- poses never depend on
+    the visual view graph.
+    """
+    seed_dir = Path(seed_dir)
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    n = create_arkit_seed_model(frames, database_path, seed_dir)
+    if n == 0:
+        print("ARKit seed model is empty (no frames matched database images)")
+        return False
+
+    cmd = [
+        "colmap", "point_triangulator",
+        "--database_path", str(database_path),
+        "--image_path", str(image_path),
+        "--input_path", str(seed_dir),
+        "--output_path", str(output_path),
+        # Trust ARKit calibration + poses; don't let BA drift intrinsics.
+        "--Mapper.ba_refine_focal_length", "0",
+        "--Mapper.ba_refine_principal_point", "0",
+        "--Mapper.ba_refine_extra_params", "0",
+        # Looser triangulation thresholds recover more/longer tracks: ARKit VIO
+        # drift otherwise splits multi-view observations into separate 2-view
+        # points that later fail the >=3-sightings cull. Merging them into longer
+        # tracks roughly doubles the usable-landmark pool; the refiner's bundle
+        # adjustment + outlier removal then prunes any bad merges.
+        "--Mapper.tri_complete_max_reproj_error", "12",
+        "--Mapper.tri_merge_max_reproj_error", "12",
+        "--Mapper.filter_max_reproj_error", "12",
+        "--Mapper.tri_min_angle", "1.0",
+    ]
+
+    print("Running ARKit-pose triangulation (point_triangulator)...")
+    try:
+        subprocess.run(cmd, check=True, text=True)
+        print("Triangulation completed successfully")
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"Triangulation failed: {e}")
         return False
 
 def run_glomap_mapping(database_path, output_dir):
@@ -222,9 +342,24 @@ def extract_features(args, work_dir, database_path):
             exit(1)
 
 def feature_matching(args, database_path):
-    if args.use_vocab_tree:
+    if args.use_sequential:
+        print("\nRunning sequential feature matching...")
+        vocab_tree_path = resolve_vocab_tree_path(args.source_dir)
+        if vocab_tree_path is None:
+            print("No vocab tree found, running window-only sequential matching (no loop detection)")
+        else:
+            print(f"Using vocab tree: {vocab_tree_path}")
+        if not run_colmap_sequential_feature_matching(database_path, args.sequential_overlap, vocab_tree_path):
+            print("COLMAP pipeline failed at sequential feature matching")
+            exit(1)
+    elif args.use_vocab_tree:
         print("\nRunning vocab tree feature matching...")
-        if not run_colmap_vocab_tree_feature_matching(database_path, Path(args.source_dir) / "vocab_tree.bin"):
+        vocab_tree_path = resolve_vocab_tree_path(args.source_dir)
+        if vocab_tree_path is None:
+            print("No vocab tree found (looked in source_dir and next to script)")
+            exit(1)
+        print(f"Using vocab tree: {vocab_tree_path}")
+        if not run_colmap_vocab_tree_feature_matching(database_path, vocab_tree_path):
             print("COLMAP pipeline failed at vocab tree feature matching")
             exit(1)
     else:
@@ -233,14 +368,17 @@ def feature_matching(args, database_path):
             print("COLMAP pipeline failed at feature matching")
             exit(1)
 
-def insert_arkit_odometry(arkit_frames, database_path):
-    """Insert ARKit relative poses as odometry constraints for bundle adjustment"""
-    print("\nInserting ARKit VIO odometry constraints...")
-    count = insert_two_view_geometries_from_arkit(arkit_frames, database_path)
-    print(f"Added {count} relative pose constraints from ARKit VIO")
-
-def sparse_reconstruction(args, database_path, sparse_dir):
-    if args.use_glomap:
+def sparse_reconstruction(args, arkit_frames, database_path, sparse_dir):
+    if args.use_arkit_poses:
+        print("\nReconstructing by triangulating against ARKit poses...")
+        work_dir = Path(database_path).parent
+        seed_dir = work_dir / "arkit_seed"
+        # point_triangulator writes the model directly into output_path; use
+        # sparse/0 so the rest of the pipeline (which expects sparse/0) works.
+        if not run_arkit_pose_triangulation(arkit_frames, database_path, work_dir, seed_dir, sparse_dir / "0"):
+            print("COLMAP pipeline failed at ARKit-pose triangulation")
+            exit(1)
+    elif args.use_glomap:
         print("\nRunning global reconstruction with GLOMAP...")
         if not run_glomap_mapping(database_path, sparse_dir):
             print("GLOMAP pipeline failed at reconstruction")
@@ -301,8 +439,20 @@ def main():
                        help="Maximum error threshold for model alignment (default: 0.1)")
     parser.add_argument("--use_vocab_tree", action="store_true",
                        help="Use vocabulary tree matching instead of exhaustive matching")
+    parser.add_argument("--use_sequential", action="store_true",
+                       help="Use sequential (sliding-window) matching, with vocab tree loop detection. "
+                            "Uses <source_dir>/vocab_tree.bin if present, else the bundled default. "
+                            "Best for sequential captures.")
+    parser.add_argument("--sequential_overlap", type=int, default=10,
+                       help="Number of subsequent images to match per image for sequential matching (default: 10)")
     parser.add_argument("--use_glomap", action="store_true",
                        help="Use GLOMAP for reconstruction instead of COLMAP (faster, global SfM)")
+    parser.add_argument("--use_arkit_poses", action="store_true",
+                       help="Reconstruct by triangulating landmarks against fixed ARKit poses "
+                            "(seed model + point_triangulator). Best when vision-only SfM cannot "
+                            "cohere (wide-baseline / low-parallax capture). Produces a fully "
+                            "connected model in ARKit coordinates; skips model alignment. Takes "
+                            "precedence over the other reconstruction options.")
 
     args = parser.parse_args()
     work_dir = Path(args.source_dir) / "colmap"
@@ -316,30 +466,38 @@ def main():
     # Step 1: Setup
     arkit_frames = setup(args, frames_json_path, database_path, work_dir)
 
-    # # Step 2: Extract SIFT features
+    # Step 2: Extract SIFT features
     extract_features(args, work_dir, database_path)
 
     # Step 3: Feature matching
     feature_matching(args, database_path)
 
-    # Step 4: Insert ARKit odometry constraints
-    insert_arkit_odometry(arkit_frames, database_path)
-
-    # Step 5: Sparse reconstruction
-    reconstruction_path = sparse_reconstruction(args, database_path, sparse_dir)
+    # Step 4: Sparse reconstruction
+    reconstruction_path = sparse_reconstruction(args, arkit_frames, database_path, sparse_dir)
     reconstruction_path = sparse_dir / "0"
 
-    # Step 6: Model alignment
-    reconstruction_path = model_alignment(args, arkit_frames, ref_coords_file, reconstruction_path, database_path)
+    # Step 6: Model alignment. Skipped for --use_arkit_poses: the model is already
+    # built directly in ARKit world coordinates, so there is nothing to align.
+    if args.use_arkit_poses:
+        print("\nSkipping model alignment (ARKit-pose model is already in ARKit coordinates)")
+    else:
+        reconstruction_path = model_alignment(args, arkit_frames, ref_coords_file, reconstruction_path, database_path)
 
     # Step 7: Export map
     export_map(args, database_path, map_json_file, arkit_frames, reconstruction_path, poses_dir)
 
     print(f"\n✅ Processing completed successfully!")
     print(f"Feature extraction method: {'COLMAP' if args.use_colmap_sift else 'OpenCV'}")
-    print(f"Matching method: {'Vocabulary Tree' if args.use_vocab_tree else 'Exhaustive'}")
-    print(f"Reconstruction method: {'GLOMAP' if args.use_glomap else 'COLMAP'}")
-    print(f"Model alignment: Applied in place")
+    matching_method = "Sequential" if args.use_sequential else ("Vocabulary Tree" if args.use_vocab_tree else "Exhaustive")
+    print(f"Matching method: {matching_method}")
+    if args.use_arkit_poses:
+        reconstruction_method = "ARKit-pose triangulation"
+    elif args.use_glomap:
+        reconstruction_method = "GLOMAP"
+    else:
+        reconstruction_method = "COLMAP"
+    print(f"Reconstruction method: {reconstruction_method}")
+    print(f"Model alignment: {'Skipped (ARKit coords)' if args.use_arkit_poses else 'Applied in place'}")
     print(f"Final map: {map_json_file}")
     print(f"Launch gui with: colmap gui --database_path {database_path} --import_path {reconstruction_path} --image_path {work_dir}")
     return 0
