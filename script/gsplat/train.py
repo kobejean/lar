@@ -299,11 +299,14 @@ def _save_preview(rgb: torch.Tensor, path: Path) -> None:
 def main():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--model", required=True,
-                   help="COLMAP text model dir (…/colmap/poses_txt)")
+    p.add_argument("--session", default=None,
+                   help="LAR session name: fills --model/--images/--out from the canonical "
+                        "layout (script/lar_session.py). Explicit flags override.")
+    p.add_argument("--model", default=None,
+                   help="COLMAP text model dir (…/colmap/sparse/0 or …/poses_txt)")
     p.add_argument("--images", default=None,
-                   help="image dir (default: parent of --model, i.e. …/colmap)")
-    p.add_argument("--out", required=True, help="output dir for plys/previews/config")
+                   help="image dir (default: session images, else parent of --model)")
+    p.add_argument("--out", default=None, help="output dir for plys/previews/config")
     p.add_argument("--data-factor", type=int, default=2,
                    help="downscale images by this integer factor (default: 2; use >=2 at park scale)")
     p.add_argument("--limit", type=int, default=None,
@@ -341,9 +344,27 @@ def main():
                         "survives a late crash (default 5000; 0 = only at the end)")
 
     args = p.parse_args()
+    _resolve_session(args, p)
     if args.preview_every == 0:
         args.preview_every = args.max_steps  # still dump one at the end
     train(args)
+
+
+def _resolve_session(args, parser):
+    """Fill --model/--images/--out from --session (canonical layout); explicit flags win."""
+    if args.session:
+        import sys
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+        from lar_session import Session
+        s = Session(args.session)
+        args.model = args.model or str(s.best_model())
+        args.images = args.images or str(s.images)
+        args.out = args.out or str(s.gsplat_out(semantic=args.semantic))
+        print(f"session '{args.session}':\n  model  = {args.model}\n"
+              f"  images = {args.images}\n  out    = {args.out}")
+    missing = [m for m in ("model", "out") if not getattr(args, m)]
+    if missing:
+        parser.error("need --session or explicit " + " ".join(f"--{m}" for m in missing))
 
 
 if __name__ == "__main__":

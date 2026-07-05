@@ -140,6 +140,9 @@ def _log_class_histogram(labels: np.ndarray, log) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser(description="Semantic BEV ground model from COLMAP points "
                                              "or a semantic 3DGS export")
+    ap.add_argument("--session", default=None,
+                    help="LAR session name: fills --model/--images/--gsplat-dir/--out from the "
+                         "canonical layout (script/lar_session.py). Explicit flags override.")
     ap.add_argument("--source", default="colmap", choices=["colmap", "gsplat"],
                     help="geometry source: 'colmap' sparse points + segmentation (default), or "
                          "'gsplat' a trained semantic 3DGS export (denser, pre-labelled)")
@@ -151,7 +154,7 @@ def main() -> None:
                     help="COLMAP text model dir. Required for --source colmap; for --source gsplat "
                          "it supplies camera orientations for gravity (unless --up-axis/--up-sign given)")
     ap.add_argument("--images", default=None, help="directory of source images (--source colmap)")
-    ap.add_argument("--out", required=True, help="output directory")
+    ap.add_argument("--out", default=None, help="output directory (derived from --session if unset)")
     ap.add_argument("--segmenter", default="heuristic", choices=list(SEGMENTER_KINDS))
     ap.add_argument("--cell-size", type=float, default=0.5, help="metres per grid cell")
     ap.add_argument("--up-axis", type=int, default=None, choices=[0, 1, 2], help="0=x,1=y,2=z (auto if unset)")
@@ -162,10 +165,25 @@ def main() -> None:
     ap.add_argument("--semantic-mode", default="vote", choices=["vote", "project"],
                     help="vote: sparse point votes (fast); project: dense-mask projection (cleaner)")
     args = ap.parse_args()
+    if args.session:
+        import sys
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+        from lar_session import Session
+        s = Session(args.session)
+        args.model = args.model or str(s.best_model())  # geometry (colmap) or gravity (gsplat)
+        args.out = args.out or str(s.sbev_out(args.source))
+        if args.source == "gsplat":
+            args.gsplat_dir = args.gsplat_dir or str(s.gsplat_out(semantic=True))
+        else:
+            args.images = args.images or str(s.images)
+        print(f"session '{args.session}': source={args.source} out={args.out}")
+
+    if not args.out:
+        ap.error("need --session or --out")
     if args.source == "colmap" and (not args.model or not args.images):
-        ap.error("--source colmap requires --model and --images")
+        ap.error("--source colmap requires --model and --images (or --session)")
     if args.source == "gsplat" and not args.gsplat_dir:
-        ap.error("--source gsplat requires --gsplat-dir")
+        ap.error("--source gsplat requires --gsplat-dir (or --session)")
 
     run(args.model, args.images, args.out, source=args.source, gsplat_dir=args.gsplat_dir,
         min_opacity=args.min_opacity, segmenter_kind=args.segmenter,

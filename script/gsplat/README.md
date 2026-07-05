@@ -94,33 +94,30 @@ export TORCH_CUDA_ARCH_LIST=12.0     # Blackwell sm_120
 
 ## Run
 
-Smoke test (subset, few steps — proves the chain end to end):
+**Just pass `--session <name>`** and paths are filled from the canonical layout
+([`../lar_session.py`](../lar_session.py)): `--model` = the refined COLMAP model if it
+exists else the raw one, `--images` = `input/<name>`, `--out` = `output/<name>-gsplat[-sem]`.
+Any explicit flag overrides.
+
+Semantic park model (the usual command):
 
 ```sh
 cd script/gsplat
-uv run --extra gsplat python train.py \
-  --model ../../input/maguro-park-after-itchy/colmap/poses_txt \
-  --out   ../../output/maguro-gsplat-smoke \
-  --limit 40 --data-factor 4 --cap-max 80000 --max-steps 500 --preview-every 100
-```
-
-Coarse park model (RGB):
-
-```sh
-uv run --extra gsplat python train.py \
-  --model ../../input/maguro-park-after-itchy/colmap/poses_txt \
-  --out   ../../output/maguro-gsplat \
-  --data-factor 2 --cap-max 300000 --max-steps 30000
-```
-
-Semantic 3DGS (adds the distilled class head):
-
-```sh
 uv run --extra gsplat --extra segmentation python train.py \
-  --model ../../input/maguro-park-after-itchy/colmap/poses_txt \
-  --out   ../../output/maguro-gsplat-sem \
+  --session maguro-park-after-itchy \
   --data-factor 2 --cap-max 300000 --max-steps 30000 \
   --semantic --segmenter mask2former-large
+```
+
+RGB only — drop `--semantic` (writes to `output/<name>-gsplat`). Smoke test — add
+`--limit 40 --max-steps 500` (and `--out` if you don't want to overwrite the real run).
+
+Explicit paths still work instead of `--session`:
+
+```sh
+uv run --extra gsplat python train.py \
+  --model ../../input/maguro-park-after-itchy/colmap/poses_txt \
+  --out   ../../output/maguro-gsplat --data-factor 2 --cap-max 300000 --max-steps 30000
 ```
 
 `--segmenter` accepts any `semantic_bev` backend: `oneformer` / `oneformer-large` /

@@ -94,6 +94,16 @@ class, so this skips segmentation/voting entirely and feeds a much denser, pre-l
 cloud straight into the *same* `build_level`. `--model` is still used (cameras only) to
 detect gravity/up, unless you pass `--up-axis`/`--up-sign`.
 
+**Just pass `--session <name>`** (canonical layout, [`../lar_session.py`](../lar_session.py)):
+it fills `--gsplat-dir` = `output/<name>-gsplat-sem`, `--model` = the refined model (for
+gravity), and `--out` = `output/<name>-sbev-gsplat`. Explicit flags override.
+
+```sh
+uv run python pipeline.py --session maguro-park-after-itchy --source gsplat --cell-size 0.5
+```
+
+Equivalent explicit form:
+
 ```sh
 uv run python pipeline.py --source gsplat \
   --gsplat-dir ../../output/<session>-gsplat-sem \
