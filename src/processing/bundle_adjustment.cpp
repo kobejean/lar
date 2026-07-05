@@ -31,6 +31,35 @@ static constexpr double ANISOTROPY_RATIO = 2.0;           // Major/minor axis ra
 static constexpr double MIN_INFORMATION = 0.1;            // Minimum information value
 static constexpr double MAX_INFORMATION = 100.0;          // Maximum information value
 
+// --- Odometry confidence tiers -------------------------------------------------------
+// Multiplicative scale applied to an odometry edge's information matrix based on the
+// capture-time Frame::odom_state (lar::OdometryConfidence) — the worst platform tracking
+// state observed over the interval into that frame. HIGH = full trust; MEDIUM = downweight
+// (noisy but continuous motion); LOW = near-free so drift correction / loop closure is
+// absorbed on these edges (they span a tracking discontinuity). These three numbers are
+// the only tunable knobs; the capture side emits the categorical tier untouched.
+// See docs/ODOMETRY_CONFIDENCE.md.
+static constexpr double ODOM_CONFIDENCE_WEIGHT_HIGH   = 1.0;
+static constexpr double ODOM_CONFIDENCE_WEIGHT_MEDIUM = 0.25;
+static constexpr double ODOM_CONFIDENCE_WEIGHT_LOW    = 0.02;
+
+static double odomConfidenceWeight(int odom_state) {
+  using OC = lar::OdometryConfidence;
+  switch (static_cast<OC>(odom_state)) {
+    case OC::Normal:
+      return ODOM_CONFIDENCE_WEIGHT_HIGH;
+    case OC::LimitedInitializing:
+    case OC::LimitedExcessiveMotion:
+    case OC::LimitedInsufficientVisual:
+      return ODOM_CONFIDENCE_WEIGHT_MEDIUM;
+    case OC::Relocalizing:
+    case OC::Unavailable:
+      return ODOM_CONFIDENCE_WEIGHT_LOW;
+    default:
+      return ODOM_CONFIDENCE_WEIGHT_HIGH;  // unknown/future value -> full trust (no regression)
+  }
+}
+
 G2O_USE_OPTIMIZATION_LIBRARY(eigen);
 
 namespace g2o {
@@ -366,6 +395,10 @@ namespace lar {
     info.block<3,3>(0,0) = Eigen::Matrix3d::Identity() * distance_scale * distance_scale / (translation_uncertainty*translation_uncertainty);
     // Rotation information: scales as 1/distance² (drift accumulates with time/distance)
     info.block<3,3>(3,3) = Eigen::Matrix3d::Identity() * distance_scale * distance_scale / (rotation_uncertainty*rotation_uncertainty);
+    // Scale by the capture-time confidence tier for the interval into frame2. The edge runs
+    // frame_id-1 -> frame_id and odom_state describes exactly that interval, so a shaky /
+    // relocalizing stretch is down-weighted here rather than trusted like a clean one.
+    info *= odomConfidenceWeight(frame2.odom_state);
     e->setInformation(info);
     // g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
     // rk->setDelta(sqrt(12.592));
