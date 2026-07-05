@@ -248,6 +248,16 @@ namespace lar {
   }
 
 
+  std::pair<Eigen::Matrix3d, Eigen::Vector3d>
+  ColmapDatabase::arkitToColmapWorldToCamera(const Eigen::Matrix4d& extrinsics) {
+    // Camera-axis flip F = diag(1,-1,-1); world frame is kept as ARKit's.
+    const Eigen::Matrix3d F = Eigen::Vector3d(1.0, -1.0, -1.0).asDiagonal();
+    Eigen::Matrix3d R_c2w = extrinsics.block<3, 3>(0, 0);
+    Eigen::Vector3d C = extrinsics.block<3, 1>(0, 3);  // camera center (ARKit world)
+    Eigen::Matrix3d R_w2c = F * R_c2w.transpose();
+    return {R_w2c, -R_w2c * C};
+  }
+
   Eigen::Matrix4d ColmapDatabase::colmapPoseToMatrix(const std::vector<double>& quat_trans) {
     double qw = quat_trans[0];
     double qx = quat_trans[1]; 

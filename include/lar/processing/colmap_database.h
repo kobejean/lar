@@ -7,6 +7,7 @@
 #include <string>
 #include <map>
 #include <vector>
+#include <utility>
 #include <sqlite3.h>
 
 #include <Eigen/Core>
@@ -40,6 +41,13 @@ namespace lar {
 
     bool readDatabase(const std::string& database_path);
     bool readSparseReconstruction(const std::string& sparse_dir);
+
+    // Single source of truth for the ARKit<->COLMAP camera-axis flip
+    // F = diag(1,-1,-1). Forward: refined ARKit camera-to-world extrinsics ->
+    // COLMAP world-to-camera (R_w2c, t) = (F * R_c2w^T, -R_w2c * C). This is the
+    // inverse of colmapPoseToMatrix and mirrors colmap_pose.py.
+    static std::pair<Eigen::Matrix3d, Eigen::Vector3d>
+    arkitToColmapWorldToCamera(const Eigen::Matrix4d& extrinsics);
     
     // Construct complete landmarks from COLMAP data (like Python script)
     void constructLandmarksFromColmap(

@@ -28,6 +28,9 @@ namespace lar {
       void optimize();
       void rescale(double scale_factor);
       void saveMap(std::string dir);
+      // Write the refined reconstruction as a COLMAP sparse text model
+      // (<dir>/colmap/sparse/0) so it can be opened directly in `colmap gui`.
+      void saveColmapModel(std::string dir);
     // private:
       std::vector<Eigen::Matrix4d> localizations;
       Tracker tracker;
