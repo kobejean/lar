@@ -87,11 +87,25 @@ def read_cameras_text(path: Path) -> dict[int, Camera]:
 
 
 def read_images_text(path: Path) -> dict[int, Image]:
-    """Two lines per image: pose line, then a flat (X, Y, POINT3D_ID) triple list."""
+    """Two *physical* lines per image: a pose header, then a (X, Y, POINT3D_ID) list.
+
+    The POINTS2D line can be **empty** (a refined image with a pose but no surviving 2D
+    points -- valid COLMAP). Pair by physical line position, not by filtering blanks first,
+    or those empty lines desync every subsequent pose.
+    """
     images: dict[int, Image] = {}
-    it = _read_lines(path)
-    for header in it:
-        pts_line = next(it)
+    with open(path) as f:
+        lines = f.read().split("\n")
+
+    i, n = 0, len(lines)
+    while i < n:
+        header = lines[i].strip()
+        if not header or header.startswith("#"):
+            i += 1
+            continue
+        pts_line = lines[i + 1] if i + 1 < n else ""
+        i += 2
+
         h = header.split()
         img_id = int(h[0])
         qvec = np.array(h[1:5], dtype=np.float64)
@@ -99,15 +113,15 @@ def read_images_text(path: Path) -> dict[int, Image]:
         camera_id = int(h[8])
         name = h[9]
 
-        vals = np.array(pts_line.split(), dtype=np.float64).reshape(-1, 3)
+        toks = pts_line.split()
+        if toks:
+            vals = np.array(toks, dtype=np.float64).reshape(-1, 3)
+            xys, pids = vals[:, :2].copy(), vals[:, 2].astype(np.int64)
+        else:
+            xys, pids = np.empty((0, 2)), np.empty((0,), dtype=np.int64)
         images[img_id] = Image(
-            id=img_id,
-            qvec=qvec,
-            tvec=tvec,
-            camera_id=camera_id,
-            name=name,
-            xys=vals[:, :2].copy(),
-            point3d_ids=vals[:, 2].astype(np.int64),
+            id=img_id, qvec=qvec, tvec=tvec, camera_id=camera_id, name=name,
+            xys=xys, point3d_ids=pids,
         )
     return images
 
