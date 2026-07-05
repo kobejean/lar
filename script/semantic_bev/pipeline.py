@@ -63,8 +63,12 @@ def run(model_dir: str | None, image_dir: str | None, out_dir: str, *,
         # Back-project labelled pixels through per-view metric depth. Needs the same masks
         # as the colmap source; only the geometry (points) comes from depth, not tracks.
         mask_dir = out / "masks"
-        log(f"[1/4] reading COLMAP model: {model_dir}")
-        recon = read_model(model_dir)
+        # A backend may ship its own model (e.g. MVS's undistorted one) with matching
+        # intrinsics — prefer it over the passed --model.
+        colocated = Path(depth_dir) / "model"
+        depth_model = colocated if (colocated / "cameras.txt").exists() else Path(model_dir)
+        log(f"[1/4] reading COLMAP model: {depth_model}")
+        recon = read_model(depth_model)
         image_ids = sorted(recon.images)
         if limit is not None:
             image_ids = image_ids[:limit]
