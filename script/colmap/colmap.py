@@ -17,6 +17,11 @@ from pathlib import Path
 from feature_extraction import extract_colmap_sift_features, extract_opencv_sift_features
 from database_operations import create_colmap_database, export_poses, create_arkit_seed_model
 from arkit_integration import load_arkit_data, create_reference_file_from_arkit
+from covisibility import (
+    generate_covisibility_pairs,
+    run_colmap_matches_importer,
+    report_view_graph_connectivity,
+)
 from map_export import export_aligned_map_json
 
 # Default vocab tree bundled alongside this script (Flickr100K, 32K words).
@@ -341,7 +346,32 @@ def extract_features(args, work_dir, database_path):
             print("COLMAP pipeline failed at feature import")
             exit(1)
 
-def feature_matching(args, database_path):
+def run_covisibility_matching(args, arkit_frames, database_path, work_dir):
+    """Augment matching with ARKit-covisibility pairs (loop-closure connectivity).
+
+    Proposes image pairs from ARKit geometry (drift-aware, odom_state-widened
+    radius) that appearance matching misses, then matches + verifies them into the
+    database on top of whatever the primary matcher produced.
+    """
+    pairs_path = Path(work_dir) / "covisibility_pairs.txt"
+    n_pairs = generate_covisibility_pairs(
+        arkit_frames, database_path, pairs_path,
+        base_radius=args.covis_base_radius,
+        base_drift_rate=args.covis_drift_rate,
+        drift_cap=args.covis_drift_cap,
+        max_angle_deg=args.covis_max_angle,
+        min_seq_gap=args.covis_min_seq_gap,
+        max_pairs_per_image=args.covis_max_pairs,
+    )
+    if n_pairs == 0:
+        print("No covisibility pairs generated; skipping matches_importer.")
+        return
+    if not run_colmap_matches_importer(database_path, pairs_path):
+        print("COLMAP pipeline failed at covisibility matching")
+        exit(1)
+
+
+def feature_matching(args, arkit_frames, database_path, work_dir):
     if args.use_sequential:
         print("\nRunning sequential feature matching...")
         vocab_tree_path = resolve_vocab_tree_path(args.source_dir)
@@ -367,6 +397,14 @@ def feature_matching(args, database_path):
         if not run_colmap_feature_matching(database_path):
             print("COLMAP pipeline failed at feature matching")
             exit(1)
+
+    if args.use_covisibility:
+        print("\nAugmenting with ARKit-covisibility matching...")
+        report_view_graph_connectivity(database_path, label="before covisibility")
+        run_covisibility_matching(args, arkit_frames, database_path, work_dir)
+
+    # Measurement: how connected is the verified view graph now? (the 192/673 number)
+    report_view_graph_connectivity(database_path, label="after matching")
 
 def sparse_reconstruction(args, arkit_frames, database_path, sparse_dir):
     if args.use_arkit_poses:
@@ -453,6 +491,24 @@ def main():
                             "cohere (wide-baseline / low-parallax capture). Produces a fully "
                             "connected model in ARKit coordinates; skips model alignment. Takes "
                             "precedence over the other reconstruction options.")
+    parser.add_argument("--use_covisibility", action="store_true",
+                       help="Augment matching with ARKit-covisibility pairs: propose image pairs "
+                            "from ARKit geometry (drift- and odom_state-aware radius) that "
+                            "appearance matching misses, then match+verify them. Adds loop-closure "
+                            "connectivity on top of the primary matcher.")
+    parser.add_argument("--covis_base_radius", type=float, default=8.0,
+                       help="Covisibility radius (metres) before drift slack (default: 8.0)")
+    parser.add_argument("--covis_drift_rate", type=float, default=0.02,
+                       help="Normal-tracking drift as a fraction of arc length (default: 0.02 = 2%%)")
+    parser.add_argument("--covis_drift_cap", type=float, default=15.0,
+                       help="Max drift slack added to the radius, metres (default: 15.0)")
+    parser.add_argument("--covis_max_angle", type=float, default=45.0,
+                       help="Max optical-axis angle between paired frames, degrees (default: 45)")
+    parser.add_argument("--covis_min_seq_gap", type=int, default=10,
+                       help="Skip covisibility pairs closer than this in capture order; the "
+                            "sequential matcher covers the local window (default: 10)")
+    parser.add_argument("--covis_max_pairs", type=int, default=30,
+                       help="Keep only the nearest N covisibility candidates per image (default: 30)")
 
     args = parser.parse_args()
     work_dir = Path(args.source_dir) / "colmap"
@@ -470,7 +526,7 @@ def main():
     extract_features(args, work_dir, database_path)
 
     # Step 3: Feature matching
-    feature_matching(args, database_path)
+    feature_matching(args, arkit_frames, database_path, work_dir)
 
     # Step 4: Sparse reconstruction
     reconstruction_path = sparse_reconstruction(args, arkit_frames, database_path, sparse_dir)
