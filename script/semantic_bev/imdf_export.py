@@ -30,6 +30,7 @@ from shapely.geometry.polygon import orient
 from shapely.ops import unary_union
 
 from colmap_io import qvec2rotmat, read_model
+from grid_transform import cells_to_world
 from taxonomy import CLASSES, Klass
 
 # --- allowed category enums (OGC IMDF 1.0.0 / docs.ogc.org/cs/20-094) ---------------
@@ -96,10 +97,7 @@ def fit_world_to_wgs84(recon, frames_path: str | Path, gps_path: str | Path):
 
 def _pix_to_world(pts_xy: np.ndarray, meta: dict) -> np.ndarray:
     """cv2 contour pixels (col=x, row=y) -> world (X,Z) metres."""
-    world = np.empty_like(pts_xy, dtype=np.float64)
-    world[:, 0] = meta["origin_u"] + pts_xy[:, 0] * meta["cell_size"]  # X
-    world[:, 1] = meta["origin_v"] + pts_xy[:, 1] * meta["cell_size"]  # Z
-    return world
+    return cells_to_world(pts_xy, meta)
 
 
 def mask_to_polygons(binary: np.ndarray, meta: dict, simplify_m: float = 0.5,
@@ -180,7 +178,8 @@ def _geom_wgs84(poly: Polygon, to_wgs84) -> dict:
 def build_imdf(level_dir: str | Path, model_dir: str | Path, frames_path: str | Path,
                gps_path: str | Path, venue_name: str = "Maguro Park",
                venue_category: str = "themepark", locality: str = "Tokyo",
-               country: str = "JP", smooth: bool = True, log=print) -> dict:
+               country: str = "JP", smooth: bool = True, paths: str = "polygon",
+               log=print) -> dict:
     d = Path(level_dir)
     meta = json.load(open(d / "level0.meta.json"))
     npz = np.load(d / "level0.npz")
@@ -228,7 +227,7 @@ def build_imdf(level_dir: str | Path, model_dir: str | Path, frames_path: str | 
                       "display_point": _display_point(venue_poly, to_wgs84),
                       "address_id": address["id"], "building_ids": None})
 
-    units = []
+    units, routing = [], []
     for category, klasses in cat_classes.items():
         if category not in UNIT_CATEGORIES:
             log(f"  skipping unit category '{category}' (not in IMDF enum)")
@@ -237,10 +236,23 @@ def build_imdf(level_dir: str | Path, model_dir: str | Path, frames_path: str | 
         # consolidate before tracing: drop specks (open) then fill pinholes (close).
         k = np.ones((3, 3), np.uint8)
         mask = cv2.morphologyEx(cv2.morphologyEx(mask, cv2.MORPH_OPEN, k), cv2.MORPH_CLOSE, k)
-        polys = mask_to_polygons(mask, meta, simplify_m=0.6, min_area_m2=5.0)
+
+        if category == "walkway" and paths == "centerline":
+            # elegant paths: skeleton -> centerline graph -> constant-width polygons
+            from path_centerlines import centerlines_to_polygons, walkway_centerlines
+            cls = walkway_centerlines(mask, meta)
+            merged = centerlines_to_polygons(cls)
+            for c in cls:
+                ll = to_wgs84(c["line"])
+                if len(ll) >= 2:
+                    routing.append({"coords": [[float(x), float(y)] for x, y in ll.tolist()],
+                                    "width_m": round(c["width"], 2)})
+            log(f"  walkway: {len(cls)} centerline segments")
+        else:
+            polys = mask_to_polygons(mask, meta, simplify_m=0.6, min_area_m2=5.0)
+            merged = unary_union(polys) if polys else None
 
         # merge touching pieces, then cartographically smooth each region
-        merged = unary_union(polys) if polys else None
         parts = ([] if merged is None or merged.is_empty
                  else list(merged.geoms) if merged.geom_type == "MultiPolygon" else [merged])
         cat_polys = []
@@ -259,7 +271,7 @@ def build_imdf(level_dir: str | Path, model_dir: str | Path, frames_path: str | 
         "manifest": {"version": "1.0.0", "created": datetime.now(timezone.utc).isoformat(),
                      "generated_by": "lar semantic_bev", "language": "en", "extensions": []},
         "address": [address], "venue": [venue], "level": [level], "unit": units,
-        "_geo": geo,
+        "_geo": geo, "_routing": routing,
     }
 
 
@@ -272,6 +284,15 @@ def write_archive(imdf: dict, out_dir: str | Path, log=print) -> None:
         (out / f"{ftype}.geojson").write_text(json.dumps(fc))
     log(f"wrote IMDF archive -> {out} "
         f"({len(imdf['unit'])} units, {len(imdf['level'])} level, {len(imdf['venue'])} venue)")
+
+    # bonus (not part of the IMDF spec): path centerline graph for LAR navigation
+    routing = imdf.get("_routing") or []
+    if routing:
+        fc = {"type": "FeatureCollection", "name": "routing", "features": [
+            {"type": "Feature", "geometry": {"type": "LineString", "coordinates": r["coords"]},
+             "properties": {"width_m": r["width_m"]}} for r in routing]}
+        (out / "routing.geojson").write_text(json.dumps(fc))
+        log(f"  + routing.geojson ({len(fc['features'])} path centerlines)")
 
 
 # ---- self-validation ----------------------------------------------------------------
@@ -335,11 +356,13 @@ def main() -> None:
     ap.add_argument("--venue-name", default="Maguro Park")
     ap.add_argument("--venue-category", default="themepark", choices=sorted(VENUE_CATEGORIES))
     ap.add_argument("--no-smooth", action="store_true", help="disable cartographic smoothing")
+    ap.add_argument("--paths", default="polygon", choices=["polygon", "centerline"],
+                    help="walkway units: traced polygons, or centerline-graph constant-width paths")
     args = ap.parse_args()
 
     imdf = build_imdf(args.level, args.model, args.frames, args.gps,
                       venue_name=args.venue_name, venue_category=args.venue_category,
-                      smooth=not args.no_smooth)
+                      smooth=not args.no_smooth, paths=args.paths)
     ok = validate(imdf)
     write_archive(imdf, args.out or (Path(args.level) / "imdf"))
     if not ok:

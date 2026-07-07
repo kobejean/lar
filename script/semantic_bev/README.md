@@ -26,6 +26,8 @@ export — and the semantic labels are intended to feed back into localization.
 
 | file | role |
 |------|------|
+| `geometry.py`    | **pure-geometry front-end**: gravity-align + robust ground DEM + ground/vertical split (no semantics) |
+| `geometry_cli.py`| run `geometry.py` on a COLMAP model → DEM hillshade, structure-height, ground/vertical, trajectory, cross-sections |
 | `colmap_io.py`   | read COLMAP text model; tracks give exact observed pixel per point |
 | `taxonomy.py`    | **the semantic contract**: prompts → internal class → IMDF category |
 | `segmentation.py`| `Segmenter` interface + `Heuristic`/`ClipSeg`/`OneFormer` backends |
@@ -36,6 +38,41 @@ export — and the semantic labels are intended to feed back into localization.
 | `pipeline.py`    | end-to-end driver + CLI (auto up-axis/sign detection) |
 | `compare_segmenters.py` | run backends side-by-side on sample images → comparison grid |
 | `verify_orientation.py` | overlay camera trajectory on the BEV (orientation sanity) |
+
+## Geometry front-end (`geometry.py` / `geometry_cli.py`)
+
+"Master the geometry first" — a semantics-free ground model, so the DEM / ground mask /
+obstacle mask are correct *before* any labels are projected onto them. Three products:
+
+1. **Gravity-aligned frame** — up is measured from camera image-up averaged over all
+   frames (not axis-snapped). On `maguro-park-after-itchy-refined` gravity is only 0.92°
+   off −Y, but that's ~1.5 m of false slope across the 90 m park, so we rotate by the full
+   vector and keep the horizontal axes level.
+2. **Ground DEM** — robust *lower envelope*: a low per-cell quantile seeds the surface,
+   then an iterative refit inside an asymmetric band (tight below, looser above) locks it
+   to the ground cluster without climbing into the bush/canopy layer. Smoothing is
+   normalised-convolution (blur observed ÷ blur mask) so unobserved cells never drag real
+   ground up. Sharp to ~15–20 cm where cameras walked; the rest is marked extrapolated.
+3. **Ground / vertical / floater split** — per-point height-above-ground: within the band
+   = ground, above = vertical structure, below = floater/outlier.
+
+```sh
+uv run python geometry_cli.py \
+  --model ../../output/maguro-park-after-itchy-refined/sparse/0 \
+  --out   ../../output/maguro-park-after-itchy-geom --cell-size 0.5
+```
+
+Emits `ground_field.npz` (dem, coverage, R, up, origin, cell_size) + previews:
+`dem_hillshade`, `structure_height`, `ground_vs_vertical`, `camera_trajectory`,
+`cross_sections` (the real ground-quality test — DEM vs. class-coloured points). No
+matplotlib dependency (renders via cv2).
+
+> **Note — the refined LAR model has no tracks.** `…-refined/sparse/0` stores poses +
+> point *positions* only: `points3D.txt` has no track, colour, or reproj-error (all
+> RGB=180,180,180, error=1.0) and `images.txt` has empty POINTS2D. So track-pixel
+> semantic voting (`labeling.py`) **cannot run on the refined model** — semantics there
+> must come from dense-mask projection (poses + intrinsics), which needs no tracks. The
+> geometry front-end uses only positions + camera orientations, so it works fine.
 
 ## Semantic raster modes (`--semantic-mode`)
 

@@ -16,6 +16,8 @@ from shapely.geometry import LineString
 from shapely.ops import unary_union
 from skimage.morphology import skeletonize
 
+from grid_transform import cells_to_world
+
 _NB = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
 _STEP = {o: (2 ** 0.5 if o[0] and o[1] else 1.0) for o in _NB}
 
@@ -93,7 +95,8 @@ def walkway_centerlines(mask: np.ndarray, meta: dict, prune_m: float = 1.5,
         is_spur = deg[path[0]] == 1 or deg[path[-1]] == 1
         if (is_spur and length_m < prune_m) or length_m < min_len_m:
             continue
-        world = np.array([[meta["origin_u"] + x * cs, meta["origin_v"] + y * cs] for y, x in path])
+        rc = np.array(path, dtype=np.float64)  # (N,2) as (row, col)
+        world = cells_to_world(rc[:, ::-1], meta)  # -> (col, row) -> world (X, Z)
         world = _chaikin(world, smooth_iters)
         halfw = np.array([dist[y, x] for y, x in path]) * cs            # dist = half-width
         out.append({"line": world, "width": float(2 * np.median(halfw))})
