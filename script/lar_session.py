@@ -59,8 +59,10 @@ class Session:
         return self.refined_model if (self.refined_model / "images.txt").exists() else self.colmap_model
 
     # ---- outputs ------------------------------------------------------------
-    def gsplat_out(self, semantic: bool = False) -> Path:
-        return self.root / "output" / f"{self.name}-gsplat{'-sem' if semantic else ''}"
+    def gsplat_out(self, semantic: bool = False, mode: str = "3dgs") -> Path:
+        # 2DGS (surfel) models live in a sibling dir so a 2dgs run never clobbers the 3dgs one.
+        kind = "gsplat2d" if mode == "2dgs" else "gsplat"
+        return self.root / "output" / f"{self.name}-{kind}{'-sem' if semantic else ''}"
 
     def sbev_out(self, source: str = "colmap", tag: str | None = None) -> Path:
         suffix = f"-{tag}" if tag else ("-gsplat" if source == "gsplat" else "")

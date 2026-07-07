@@ -21,7 +21,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from gsplat import rasterization
+from gsplat import rasterization, rasterization_2dgs
 from colmap_dataset import read_cameras, read_images
 
 
@@ -72,8 +72,10 @@ def main():
         sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
         from lar_session import Session
         s = Session(args.session)
+        # 2dgs backend reads the surfel model dir; 3dgs (or anything else) the volumetric one.
+        gs_mode = "2dgs" if args.backend == "2dgs" else "3dgs"
         args.model = args.model or str(s.best_model())
-        args.gs_dir = args.gs_dir or str(s.gsplat_out(semantic=True))
+        args.gs_dir = args.gs_dir or str(s.gsplat_out(semantic=True, mode=gs_mode))
         args.out = args.out or str(s.depth_dir(args.backend))
     if not (args.gs_dir and args.model and args.out):
         ap.error("need --session or explicit --gs-dir/--model/--out")
@@ -96,9 +98,18 @@ def main():
         K[1, :] *= H / v.height
         vm = torch.from_numpy(v.viewmat).float().to(device)[None]
         Kt = torch.from_numpy(K).float().to(device)[None]
-        render, _, _ = rasterization(means, quats, scales, opac, colors, vm, Kt, W, H,
-                                     sh_degree=None, packed=True, render_mode="RGB+ED")
-        depth = render[0, ..., 3].cpu().numpy().astype(np.float32)  # expected metric z-depth
+        if args.backend == "2dgs":
+            # Surfel rasterizer: median depth is the ray/surface intersection -- the
+            # sharpest, most surface-accurate depth a 2DGS model produces. gsplat 1.5.3's
+            # 2dgs path needs unpacked + a camera dim on non-SH colors (see train.rasterize).
+            _, _, _, _, _, median, _ = rasterization_2dgs(
+                means, quats, scales, opac, colors[None], vm, Kt, W, H,
+                sh_degree=None, packed=False, render_mode="RGB+ED")
+            depth = median[0, ..., 0].cpu().numpy().astype(np.float32)
+        else:
+            render, _, _ = rasterization(means, quats, scales, opac, colors, vm, Kt, W, H,
+                                         sh_degree=None, packed=True, render_mode="RGB+ED")
+            depth = render[0, ..., 3].cpu().numpy().astype(np.float32)  # expected metric z-depth
         np.save(out / f"{Path(v.name).stem}.npy", depth)
         if (i + 1) % 100 == 0 or i + 1 == len(views):
             print(f"  rendered depth {i + 1}/{len(views)}")

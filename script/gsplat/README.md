@@ -48,7 +48,43 @@ no SH, no densification).
 | `colmap_dataset.py` | read COLMAP **text** model (`poses_txt/`) → posed cameras + init points, RAM-cached at training resolution |
 | `model.py`          | Gaussian init from sparse points (k-NN scale seed); PLY + semantic-label export |
 | `semantic.py`       | cache per-image class masks via `semantic_bev` segmenters (shared taxonomy) |
-| `train.py`          | MCMC trainer (L1+SSIM RGB, optional semantic CE), CLI, exports |
+| `train.py`          | MCMC trainer (L1+SSIM RGB, optional semantic CE), 3DGS/2DGS modes, CLI, exports |
+| `export_depth.py`   | render per-view metric depth from a trained model (3DGS expected-depth / 2DGS median-depth) → depth bake-off contract |
+
+## 2DGS (surfel) mode — cleaner depth for the BEV
+
+`--mode 2dgs` swaps the volumetric 3D Gaussians for **2D Gaussian surfels** (flat disks
+that lie *on* surfaces) plus the 2DGS surface regularizers. The point is **geometry, not
+looks**: surfels give sharp, surface-aligned depth, which is what the `semantic_bev`
+depth back-projection needs for accurate ground height + object footprints. It keeps the
+exact same MCMC `--cap-max` VRAM budget and two-phase semantic recipe, and writes to a
+separate `output/<name>-gsplat2d[-sem]/` dir so it never clobbers a 3DGS model.
+
+```sh
+uv run --extra gsplat python train.py --session <name> --mode 2dgs          # RGB geometry
+uv run --extra gsplat --extra segmentation python train.py --session <name> --mode 2dgs --semantic
+```
+
+- `--normal-reg` (default **0.05**, the 2DGS paper value) — normal-consistency; this is
+  what flattens the surfels onto the surface. The safe, standard regularizer.
+- `--dist-reg` (default **0**) — distortion; sharpens depth further but, like the MCMC
+  regularizers, can misbehave on our un-normalized metric coordinates. Off by default;
+  turn up slowly and watch the depth previews.
+- `--reg-start` (default **500**) — delays both regularizers until the geometry has
+  roughly settled (fighting them too early stalls convergence).
+
+> **Implementation note.** gsplat 1.5.3's `rasterization_2dgs` has three sharp edges we
+> route around in `train.rasterize` (all verified on this build): its **packed** path
+> mis-gathers colours (`colors.shape[0] == nnz`), it only produces `surf_normals` under a
+> **depth render mode**, and with `sh_degree=None` it **omits the camera axis** on colours.
+> So 2DGS always renders unpacked, in `RGB+ED`, with non-SH colours shaped `(1, N, D)`.
+
+Render depth from any trained model for the bake-off:
+
+```sh
+uv run --extra gsplat python export_depth.py --session <name> --backend 2dgs   # 2dgs median depth
+uv run --extra gsplat python export_depth.py --session <name> --backend 3dgs   # 3dgs expected depth
+```
 
 ## Install
 

@@ -15,6 +15,13 @@ size, trading detail for a coarse-but-complete model that fits an 8 GB laptop GP
   uv run --extra gsplat --extra segmentation python train.py ... \
       --semantic --segmenter mask2former-large
 
+  # 2DGS (surfel) mode: cleaner surface-aligned depth for the BEV back-projection.
+  uv run --extra gsplat python train.py --session <name> --mode 2dgs
+
+``--mode 2dgs`` swaps the volumetric rasterizer for the surfel (2D Gaussian) one and adds
+the normal-consistency / distortion surface regularizers, keeping the same MCMC ``--cap-max``
+VRAM budget. It writes to a separate ``-gsplat2d`` dir so it never clobbers a 3DGS model.
+
 Semantic training is two-phase (the reliable, canonical recipe):
   Phase 1 (--max-steps) trains RGB + geometry with MCMC densification -- identical to a
     plain RGB run, no semantic field involved.
@@ -39,11 +46,43 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from gsplat import rasterization
+from gsplat import rasterization, rasterization_2dgs
 from gsplat.strategy import MCMCStrategy
 
 import model as gmodel
 from colmap_dataset import ColmapDataset
+
+
+def rasterize(mode, *, colors, sh_degree, packed=True, render_mode="RGB", **kw):
+    """Dispatch to the 3DGS or 2DGS rasterizer, returning a uniform 4-tuple.
+
+    Both paths return ``(colors, alphas, info, aux)``. For 2DGS ``aux`` carries the
+    surfel extras used by the surface regularizers -- rendered normals, the normals
+    implied by the depth map, and the per-pixel distortion. For 3DGS ``aux`` is ``None``.
+    MCMC's densification never reads ``info``, so the two rasterizers' differing meta
+    dicts are interchangeable here.
+
+    gsplat 1.5.3's ``rasterization_2dgs`` has three sharp edges that this wrapper hides so
+    the trainer never has to think about them (all verified empirically on this build):
+      * **packed is buggy** -- the packed path mis-gathers colors to the intersection count
+        (``colors.shape[0] == nnz`` assert) and fails on most inputs. Force ``packed=False``.
+      * **needs a depth render mode** -- ``surf_normals`` (normal-from-depth, required by the
+        normal-consistency reg) is only produced when depth is rendered, and the internal
+        colors/depth ``cat`` only lines up then. Force ``RGB+ED`` and slice the depth back off.
+      * **non-SH colors need a camera dim** -- with ``sh_degree=None`` gsplat forgets to add
+        the ``C`` axis, so ``(N, D)`` collides with depth ``(1, N, 1)``. Pass ``(1, N, D)``.
+    """
+    if mode == "2dgs":
+        c_in = colors if sh_degree is not None else colors[None]      # (N,D) -> (1,N,D)
+        colors_out, alphas, normals, surf_normals, distort, median, info = rasterization_2dgs(
+            colors=c_in, sh_degree=sh_degree, packed=False, render_mode="RGB+ED", **kw)
+        n_ch = 3 if sh_degree is not None else colors.shape[-1]       # strip appended depth
+        aux = {"normals": normals, "surf_normals": surf_normals,
+               "distort": distort, "median": median}
+        return colors_out[..., :n_ch], alphas, info, aux
+    colors, alphas, info = rasterization(
+        colors=colors, sh_degree=sh_degree, packed=packed, render_mode=render_mode, **kw)
+    return colors, alphas, info, None
 
 
 # --------------------------------------------------------------------------- metrics
@@ -106,7 +145,7 @@ def train(args):
     out.mkdir(parents=True, exist_ok=True)
     image_dir = Path(args.images) if args.images else Path(args.model).parent
 
-    print(f"gsplat 3DGS training -> {out}")
+    print(f"gsplat {args.mode.upper()} training -> {out}")
     ds = ColmapDataset(args.model, image_dir, data_factor=args.data_factor, limit=args.limit)
 
     # Optionally subsample the init cloud. MCMC's --cap-max only bounds *growth*, so if
@@ -185,7 +224,8 @@ def train(args):
         H, W = v.height, v.width
 
         colors = torch.cat([params["sh0"], params["shN"]], dim=1)  # (N, K, 3)
-        renders, alphas, info = rasterization(
+        renders, alphas, info, aux = rasterize(
+            args.mode,
             means=params["means"],
             quats=params["quats"],
             scales=torch.exp(params["scales"]),
@@ -198,11 +238,36 @@ def train(args):
             packed=True,
             render_mode="RGB",
         )
-        rgb = renders[0].clamp(0.0, 1.0)  # (H, W, 3)
+        # Random-background compositing: add bkgd*(1-alpha) to the render only (GT is the
+        # raw image). Where real content exists this forces alpha->1; the leftover sky
+        # fill is randomized so floaters can't settle on one convenient background colour.
+        raw_rgb = renders[0].clamp(0.0, 1.0)  # clean render, for preview/PSNR logging
+        rgb = renders[0]
+        if args.random_bkgd:
+            bkgd = torch.rand(3, device=device)
+            rgb = rgb + bkgd * (1.0 - alphas[0])
+        rgb = rgb.clamp(0.0, 1.0)  # (H, W, 3), background-composited -> loss
 
         l1 = F.l1_loss(rgb, gt)
         ssim_val = ssim(rgb.permute(2, 0, 1)[None], gt.permute(2, 0, 1)[None])
         loss = (1.0 - lam) * l1 + lam * (1.0 - ssim_val)
+        # MCMC regularizers on the raw (positive) opacity/scale values.
+        if args.opacity_reg:
+            loss = loss + args.opacity_reg * torch.sigmoid(params["opacities"]).mean()
+        if args.scale_reg:
+            loss = loss + args.scale_reg * torch.exp(params["scales"]).mean()
+        # 2DGS surface regularizers (paper §3.3), warmed up so they only bite once the
+        # geometry has roughly settled: normal consistency snaps the disks flush to the
+        # surface (this is what makes 2DGS depth cleaner than 3DGS); distortion pulls the
+        # ray's mass onto a single depth. Both default OFF-ish -- see the arg help.
+        nloss = dloss = None
+        if aux is not None and step >= args.reg_start:
+            if args.normal_reg:
+                nloss = (1.0 - (aux["normals"] * aux["surf_normals"]).sum(dim=-1)).mean()
+                loss = loss + args.normal_reg * nloss
+            if args.dist_reg:
+                dloss = aux["distort"].mean()
+                loss = loss + args.dist_reg * dloss
 
         strategy.step_pre_backward(params, optimizers, strategy_state, step, info)
         loss.backward()
@@ -218,10 +283,15 @@ def train(args):
         if step % args.log_every == 0 or step == args.max_steps - 1:
             n = params["means"].shape[0]
             rate = (step + 1) / (time.time() - t0)
+            extra = ""
+            if nloss is not None:
+                extra += f" nrm={nloss.item():.3f}"
+            if dloss is not None:
+                extra += f" dist={dloss.item():.4f}"
             print(f"[P1 {step:6d}/{args.max_steps}] loss={loss.item():.4f} "
-                  f"psnr={psnr(rgb, gt):.2f} gaussians={n} {rate:.1f} it/s")
+                  f"psnr={psnr(raw_rgb, gt):.2f} gaussians={n}{extra} {rate:.1f} it/s")
         if args.preview_every and (step % args.preview_every == 0 or step == args.max_steps - 1):
-            _save_preview(rgb, out / f"preview_{step:06d}.png")
+            _save_preview(raw_rgb, out / f"preview_{step:06d}.png")
         # Periodic geometry checkpoint so a long RGB phase survives a late crash/OOM.
         if args.save_every and step > 0 and step % args.save_every == 0:
             gmodel.export_gaussian_ply(params, out / "point_cloud.ply")
@@ -254,7 +324,8 @@ def train(args):
                 order = np.random.permutation(n_views)
             v = ds.views[idx]
 
-            sem_render, _, _ = rasterization(
+            sem_render, _, _, _ = rasterize(
+                args.mode,
                 means=geo["means"], quats=geo["quats"], scales=geo["scales"],
                 opacities=geo["opacities"], colors=params["sem"],
                 viewmats=viewmats[idx][None], Ks=Ks[idx][None],
@@ -312,6 +383,11 @@ def main():
     p.add_argument("--limit", type=int, default=None,
                    help="use only the first N images (smoke tests)")
 
+    p.add_argument("--mode", choices=["3dgs", "2dgs"], default="3dgs",
+                   help="Gaussian primitive: 3dgs (volumetric ellipsoids) or 2dgs "
+                        "(surfels/flat disks). 2dgs gives cleaner surface-aligned depth for "
+                        "the BEV back-projection, at some RGB fidelity. Same MCMC/--cap-max "
+                        "VRAM budget either way; writes to a separate -gsplat2d output dir.")
     p.add_argument("--max-steps", type=int, default=30000)
     p.add_argument("--cap-max", type=int, default=1_000_000,
                    help="hard cap on Gaussian count (MCMC). Lower = coarser + less VRAM.")
@@ -324,6 +400,34 @@ def main():
     p.add_argument("--ssim-weight", type=float, default=0.2)
     p.add_argument("--refine-start", type=int, default=500)
     p.add_argument("--refine-every", type=int, default=100)
+    # MCMC regularizers (the official recipe treats these as mandatory): opacity-reg
+    # pushes surplus Gaussians toward zero opacity so pruning removes the near-camera
+    # floater veil; scale-reg penalizes large scales so Gaussians stop growing into the
+    # view-ray needles/spikes. Omitting them is what wrecks an otherwise-correct scene.
+    # NOTE (2026-07-06): these three all DEGRADED the metric park scene and are OFF by
+    # default. gsplat's 0.01 reg defaults assume a scene normalized to ~unit scale; on our
+    # un-normalized metric coords they collapse opacity (median 1.0->0.015) and explode
+    # anisotropy. Random-bkgd just produced hazy fog on view-inconsistent foliage. Prefer
+    # post-hoc prune_gaussians.py for the veil/spike artifacts. See gsplat-pipeline memory.
+    p.add_argument("--opacity-reg", type=float, default=0.0,
+                   help="MCMC opacity regulariser (0 = off; >0 collapsed opacity on this scene)")
+    p.add_argument("--scale-reg", type=float, default=0.0,
+                   help="MCMC scale regulariser (0 = off; >0 exploded anisotropy on this scene)")
+    p.add_argument("--random-bkgd", action=argparse.BooleanOptionalAction, default=False,
+                   help="composite a random background onto the render each step (default off; "
+                        "on produced hazy fog here)")
+
+    # 2DGS surface regularizers (ignored when --mode 3dgs). normal-reg is the safe,
+    # standard one (0.05, the 2DGS paper value) and is what actually flattens the surfels
+    # onto the surface for clean depth. dist-reg (distortion) sharpens depth further but,
+    # like the MCMC regs above, can misbehave on our un-normalized metric coords, so it's
+    # OFF by default -- turn it on cautiously and watch the depth previews.
+    p.add_argument("--normal-reg", type=float, default=0.05,
+                   help="2DGS normal-consistency weight (0 = off; 0.05 = paper default)")
+    p.add_argument("--dist-reg", type=float, default=0.0,
+                   help="2DGS distortion weight (0 = off; risky on metric coords, tune up slowly)")
+    p.add_argument("--reg-start", type=int, default=500,
+                   help="delay the 2DGS surface regularizers until this step (let geometry settle first)")
 
     p.add_argument("--semantic", action="store_true",
                    help="train a per-Gaussian semantic head distilled from a 2D segmenter")
@@ -359,7 +463,7 @@ def _resolve_session(args, parser):
         s = Session(args.session)
         args.model = args.model or str(s.best_model())
         args.images = args.images or str(s.images)
-        args.out = args.out or str(s.gsplat_out(semantic=args.semantic))
+        args.out = args.out or str(s.gsplat_out(semantic=args.semantic, mode=args.mode))
         print(f"session '{args.session}':\n  model  = {args.model}\n"
               f"  images = {args.images}\n  out    = {args.out}")
     missing = [m for m in ("model", "out") if not getattr(args, m)]
