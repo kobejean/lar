@@ -53,7 +53,9 @@ def run(model_dir: str | None, image_dir: str | None, out_dir: str, *,
         segmenter_kind: str = "heuristic", cell_size: float = 0.5,
         up_axis: int | None = None, up_sign: float | None = None,
         limit: int | None = None, clip_threshold: float = 0.30,
-        overwrite_masks: bool = False, semantic_mode: str = "vote", log=print) -> None:
+        overwrite_masks: bool = False, semantic_mode: str = "vote",
+        rgb_ortho: bool = False, rgb_sub: int = 5, rgb_best_view: bool = False,
+        log=print) -> None:
     out = Path(out_dir)
     recon = None   # COLMAP model: geometry+labels in colmap mode; gravity only in gsplat mode
     store = None
@@ -156,6 +158,19 @@ def run(model_dir: str | None, image_dir: str | None, out_dir: str, *,
         level.semantic = sem
         level.coverage = level.coverage | proj_cov  # projection reaches cells sparse points miss
 
+    if rgb_ortho:
+        if recon is None or not image_dir:
+            log("      skipping --rgb-ortho: needs a COLMAP model (gravity+poses) and --images")
+        else:
+            ids = image_ids if image_ids is not None else sorted(recon.images)
+            log(f"      RGB orthophoto ({rgb_sub}x DEM, "
+                f"{'best-view' if rgb_best_view else 'weighted-mean'}"
+                f"{', ground-gated' if store is not None else ''})")
+            from rgb_projection import project_rgb_ortho, save_ortho
+            rgb, obs = project_rgb_ortho(recon, level, ids, image_dir, store=store,
+                                         sub=rgb_sub, best_view=rgb_best_view, log=log)
+            save_ortho(rgb, obs, out, prefix="level0")
+
     log(f"[export] -> {out}")
     save_level(level, out, prefix="level0")
     log("done.")
@@ -204,6 +219,15 @@ def main() -> None:
     ap.add_argument("--overwrite-masks", action="store_true")
     ap.add_argument("--semantic-mode", default="vote", choices=["vote", "project"],
                     help="vote: sparse point votes (fast); project: dense-mask projection (cleaner)")
+    ap.add_argument("--rgb-ortho", action="store_true",
+                    help="also render a true-colour BEV orthophoto (level0_rgb.png): drape the "
+                         "source RGB onto the DEM, top-down. Needs a COLMAP model + --images")
+    ap.add_argument("--rgb-sub", type=int, default=5,
+                    help="orthophoto super-resolution factor over the DEM grid "
+                         "(fine cell = cell_size/rgb_sub; e.g. 0.5 m DEM + 10 -> 0.05 m ortho)")
+    ap.add_argument("--rgb-best-view", action="store_true",
+                    help="colour each cell from its single closest view (crisper, exposure seams) "
+                         "instead of the inverse-depth weighted mean (smoother)")
     args = ap.parse_args()
     if args.session:
         import sys
@@ -239,7 +263,8 @@ def main() -> None:
         depth_voxel=args.voxel, segmenter_kind=args.segmenter,
         cell_size=args.cell_size, up_axis=args.up_axis, up_sign=args.up_sign,
         limit=args.limit, clip_threshold=args.clip_threshold,
-        overwrite_masks=args.overwrite_masks, semantic_mode=args.semantic_mode)
+        overwrite_masks=args.overwrite_masks, semantic_mode=args.semantic_mode,
+        rgb_ortho=args.rgb_ortho, rgb_sub=args.rgb_sub, rgb_best_view=args.rgb_best_view)
 
 
 if __name__ == "__main__":

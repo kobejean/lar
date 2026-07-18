@@ -82,6 +82,23 @@ matplotlib dependency (renders via cv2).
   cleaner + higher coverage, CPU-only. This is the fallback for when semantic 3DGS is too heavy
   (low-VRAM / on-device). Height + occupancy still come from the point path.
 
+## True-colour BEV orthophoto (`--rgb-ortho`)
+
+Drapes the source RGB onto the DEM, top-down, into `level0_rgb.png` — a photographic overhead
+map instead of a class raster. It's the same reprojection as `--semantic-mode project`, but it
+reads the source **image** at each cell instead of the mask, and at a **finer grid**:
+
+- `--rgb-sub N` — render at `N`× the DEM resolution (fine cell = `cell_size / N`). Height varies
+  slowly, so a coarse DEM (e.g. 0.5 m) upsamples cleanly and colour gets the resolution
+  (e.g. `--cell-size 0.5 --rgb-sub 10` → a 0.05 m orthophoto).
+- Occlusion-robust: when masks exist (colmap/depth sources), a view's colour is kept only where
+  its pixel is a **ground class**, so canopy/wall colours are dropped and a clear ground view wins.
+- `--rgb-best-view` — colour each cell from its single closest view (crisper, but exposure seams)
+  instead of the default inverse-depth weighted mean (smoother, but slight parallax ghosting).
+
+Outputs `level0_rgb.png` (opaque, gaps nearest-filled) and `level0_rgb_masked.png` (alpha = only
+directly-observed cells). Needs a COLMAP model (poses + gravity) and `--images`.
+
 ## Segmentation backends (all commercial-license friendly)
 
 | backend | model | license | speed | notes |
@@ -159,6 +176,7 @@ at the cost of first training a semantic splat model.
   (free/blocked/unknown), `coverage` (observed vs interpolated)
 - `level0.meta.json` — grid spec (cell size, origin, up-axis/sign, dims)
 - `level0_{height,semantic,occupancy}.png` — previews (north-up)
+- `level0_rgb.png`, `level0_rgb_masked.png` — true-colour orthophoto (only with `--rgb-ortho`)
 - `masks/` — cached per-image class-id PNGs (+ colour previews); segmentation runs once
 
 ## Status / next
