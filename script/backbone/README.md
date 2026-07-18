@@ -9,6 +9,7 @@ two separate off-the-shelf models (DA2 depth + Mask2Former seg) with one backbon
 |------|------|
 | `probe.py`            | is the frozen backbone worth building on? `pca` (feature viz) + `linprobe` (linear head vs Mask2Former pseudo-labels). Verdict: yes — ViT-S/16 hits 0.87 patch-acc on our taxonomy. |
 | `footprint_labels.py` | **generate footprint / free-space supervision** (below) for a ground head, no manual labels. |
+| `base_points.py`      | **deduped discrete object footprints** — open-vocab detection → foot points → BEV clustering (below). |
 
 ## `footprint_labels.py` — footprint / free-space supervision generator
 
@@ -66,7 +67,39 @@ Key knobs: `--depth-dir/--depth-stride/--depth-voxel` (mono source), `--cell-siz
 `--size` (render res), `--max-range`, `--clearance-lo/-hi` (occluder band),
 `--min-count`/`--solid-gap` (footprint solidity), `--occ-margin`, `--splat-radius`.
 
+## `base_points.py` — deduped discrete object footprints
+
+Semantic masks smear: the same tree, projected from 970 frames, becomes one un-separable BEV
+blob. The multi-view fix is the **foot point** — reduce each *detected instance* to its
+ground-contact (bottom-centre of the box), project to the ground, and **cluster across frames**.
+Points from one object collapse to a single landmark; a stray frame is an outlier. Instance
+detection (not semantic seg) is what makes objects separable to begin with.
+
+Per sampled frame: **Grounding DINO** (Apache-2.0, open-vocab, via `transformers`) detects the
+`--prompt` classes → foot point per box → **DEM ground depth** at that pixel (the trusted
+surface, reusing this dir's DEM render — not mono depth at the noisy object edge) → world point.
+Across frames: gravity-align → **DBSCAN per class** → one labelled footprint per object.
+
+Outputs `output/<session>-basepoints/`: `bev_footprints.png` (top-down map, camera trajectory +
+class-coloured markers sized by detection count), `objects.json` (`{class,u,v,count,score}` per
+object), `detections/` (per-frame box + foot-point overlays for QA).
+
+```sh
+uv run --extra segmentation python script/backbone/base_points.py \
+  --session maguro-park-after-itchy --dem-source mono --sample 250
+```
+
+On `maguro-park-after-itchy` (250 frames): 1364 foot points → **109 objects** — 47 tree, 22
+bush, 12 bench, 11 pole, 8 sign, 5 trash-can, 4 rock; trees line the walked paths. Drops into
+IMDF `amenity.landmark` (trees/benches) / `unit.structure`. Knobs: `--prompt`, `--box-thr/
+--text-thr` (detector), `--eps/--min-samples` (cluster radius / min detections per object).
+
 ### Status / next
+
+- [x] `base_points.py`: open-vocab foot-point → BEV clustering → 109 deduped labelled objects
+  on the park (the "occupied areas *with semantic labels*" ask, as discrete landmarks)
+- [ ] **lines** for extended objects (walls/hedges): SAM2/Grounded-SAM-2 mask → bottom contour
+  → ground polyline (vs a single point)
 
 - [x] geometry-only targets validated on `maguro-park-after-itchy` (open ground → visible,
   trunks/walls → footprint, distant occluded ground → hidden; metric depth sane 2–30 m)

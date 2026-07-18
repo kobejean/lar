@@ -100,6 +100,7 @@ class GroundMesh:
     """
 
     def __init__(self, gf: geometry.GroundField, footprint_cell: np.ndarray):
+        self.gf = gf  # kept so downstream (base_points.py) can reuse the DEM/grid + gravity R
         spec, dem = gf.spec, gf.dem
         rows, cols, cs = spec.rows, spec.cols, spec.cell_size
         # vertex grid at cell centres, local (gravity-aligned) frame
