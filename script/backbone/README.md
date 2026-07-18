@@ -48,20 +48,32 @@ Per frame, at a downscaled render resolution:
 ```sh
 # from repo root; --sample spreads N frames across the whole capture for QA
 uv run python script/backbone/footprint_labels.py --session maguro-park-after-itchy --sample 10
+# denser ground surface from fused mono depth (needs script/depth/mono_depth.py output)
+uv run python script/backbone/footprint_labels.py --session maguro-park-after-itchy --dem-source mono
 # full run
 uv run python script/backbone/footprint_labels.py --session maguro-park-after-itchy
 ```
 
-Key knobs: `--cell-size` (DEM), `--size` (render res), `--max-range`, `--clearance-lo/-hi`
-(occluder band), `--min-count`/`--solid-gap` (footprint solidity), `--occ-margin`,
-`--splat-radius`.
+**`--dem-source {colmap,mono}`** — where the ground *surface* comes from. `colmap` (default)
+uses the sparse SfM points; `mono` back-projects the per-view mono depth
+(`output/<session>-depth-<mono>/`, from `script/depth/mono_depth.py`) into a dense cloud for
+the DEM. **Footprint/occupancy always stays on the accurate COLMAP obstacle cloud** (the
+depth-bench hybrid: mono's vertical noise over-blocks). On `maguro-park-after-itchy`, `mono`
+lifts DEM coverage 20%→43% and *trusted* depth-target coverage 75%→98% (near-zero extrapolated
+fill under the loss) — for ~33 s reusing precomputed maps.
+
+Key knobs: `--depth-dir/--depth-stride/--depth-voxel` (mono source), `--cell-size` (DEM),
+`--size` (render res), `--max-range`, `--clearance-lo/-hi` (occluder band),
+`--min-count`/`--solid-gap` (footprint solidity), `--occ-margin`, `--splat-radius`.
 
 ### Status / next
 
 - [x] geometry-only targets validated on `maguro-park-after-itchy` (open ground → visible,
   trunks/walls → footprint, distant occluded ground → hidden; metric depth sane 2–30 m)
+- [x] `--dem-source mono` hybrid: dense mono DEM + COLMAP footprint → trusted depth-target
+  coverage 75%→98% (reconstruction poses are fine; the ground was just sparsely sampled)
 - [ ] **FOOTPRINT-SEMANTICS**: vote each obstacle point's Mask2Former class (the `MaskStore`
   cache) → footprint cells carry a class id ("occupied areas *with semantic labels*")
-- [ ] denser occluders for a stronger hidden-ground signal (extruded footprint columns, or
-  mono-depth back-projection) — sparse COLMAP gives a speckly forest-floor footprint
+- [ ] denser *footprint*: 2DGS surfels (dense **and** surface-accurate — fixes the speckly
+  forest-floor footprint that sparse COLMAP still leaves, unlike mono which over-blocks)
 - [ ] train the head on frozen LingBot patch features (semantic head + this ground head)

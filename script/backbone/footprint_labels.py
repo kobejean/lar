@@ -132,37 +132,91 @@ class GroundMesh:
         self.face_coverage = np.tile(f_cov, 2)                              # (F,)
 
 
-def build_ground_mesh(recon, cell_size: float, clearance: tuple[float, float],
-                      min_count: int, solid_gap: float, log=print
-                      ) -> tuple[GroundMesh, np.ndarray]:
-    """DEM mesh + body-height occluder cloud in one pass.
+def backproject_positions(recon, depth_dir: Path, image_ids, stride: int, voxel: float,
+                          log=print) -> np.ndarray:
+    """Fused world point cloud from per-view metric depth (positions only, voxel-deduped).
 
-    A cell is a **footprint** (occupied) only when it passes the same *solid-to-ground* test
-    the validated occupancy layer uses (`ground_model.build_level`): ≥ ``min_count`` obstacle
-    points AND their low (0.1) height-above-ground quantile ≤ ``solid_gap`` — i.e. the column
-    reaches down to the ground (trunk / wall / bush / building). Canopy overhanging an open
-    path floats above the gap, so the path stays walkable ground, not footprint. Without this
-    test every cell with a few stray body-height points reads as occupied and open paths turn
-    into solid footprint (the failure this fixes).
-
-    Occluders for the visible/hidden split are the body-height **band** points (they block the
-    camera's view of the ground whether or not they reach it — canopy included).
+    Positions-only twin of ``depth_backproject.backproject_labeled_points`` — no MaskStore,
+    since the DEM only needs geometry. Same depth-map contract: ``<stem>.npy`` float32 (H,W)
+    metric z-depth, intrinsics scaled to depth resolution.
     """
-    gf, local, hag, label = geometry.from_reconstruction(recon, cell_size=cell_size, log=log)
+    depth_dir = Path(depth_dir)
+    all_pos, n, raw = [], 0, 0
+    for img_id in image_ids:
+        im = recon.images[img_id]
+        dp = depth_dir / f"{Path(im.name).stem}.npy"
+        if not dp.exists():
+            continue
+        depth = np.load(dp).astype(np.float32)
+        h, w = depth.shape
+        cam = recon.cameras[im.camera_id]
+        fx, fy, cx, cy = pinhole_params(cam)
+        sx, sy = w / cam.width, h / cam.height           # scale intrinsics to depth res
+        fx, fy, cx, cy = fx * sx, fy * sy, cx * sx, cy * sy
+        ys, xs = np.arange(0, h, stride), np.arange(0, w, stride)
+        gx, gy = (a.ravel() for a in np.meshgrid(xs, ys))
+        d = depth[gy, gx]
+        ok = (d > 0) & np.isfinite(d)
+        if not ok.any():
+            continue
+        u, v, dd = gx[ok].astype(np.float32), gy[ok].astype(np.float32), d[ok]
+        cam_pts = np.stack([(u - cx) / fx * dd, (v - cy) / fy * dd, dd], axis=1)
+        R = qvec2rotmat(im.qvec)
+        world = cam_pts @ R + (-R.T @ im.tvec)           # world = R^T @ cam + C
+        all_pos.append(world.astype(np.float32))
+        n += 1
+        raw += len(world)
+    if not all_pos:
+        raise SystemExit(f"no depth maps found in {depth_dir}")
+    pos = np.concatenate(all_pos)
+    vox = np.floor(pos / voxel).astype(np.int64)
+    uniq, inv = np.unique(vox, axis=0, return_inverse=True)
+    sums = np.zeros((len(uniq), 3), np.float64)
+    np.add.at(sums, inv, pos)
+    positions = (sums / np.bincount(inv)[:, None]).astype(np.float32)
+    log(f"  mono depth: {raw} pts from {n} maps -> {len(positions)} voxels @ {voxel} m")
+    return positions
+
+
+def build_ground_mesh(recon, cell_size: float, clearance: tuple[float, float],
+                      min_count: int, solid_gap: float, *, dem_world: np.ndarray | None = None,
+                      log=print) -> tuple[GroundMesh, np.ndarray]:
+    """DEM mesh (from ``dem_world`` or COLMAP points) + COLMAP footprint/occluders.
+
+    The ground **surface** (DEM) can come from a denser source via ``dem_world`` (e.g. fused
+    mono depth) while the **footprint/occupancy stays on the sparse-but-accurate COLMAP
+    obstacle cloud** — the depth-bench hybrid verdict (mono's ~20% vertical noise scatters
+    canopy into the band and over-blocks; SfM is geometrically exact). Both share one gravity
+    frame derived from the cameras, so the mono DEM and the COLMAP footprint cells line up.
+
+    A cell is a **footprint** (occupied) only if it passes the *solid-to-ground* test the
+    validated occupancy layer uses (`ground_model.build_level`): ≥ ``min_count`` obstacle
+    points whose low (0.1) height-above-ground quantile ≤ ``solid_gap`` — the column reaches
+    the ground (trunk/wall/bush/building). Canopy over a path floats above the gap → the path
+    stays walkable ground. Occluders for the visible/hidden split are the body-height **band**
+    points (canopy over a path still occludes the ground below).
+    """
+    qvecs = np.array([im.qvec for im in recon.images.values()])
+    up = geometry.gravity_up(qvecs)
+    R = geometry.align_rotation(up)
+    log(f"gravity up = [{up[0]:+.4f} {up[1]:+.4f} {up[2]:+.4f}] (axis {int(np.argmax(np.abs(up)))})")
+
+    colmap_xyz = np.array([p.xyz for p in recon.points3d.values()])
+    dem_local = (colmap_xyz if dem_world is None else dem_world) @ R.T
+    gf = geometry.build_dem(dem_local[:, :2], dem_local[:, 2], R, up, cell_size=cell_size, log=log)
+
+    # footprint + occluders: COLMAP obstacle points classified against this DEM
+    colmap_local = colmap_xyz @ R.T
+    hag, label = geometry.classify_points(colmap_local[:, :2], colmap_local[:, 2], gf)
     ncells = gf.spec.rows * gf.spec.cols
-
-    # footprint: solid-to-ground obstacle cells
     obstacle = label == geometry.VERTICAL
-    o_cid = gf.cell_of(local[obstacle, :2])
-    base_hag, _ = geometry._cell_quantile(o_cid, hag[obstacle], ncells, 0.1, min_count)
+    base_hag, _ = geometry._cell_quantile(gf.cell_of(colmap_local[obstacle, :2]),
+                                          hag[obstacle], ncells, 0.1, min_count)
     footprint_cell = np.isfinite(base_hag) & (base_hag <= solid_gap)
-
-    # occluders: body-height band points (canopy over a path still occludes the ground)
     lo, hi = clearance
     band = (hag > lo) & (hag < hi)
-    occ_world = local[band] @ gf.R  # local_row @ R -> world
-
-    log(f"  obstacles {obstacle.sum()}, band {band.sum()} ({band.mean() * 100:.0f}% of cloud), "
+    occ_world = colmap_xyz[band]  # already world coords
+    log(f"  obstacles {int(obstacle.sum())}, band {int(band.sum())}, "
         f"footprint cells {int(footprint_cell.sum())} / {ncells}")
     return GroundMesh(gf, footprint_cell), occ_world
 
@@ -318,6 +372,11 @@ def main() -> None:
     ap.add_argument("--model", help="COLMAP text model dir (default: session.best_model())")
     ap.add_argument("--images", help="image dir (default: session.images)")
     ap.add_argument("--out", help="output dir (default: output/<session>-footprint)")
+    ap.add_argument("--dem-source", choices=["colmap", "mono"], default="colmap",
+                    help="ground DEM from COLMAP points (default) or fused mono depth (denser)")
+    ap.add_argument("--depth-dir", help="per-view depth .npy dir (default: session.depth_dir('mono'))")
+    ap.add_argument("--depth-stride", type=int, default=8, help="pixel stride when back-projecting depth")
+    ap.add_argument("--depth-voxel", type=float, default=0.1, help="voxel size (m) for depth dedup")
     ap.add_argument("--cell-size", type=float, default=0.5, help="DEM cell size (m)")
     ap.add_argument("--clearance-lo", type=float, default=0.4,
                     help="body-height band lower bound above ground (m)")
@@ -338,8 +397,8 @@ def main() -> None:
     ap.add_argument("--no-preview", action="store_true", help="skip RGB preview blends")
     args = ap.parse_args()
 
-    if args.session:
-        s = Session(args.session)
+    s = Session(args.session) if args.session else None
+    if s:
         model = Path(args.model) if args.model else s.best_model()
         images = Path(args.images) if args.images else s.images
         out = Path(args.out) if args.out else s.root / "output" / f"{s.name}-footprint"
@@ -347,6 +406,12 @@ def main() -> None:
         if not (args.model and args.images and args.out):
             ap.error("without --session, pass --model, --images and --out")
         model, images, out = Path(args.model), Path(args.images), Path(args.out)
+
+    depth_dir = None
+    if args.dem_source == "mono":
+        depth_dir = Path(args.depth_dir) if args.depth_dir else (s.depth_dir("mono") if s else None)
+        if depth_dir is None:
+            ap.error("--dem-source mono needs --depth-dir (or --session)")
     out.mkdir(parents=True, exist_ok=True)
 
     print(f"model  : {model}")
@@ -355,9 +420,15 @@ def main() -> None:
     recon = read_model(str(model))
     print(f"loaded {len(recon.images)} images, {recon.num_points} points")
 
+    dem_world = None
+    if args.dem_source == "mono":
+        print(f"DEM source: mono depth <- {depth_dir}")
+        dem_world = backproject_positions(recon, depth_dir, list(recon.images),
+                                          args.depth_stride, args.depth_voxel)
+
     mesh, occ_world = build_ground_mesh(
         recon, args.cell_size, (args.clearance_lo, args.clearance_hi),
-        args.min_count, args.solid_gap)
+        args.min_count, args.solid_gap, dem_world=dem_world)
     print(f"mesh: {len(mesh.verts_world)} verts, {len(mesh.faces)} faces, "
           f"{len(occ_world)} occluder points")
 
@@ -397,7 +468,7 @@ def main() -> None:
 
     meta = {
         "classes": {i: n for i, n in enumerate(CLASS_NAMES)},
-        "cell_size": args.cell_size, "render_size": args.size,
+        "dem_source": args.dem_source, "cell_size": args.cell_size, "render_size": args.size,
         "clearance_band": [args.clearance_lo, args.clearance_hi], "min_count": args.min_count,
         "solid_gap": args.solid_gap,
         "max_range": args.max_range, "occ_margin": args.occ_margin,
