@@ -164,6 +164,121 @@ def cluster_footprints(pts_uv: np.ndarray, labels: list[str], scores: np.ndarray
 
 
 # --------------------------------------------------------------------------- #
+# mask-contour mode: SAM masks -> ground-contact silhouette -> footprint polygons
+# --------------------------------------------------------------------------- #
+def load_sam(model_id: str, device: str):
+    from transformers import SamModel, SamProcessor
+    proc = SamProcessor.from_pretrained(model_id)
+    model = SamModel.from_pretrained(model_id).to(device).eval()
+    return proc, model
+
+
+@torch.no_grad()
+def sam_masks(proc, model, pil: Image.Image, boxes: list, device: str):
+    """One boolean mask (original image res) per input box, best of SAM's 3 proposals."""
+    if not boxes:
+        return []
+    inputs = proc(pil, input_boxes=[[list(map(float, b)) for b in boxes]],
+                  return_tensors="pt").to(device)
+    out = model(**inputs)
+    masks = proc.image_processor.post_process_masks(
+        out.pred_masks.cpu(), inputs["original_sizes"].cpu(),
+        inputs["reshaped_input_sizes"].cpu())[0]          # (N, 3, H, W) bool
+    best = out.iou_scores.cpu().numpy()[0].argmax(1)      # (N,) best proposal per box
+    return [masks[i, best[i]].numpy().astype(bool) for i in range(len(boxes))]
+
+
+def bottom_silhouette(mask: np.ndarray, stride: int = 2):
+    """Lowest mask pixel per column = the object's ground-facing silhouette."""
+    h = mask.shape[0]
+    rows = np.arange(h)[:, None]
+    has = mask.any(0)
+    bottom = (mask * rows).argmax(0)          # largest True row index per column
+    cols = np.where(has)[0][::stride]
+    return cols, bottom[cols]
+
+
+def backproject_pixels(px, py, depth, cam, im, scale):
+    """(px,py) render-res pixels + per-pixel depth -> (N,3) world points."""
+    fx, fy, cx, cy = (v * scale for v in pinhole_params(cam))
+    cam_pts = np.stack([(px - cx) / fx * depth, (py - cy) / fy * depth, depth], axis=1)
+    R = qvec2rotmat(im.qvec)
+    return cam_pts @ R + (-R.T @ im.tvec)
+
+
+def extract_polygons(accum_count, accum_weight, spec, accum_cell, cls,
+                     min_hits, min_area, approx_eps):
+    """Per-class BEV accumulator -> footprint polygons via connected components.
+
+    Multi-view denoises: a real contact (e.g. a bench leg) projects to the SAME world cell
+    from every view and accumulates; a floating silhouette edge (seat underside) projects to
+    whatever ground is behind it, scatters, and stays below threshold.
+    """
+    binary = (accum_count >= min_hits).astype(np.uint8)
+    if not binary.any():
+        return []
+    binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))
+    n, labels, stats, cents = cv2.connectedComponentsWithStats(binary, connectivity=8)
+    cell_area = accum_cell * accum_cell
+    out = []
+    for i in range(1, n):
+        area = stats[i, cv2.CC_STAT_AREA] * cell_area
+        if area < min_area:
+            continue
+        comp = (labels == i).astype(np.uint8)
+        cnts, _ = cv2.findContours(comp, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        cnt = max(cnts, key=cv2.contourArea)
+        eps = approx_eps * cv2.arcLength(cnt, True)
+        poly = cv2.approxPolyDP(cnt, eps, True).reshape(-1, 2)
+        verts = [[float(spec.origin_u + c * accum_cell), float(spec.origin_v + r * accum_cell)]
+                 for c, r in poly]
+        cu = spec.origin_u + cents[i, 0] * accum_cell
+        cv_ = spec.origin_v + cents[i, 1] * accum_cell
+        out.append({"class": cls, "area_m2": round(float(area), 2),
+                    "hits": int(accum_count[labels == i].sum()),
+                    "centroid": [float(cu), float(cv_)], "polygon": verts})
+    return out
+
+
+def render_bev_polygons(gf, polygons, traj_uv, out_path: Path, ppm: float = 6.0):
+    spec = gf.spec
+    origin_u, origin_v, cs = spec.origin_u, spec.origin_v, spec.cell_size
+    W = int(spec.cols * cs * ppm) + 40
+    H = int(spec.rows * cs * ppm) + 40
+
+    def to_px(u, v):
+        return int((u - origin_u) * ppm) + 20, int((v - origin_v) * ppm) + 20
+
+    img = np.full((H, W, 3), 248, np.uint8)
+    cov = cv2.resize(gf.coverage.astype(np.uint8) * 255, (W - 40, H - 40),
+                     interpolation=cv2.INTER_NEAREST)
+    img[20:H - 20, 20:W - 20][cov > 0] = (233, 233, 233)
+    if len(traj_uv) > 1:
+        pts = np.array([to_px(u, v) for u, v in traj_uv], np.int32)
+        cv2.polylines(img, [pts], False, (170, 170, 170), 1, cv2.LINE_AA)
+
+    classes = sorted({p["class"] for p in polygons})
+    cidx = {c: i for i, c in enumerate(classes)}
+    overlay = img.copy()
+    for p in polygons:
+        col = colour_for(p["class"], cidx[p["class"]])
+        poly = np.array([to_px(u, v) for u, v in p["polygon"]], np.int32)
+        cv2.fillPoly(overlay, [poly], col)
+        cv2.polylines(img, [poly], True, tuple(int(c * 0.6) for c in col), 1, cv2.LINE_AA)
+    img = cv2.addWeighted(overlay, 0.45, img, 0.55, 0)
+
+    y = 30
+    for c in classes:
+        col = colour_for(c, cidx[c])
+        k = sum(1 for p in polygons if p["class"] == c)
+        cv2.rectangle(img, (24, y - 7), (36, y + 5), col, -1)
+        cv2.putText(img, f"{c}: {k}", (44, y + 4), cv2.FONT_HERSHEY_SIMPLEX, 0.42,
+                    (30, 30, 30), 1, cv2.LINE_AA)
+        y += 20
+    cv2.imwrite(str(out_path), img)
+
+
+# --------------------------------------------------------------------------- #
 # BEV render
 # --------------------------------------------------------------------------- #
 def colour_for(cls: str, i: int):
@@ -224,7 +339,16 @@ def main() -> None:
     ap.add_argument("--out", help="output dir (default: output/<session>-basepoints)")
     ap.add_argument("--dem-source", choices=["colmap", "mono"], default="colmap")
     ap.add_argument("--depth-dir", help="mono depth dir (default: session.depth_dir('mono'))")
+    ap.add_argument("--mode", choices=["points", "mask-contour"], default="points",
+                    help="points = foot point per object (thin objects); "
+                         "mask-contour = SAM mask -> ground silhouette -> footprint polygon "
+                         "(multi-contact objects: benches, signs)")
     ap.add_argument("--detector", default="IDEA-Research/grounding-dino-tiny")
+    ap.add_argument("--sam-model", default="facebook/sam-vit-base",
+                    help="SAM checkpoint for mask-contour (SAM2 is a drop-in)")
+    ap.add_argument("--accum-cell", type=float, default=0.25, help="BEV accumulator cell (m)")
+    ap.add_argument("--min-area", type=float, default=0.1, help="min footprint polygon area (m^2)")
+    ap.add_argument("--approx-eps", type=float, default=0.02, help="polygon simplify (frac of perimeter)")
     ap.add_argument("--prompt", default=DEFAULT_PROMPT, help="open-vocab classes, '.'-separated")
     ap.add_argument("--box-thr", type=float, default=0.30)
     ap.add_argument("--text-thr", type=float, default=0.25)
@@ -269,60 +393,109 @@ def main() -> None:
     classes = [c.strip().lower() for c in args.prompt.split(".") if c.strip()]
     print(f"classes: {classes}")
     proc, det_model = load_detector(args.detector, device)
+    sam_proc = sam_model = None
+    if args.mode == "mask-contour":
+        print(f"loading SAM {args.sam_model}")
+        sam_proc, sam_model = load_sam(args.sam_model, device)
 
     ims = sorted(recon.images.values(), key=lambda im: im.name)
     if args.sample and args.sample < len(ims):
         idx = np.linspace(0, len(ims) - 1, args.sample).round().astype(int)
         ims = [ims[i] for i in idx]
 
-    all_uv, all_lab, all_score = [], [], []
-    traj_uv = []
-    n_det = 0
+    spec = gf.spec
+    acols = int(spec.cols * spec.cell_size / args.accum_cell) + 1
+    arows = int(spec.rows * spec.cell_size / args.accum_cell) + 1
+    accum_count: dict[str, np.ndarray] = {}
+    accum_weight: dict[str, np.ndarray] = {}
+
+    def accum_add(cls, uv, score):
+        col = int((uv[0] - spec.origin_u) / args.accum_cell)
+        row = int((uv[1] - spec.origin_v) / args.accum_cell)
+        if 0 <= col < acols and 0 <= row < arows:
+            if cls not in accum_count:
+                accum_count[cls] = np.zeros((arows, acols), np.int32)
+                accum_weight[cls] = np.zeros((arows, acols), np.float32)
+            accum_count[cls][row, col] += 1
+            accum_weight[cls][row, col] += score
+
+    all_uv, all_lab, all_score, traj_uv = [], [], [], []
+    n_pts = 0
     for fi, im in enumerate(ims):
         cam = recon.cameras[im.camera_id]
         R = qvec2rotmat(im.qvec)
-        cam_centre = -R.T @ im.tvec                 # camera centre in world
-        traj_uv.append((cam_centre @ gf.R.T)[:2])   # -> gravity-local (u, v)
+        traj_uv.append(((-R.T @ im.tvec) @ gf.R.T)[:2])   # camera centre -> gravity-local
         res = make_frame_labels(mesh, occ_world, im, cam, args.size,
                                 args.max_range, 0.5, 0)
         if res is None:
             continue
         ground_depth = res["depth"]
+        gh, gw = ground_depth.shape
         scale = args.size / max(cam.width, cam.height)
         pil = Image.open(images / im.name).convert("RGB")
         dets = detect(proc, det_model, pil, args.prompt, device, args.box_thr, args.text_thr)
-
+        masks = (sam_masks(sam_proc, sam_model, pil, [d[0] for d in dets], device)
+                 if args.mode == "mask-contour" else [None] * len(dets))
         overlay = cv2.imread(str(images / im.name)) if fi < args.save_detections else None
-        for box, label, score in dets:
+
+        for di, (box, label, score) in enumerate(dets):
             cls = canonical(label, classes)
-            w = foot_world(box, ground_depth, scale, cam, im)
-            if w is None:
-                continue
-            local = w @ gf.R.T
-            all_uv.append(local[:2]); all_lab.append(cls); all_score.append(float(score))
-            n_det += 1
+            col = colour_for(cls, classes.index(cls) if cls in classes else 0)
+            if args.mode == "points":
+                w = foot_world(box, ground_depth, scale, cam, im)
+                if w is None:
+                    continue
+                all_uv.append((w @ gf.R.T)[:2]); all_lab.append(cls)
+                all_score.append(float(score)); n_pts += 1
+                if overlay is not None:
+                    x0, y0, x1, y1 = box.astype(int)
+                    cv2.rectangle(overlay, (x0, y0), (x1, y1), col, 2)
+                    cv2.circle(overlay, (int((x0 + x1) / 2), y1), 6, (0, 0, 255), -1)
+            else:  # mask-contour
+                mask_r = cv2.resize(masks[di].astype(np.uint8), (gw, gh),
+                                    interpolation=cv2.INTER_NEAREST).astype(bool)
+                cols, brows = bottom_silhouette(mask_r, stride=2)
+                if len(cols) == 0:
+                    continue
+                d = ground_depth[brows, cols]
+                ok = np.isfinite(d) & (d > 0.5)
+                if not ok.any():
+                    continue
+                world = backproject_pixels(cols[ok].astype(float), brows[ok].astype(float),
+                                           d[ok], cam, im, scale)
+                for uv in (world @ gf.R.T)[:, :2]:
+                    accum_add(cls, uv, float(score)); n_pts += 1
+                if overlay is not None:
+                    cnts, _ = cv2.findContours(masks[di].astype(np.uint8),
+                                               cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                    cv2.drawContours(overlay, cnts, -1, col, 2)
             if overlay is not None:
-                x0, y0, x1, y1 = box.astype(int)
-                col = colour_for(cls, classes.index(cls) if cls in classes else 0)
-                cv2.rectangle(overlay, (x0, y0), (x1, y1), col, 2)
-                cv2.circle(overlay, (int((x0 + x1) / 2), y1), 6, (0, 0, 255), -1)
+                x0, y0 = box[:2].astype(int)
                 cv2.putText(overlay, f"{cls} {score:.2f}", (x0, max(y0 - 5, 12)),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, col, 2, cv2.LINE_AA)
         if overlay is not None:
             cv2.imwrite(str(det_dir / f"{Path(im.name).stem}.jpg"), overlay)
         if (fi + 1) % 20 == 0:
-            print(f"  {fi + 1}/{len(ims)} frames, {n_det} foot points")
+            print(f"  {fi + 1}/{len(ims)} frames, {n_pts} points")
 
     traj_uv = [(t[0], t[1]) for t in traj_uv]
-    print(f"detected {n_det} foot points over {len(ims)} frames")
-    if not all_uv:
-        raise SystemExit("no foot points landed on the ground — check detector/prompt/DEM")
+    print(f"collected {n_pts} contact points over {len(ims)} frames (mode={args.mode})")
 
-    objects = cluster_footprints(
-        np.array(all_uv), all_lab, np.array(all_score), classes,
-        args.eps, args.min_samples)
+    if args.mode == "points":
+        if not all_uv:
+            raise SystemExit("no foot points landed on the ground — check detector/prompt/DEM")
+        objects = cluster_footprints(np.array(all_uv), all_lab, np.array(all_score),
+                                     classes, args.eps, args.min_samples)
+        render_bev(gf, objects, traj_uv, out / "bev_footprints.png")
+    else:
+        objects = []
+        for cls in accum_count:
+            objects += extract_polygons(accum_count[cls], accum_weight[cls], spec,
+                                        args.accum_cell, cls, args.min_samples,
+                                        args.min_area, args.approx_eps)
+        objects.sort(key=lambda o: -o["area_m2"])
+        render_bev_polygons(gf, objects, traj_uv, out / "bev_footprints.png")
 
-    render_bev(gf, objects, traj_uv, out / "bev_footprints.png")
     (out / "objects.json").write_text(json.dumps(objects, indent=2))
     print(f"\n{len(objects)} objects -> {out}/bev_footprints.png")
     by_cls: dict[str, int] = {}
