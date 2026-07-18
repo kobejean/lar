@@ -86,6 +86,36 @@ uv run --extra gsplat python export_depth.py --session <name> --backend 2dgs   #
 uv run --extra gsplat python export_depth.py --session <name> --backend 3dgs   # 3dgs expected depth
 ```
 
+## Top-down BEV render (`render_bev.py`)
+
+Rasterise a trained model from a **virtual orthographic top-down camera** — a true
+photographic BEV where occlusion and above-ground structure are handled by the render
+itself, unlike the `semantic_bev` `--rgb-ortho` ground-drape (which smears anything off the
+ground plane). Uses gsplat's `rasterization(camera_model="ortho")` — real orthographic
+projection (`px = fx·Xc + cx`, no Z-divide), so `fx = fy = 1/cell_size` px-per-metre.
+
+```sh
+uv run --extra gsplat python render_bev.py \
+    --ply  ../../output/<run>/point_cloud.ply \
+    --meta ../../output/<run>-sbev/level0.meta.json \   # align to the DEM/semantic grid
+    --out  ../../output/<run>-sbev --cell-size 0.05
+```
+
+- `--meta level0.meta.json` lands the BEV on the **same grid** as the semantic/height/
+  occupancy rasters (same origin, gravity-canonical row axis) so all layers overlay
+  pixel-for-pixel. Without it, footprint + gravity come from `--model` (COLMAP cameras) and
+  the Gaussian extent.
+- `--cell-size` metres per output pixel (0.05 → high-res); `--min-opacity` (default 0.15)
+  culls floaters. Writes `level0_rgb_bev.png` + `_rgb_bev_masked.png` (alpha = coverage).
+
+> **OOD caveat.** The capture is all grazing ground-level views, so a top-down ortho is a
+> viewpoint with **no training supervision**. Under-trained or unregularised models show
+> needle artifacts (high-opacity Gaussians seen edge-on) and floaters from above. Mitigate
+> with a fully-trained model, `--opacity-reg`/`--scale-reg` during training, and
+> `--min-opacity` at render. 2DGS surfels would be cleaner top-down (flat disks on
+> surfaces), but gsplat 1.5.3's `rasterization_2dgs` has **no ortho** support — a
+> high-focal pinhole placed far above approximates it (follow-up).
+
 ## Install
 
 gsplat compiles CUDA kernels on **first import** (JIT via torch's `cpp_extension`, ~60 s,
