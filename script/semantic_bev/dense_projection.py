@@ -19,6 +19,7 @@ from __future__ import annotations
 import numpy as np
 
 from colmap_io import Reconstruction, qvec2rotmat
+from grid_transform import cell_to_world
 from ground_model import Level
 from labeling import MaskStore
 from taxonomy import Klass, Role, role_of
@@ -35,8 +36,9 @@ def project_dense_semantics(recon: Reconstruction, store: MaskStore, level: Leve
     # World-space centre of every cell (height from the Level's field).
     jj, ii = np.meshgrid(np.arange(cols), np.arange(rows))  # jj=col(=u), ii=row(=v)
     P = np.zeros((rows * cols, 3))
-    P[:, u_axis] = (spec.origin_u + (jj.ravel() + 0.5) * spec.cell_size)
-    P[:, v_axis] = (spec.origin_v + (ii.ravel() + 0.5) * spec.cell_size)
+    u_world, v_world = cell_to_world(jj.ravel() + 0.5, ii.ravel() + 0.5, spec)  # cell centres
+    P[:, u_axis] = u_world
+    P[:, v_axis] = v_world
     P[:, spec.up_axis] = level.height.ravel() * spec.up_sign  # world up-coord = height*sign
 
     ncells = rows * cols

@@ -181,6 +181,90 @@ class Mask2FormerSegmenter(Segmenter):
         return self.lut[seg.cpu().numpy().astype(np.int64)].astype(np.uint8)
 
 
+class LingBotSegmenter(Segmenter):
+    """Frozen LingBot-Vision ViT features -> optional AnyUp upsample -> trained
+    linear head -> dense taxonomy mask.
+
+    The head + normalization + config come from a checkpoint written by
+    ``script/backbone/probe.py linprobe --save-head`` (trained on OUR taxonomy via
+    Mask2Former pseudo-labels, so no ADE->Klass keyword remap). Requires the
+    ``lingbot_vision`` package importable; if the head was trained with AnyUp,
+    also the ``anyup`` repo (path stored in the ckpt, override with ``anyup_src``).
+    """
+
+    _MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)  # ImageNet, matches
+    _STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)   # lingbot load_image
+
+    def __init__(self, ckpt: str, device: str | None = None,
+                 anyup_src: str | None = None):
+        import sys
+        import torch  # lazy
+        from lingbot_vision import extract_patch_tokens, load_pretrained_backbone
+
+        self.torch = torch
+        self._extract = extract_patch_tokens
+        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+        self.dtype = torch.bfloat16 if self.device == "cuda" else torch.float32
+
+        c = torch.load(ckpt, map_location="cpu", weights_only=False)
+        self.size = int(c["size"])
+        self.upsample = c["upsample"]
+        self.up_size = int(c["up_size"])
+        self.mu = torch.tensor(c["mu"], dtype=torch.float32, device=self.device)
+        self.sd = torch.tensor(c["sd"], dtype=torch.float32, device=self.device)
+
+        backbone, _ = load_pretrained_backbone(
+            variant=c["variant"], device=self.device, dtype=self.dtype)
+        self.backbone = backbone
+        self.patch_size = backbone.patch_size
+
+        head = torch.nn.Linear(int(c["embed_dim"]), int(c["n_klass"]))
+        head.load_state_dict(c["head"])
+        self.head = head.to(self.device).eval()
+
+        self.up = None
+        if self.upsample == "anyup":
+            src = anyup_src or c.get("anyup_src")
+            if src and src not in sys.path:
+                sys.path.insert(0, src)
+            from anyup.model import AnyUp
+            urls = {
+                "multi": "https://github.com/wimmerth/anyup/releases/download/checkpoint_v2/anyup_multi_backbone.pth",
+                "paper": "https://github.com/wimmerth/anyup/releases/download/checkpoint/anyup_paper.pth",
+            }
+            m = AnyUp().to(self.device).eval()
+            m.load_state_dict(torch.hub.load_state_dict_from_url(
+                urls[c["anyup_ckpt"]], map_location=self.device, progress=False))
+            self.up = m
+
+    def _preprocess(self, image_bgr: np.ndarray):
+        """BGR array -> [1,3,s,s] ImageNet-normalized tensor (lingbot square mode)."""
+        s = max(self.patch_size, (self.size // self.patch_size) * self.patch_size)
+        rgb = cv2.cvtColor(cv2.resize(image_bgr, (s, s), interpolation=cv2.INTER_LINEAR),
+                           cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+        rgb = (rgb - self._MEAN) / self._STD
+        return self.torch.from_numpy(rgb).permute(2, 0, 1).unsqueeze(0).contiguous()
+
+    def segment(self, image_bgr: np.ndarray) -> np.ndarray:
+        torch = self.torch
+        H, W = image_bgr.shape[:2]
+        img_norm = self._preprocess(image_bgr)
+        with torch.no_grad():
+            tokens, (h, w) = self._extract(self.backbone, img_norm, self.device, self.dtype)
+            if self.up is None:
+                feat = tokens[0].float()                       # [h*w, C]
+                gh, gw = h, w
+            else:
+                lr = tokens[0].float().reshape(1, h, w, -1).permute(0, 3, 1, 2).contiguous()
+                guide = img_norm.to(self.device).float()
+                hr = self.up(guide, lr, output_size=(self.up_size, self.up_size), q_chunk_size=256)
+                feat = hr[0].permute(1, 2, 0).reshape(-1, hr.shape[1])  # [up*up, C]
+                gh, gw = self.up_size, self.up_size
+            x = (feat - self.mu) / self.sd
+            pred = self.head(x).argmax(1).to(torch.uint8).cpu().numpy().reshape(gh, gw)
+        return cv2.resize(pred, (W, H), interpolation=cv2.INTER_NEAREST).astype(np.uint8)
+
+
 def save_mask_png(mask: np.ndarray, path: str | Path) -> None:
     """Write a class-id map as a colour PNG (viewable) alongside the raw ids in the R channel."""
     lut = np.array(color_lut(), dtype=np.uint8)
@@ -191,7 +275,7 @@ def save_mask_png(mask: np.ndarray, path: str | Path) -> None:
 
 # Single source of truth for valid backend names (CLI choices derive from this).
 SEGMENTER_KINDS = ("heuristic", "clipseg", "oneformer", "oneformer-large",
-                   "mask2former", "mask2former-large")
+                   "mask2former", "mask2former-large", "lingbot")
 
 
 def make_segmenter(kind: str, **kw) -> Segmenter:
@@ -207,5 +291,7 @@ def make_segmenter(kind: str, **kw) -> Segmenter:
         return Mask2FormerSegmenter(**kw)
     if kind == "mask2former-large":
         return Mask2FormerSegmenter(model_name="facebook/mask2former-swin-large-ade-semantic", **kw)
+    if kind == "lingbot":
+        return LingBotSegmenter(**kw)  # requires ckpt=<linprobe --save-head output>
     raise ValueError(f"unknown segmenter kind {kind!r} "
-                     f"(heuristic/clipseg/oneformer[-large]/mask2former[-large])")
+                     f"(heuristic/clipseg/oneformer[-large]/mask2former[-large]/lingbot)")

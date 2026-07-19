@@ -47,37 +47,91 @@ def camera_centers(recon: Reconstruction) -> np.ndarray:
     return np.array([-_qvec2rotmat(im.qvec).T @ im.tvec for im in recon.images.values()])
 
 
-def run(model_dir: str, image_dir: str, out_dir: str, *,
+def run(model_dir: str | None, image_dir: str | None, out_dir: str, *,
+        source: str = "colmap", gsplat_dir: str | None = None, min_opacity: float = 0.1,
+        depth_dir: str | None = None, depth_stride: int = 4, depth_voxel: float = 0.05,
         segmenter_kind: str = "heuristic", cell_size: float = 0.5,
         up_axis: int | None = None, up_sign: float | None = None,
         limit: int | None = None, clip_threshold: float = 0.30,
         overwrite_masks: bool = False, semantic_mode: str = "vote", log=print) -> None:
     out = Path(out_dir)
-    mask_dir = out / "masks"
+    recon = None   # COLMAP model: geometry+labels in colmap mode; gravity only in gsplat mode
+    store = None
+    image_ids = None
 
-    log(f"[1/5] reading COLMAP model: {model_dir}")
-    recon = read_model(model_dir)
-    log(f"      {len(recon.images)} images, {recon.num_points} points")
+    if source == "depth":
+        # Back-project labelled pixels through per-view metric depth. Needs the same masks
+        # as the colmap source; only the geometry (points) comes from depth, not tracks.
+        mask_dir = out / "masks"
+        # A backend may ship its own model (e.g. MVS's undistorted one) with matching
+        # intrinsics — prefer it over the passed --model.
+        colocated = Path(depth_dir) / "model"
+        depth_model = colocated if (colocated / "cameras.txt").exists() else Path(model_dir)
+        log(f"[1/4] reading COLMAP model: {depth_model}")
+        recon = read_model(depth_model)
+        image_ids = sorted(recon.images)
+        if limit is not None:
+            image_ids = image_ids[:limit]
+        log(f"[2/4] segmenting ({segmenter_kind}) -> {mask_dir}")
+        seg_kw = {"threshold": clip_threshold} if segmenter_kind == "clipseg" else {}
+        segmenter = make_segmenter(segmenter_kind, **seg_kw)
+        store = MaskStore(mask_dir)
+        segment_and_cache(recon, image_dir, segmenter, store, image_ids,
+                          overwrite=overwrite_masks, log=log)
+        log(f"[3/4] back-projecting depth: {depth_dir}")
+        from depth_backproject import backproject_labeled_points
+        positions, labels, conf = backproject_labeled_points(
+            recon, store, depth_dir, image_ids,
+            stride=depth_stride, voxel=depth_voxel, log=log)
+        labeled = int((labels != int(Klass.UNKNOWN)).sum())
+        log(f"      {labeled}/{len(labels)} points labelled "
+            f"({100 * labeled / max(len(labels), 1):.1f}%)")
+        _log_class_histogram(labels, log)
+        semantic_mode = "vote"  # dense-mask projection is COLMAP-only
+    elif source == "gsplat":
+        log(f"[1/4] loading semantic 3DGS points: {gsplat_dir}")
+        from gsplat_source import load_gsplat_points
+        positions, labels, conf = load_gsplat_points(gsplat_dir, min_opacity=min_opacity, log=log)
+        labeled = int((labels != int(Klass.UNKNOWN)).sum())
+        log(f"      {labeled}/{len(labels)} points labelled "
+            f"({100 * labeled / max(len(labels), 1):.1f}%)")
+        _log_class_histogram(labels, log)
+        # Gravity/up needs camera orientations, which the Gaussians don't carry -- read the
+        # COLMAP model the gsplat run was trained from (same world coords).
+        if (up_axis is None or up_sign is None):
+            if not model_dir:
+                raise SystemExit("--source gsplat needs --model (for gravity) or explicit "
+                                 "--up-axis/--up-sign")
+            recon = read_model(model_dir)
+        if semantic_mode == "project":
+            log("      note: --semantic-mode project is COLMAP-only; using per-Gaussian labels")
+            semantic_mode = "vote"
+    else:
+        mask_dir = out / "masks"
+        log(f"[1/5] reading COLMAP model: {model_dir}")
+        recon = read_model(model_dir)
+        log(f"      {len(recon.images)} images, {recon.num_points} points")
 
-    image_ids = sorted(recon.images)
-    if limit is not None:
-        image_ids = image_ids[:limit]
-        log(f"      limiting to first {len(image_ids)} images")
+        image_ids = sorted(recon.images)
+        if limit is not None:
+            image_ids = image_ids[:limit]
+            log(f"      limiting to first {len(image_ids)} images")
 
-    log(f"[2/5] segmenting ({segmenter_kind}) -> {mask_dir}")
-    seg_kw = {"threshold": clip_threshold} if segmenter_kind == "clipseg" else {}
-    segmenter = make_segmenter(segmenter_kind, **seg_kw)
-    store = MaskStore(mask_dir)
-    segment_and_cache(recon, image_dir, segmenter, store, image_ids,
-                      overwrite=overwrite_masks, log=log)
+        log(f"[2/5] segmenting ({segmenter_kind}) -> {mask_dir}")
+        seg_kw = {"threshold": clip_threshold} if segmenter_kind == "clipseg" else {}
+        segmenter = make_segmenter(segmenter_kind, **seg_kw)
+        store = MaskStore(mask_dir)
+        segment_and_cache(recon, image_dir, segmenter, store, image_ids,
+                          overwrite=overwrite_masks, log=log)
 
-    log("[3/5] voting labels onto points")
-    point_ids, votes, _ = accumulate_votes(recon, store, image_ids)
-    labels, conf = resolve_labels(votes)
-    positions = np.array([recon.points3d[int(pid)].xyz for pid in point_ids])
-    labeled = int((labels != int(Klass.UNKNOWN)).sum())
-    log(f"      {labeled}/{len(labels)} points labelled ({100 * labeled / len(labels):.1f}%)")
-    _log_class_histogram(labels, log)
+        log("[3/5] voting labels onto points")
+        point_ids, votes, _ = accumulate_votes(recon, store, image_ids)
+        labels, conf = resolve_labels(votes)
+        positions = np.array([recon.points3d[int(pid)].xyz for pid in point_ids])
+        labeled = int((labels != int(Klass.UNKNOWN)).sum())
+        log(f"      {labeled}/{len(labels)} points labelled "
+            f"({100 * labeled / len(labels):.1f}%)")
+        _log_class_histogram(labels, log)
 
     if up_axis is None or up_sign is None:
         a, s, vec = detect_gravity_up(recon)
@@ -91,7 +145,7 @@ def run(model_dir: str, image_dir: str, out_dir: str, *,
         if above < 0:
             log("      WARNING: cameras sit BELOW ground along up-axis -- frame may be upside down!")
 
-    log("[4/5] building ground level")
+    log("[build] building ground level")
     level = build_level(positions, labels, conf, cell_size=cell_size,
                         up_axis=up_axis, up_sign=up_sign, log=log)
 
@@ -102,7 +156,7 @@ def run(model_dir: str, image_dir: str, out_dir: str, *,
         level.semantic = sem
         level.coverage = level.coverage | proj_cov  # projection reaches cells sparse points miss
 
-    log(f"[5/5] exporting -> {out}")
+    log(f"[export] -> {out}")
     save_level(level, out, prefix="level0")
     log("done.")
 
@@ -114,10 +168,33 @@ def _log_class_histogram(labels: np.ndarray, log) -> None:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Semantic BEV ground model from COLMAP + segmentation")
-    ap.add_argument("--model", required=True, help="COLMAP text model dir (cameras/images/points3D.txt)")
-    ap.add_argument("--images", required=True, help="directory of source images")
-    ap.add_argument("--out", required=True, help="output directory")
+    ap = argparse.ArgumentParser(description="Semantic BEV ground model from COLMAP points "
+                                             "or a semantic 3DGS export")
+    ap.add_argument("--session", default=None,
+                    help="LAR session name: fills --model/--images/--gsplat-dir/--out from the "
+                         "canonical layout (script/lar_session.py). Explicit flags override.")
+    ap.add_argument("--source", default="colmap", choices=["colmap", "gsplat", "depth"],
+                    help="geometry source: 'colmap' sparse points + segmentation (default); "
+                         "'gsplat' a trained semantic 3DGS export; 'depth' back-projected "
+                         "per-view metric depth (MVS/2DGS/mono/3DGS bake-off)")
+    ap.add_argument("--gsplat-dir", default=None,
+                    help="semantic 3DGS export dir (script/gsplat --out); required for --source gsplat")
+    ap.add_argument("--min-opacity", type=float, default=0.1,
+                    help="drop Gaussians below this opacity when using --source gsplat")
+    ap.add_argument("--depth-backend", default=None,
+                    help="depth backend name (mvs/2dgs/mono/3dgs); with --session derives "
+                         "--depth-dir and the output tag")
+    ap.add_argument("--depth-dir", default=None,
+                    help="dir of per-view metric depth maps (<stem>.npy); required for --source depth")
+    ap.add_argument("--stride", type=int, default=4,
+                    help="pixel subsample stride for depth back-projection (--source depth)")
+    ap.add_argument("--voxel", type=float, default=0.05,
+                    help="voxel size in metres for depth-point dedup (--source depth)")
+    ap.add_argument("--model", default=None,
+                    help="COLMAP text model dir. Required for --source colmap; for --source gsplat "
+                         "it supplies camera orientations for gravity (unless --up-axis/--up-sign given)")
+    ap.add_argument("--images", default=None, help="directory of source images (--source colmap)")
+    ap.add_argument("--out", default=None, help="output directory (derived from --session if unset)")
     ap.add_argument("--segmenter", default="heuristic", choices=list(SEGMENTER_KINDS))
     ap.add_argument("--cell-size", type=float, default=0.5, help="metres per grid cell")
     ap.add_argument("--up-axis", type=int, default=None, choices=[0, 1, 2], help="0=x,1=y,2=z (auto if unset)")
@@ -128,8 +205,38 @@ def main() -> None:
     ap.add_argument("--semantic-mode", default="vote", choices=["vote", "project"],
                     help="vote: sparse point votes (fast); project: dense-mask projection (cleaner)")
     args = ap.parse_args()
+    if args.session:
+        import sys
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+        from lar_session import Session
+        s = Session(args.session)
+        args.model = args.model or str(s.best_model())  # geometry (colmap) or gravity (gsplat/depth)
+        if args.source == "gsplat":
+            args.gsplat_dir = args.gsplat_dir or str(s.gsplat_out(semantic=True))
+            args.out = args.out or str(s.sbev_out("gsplat"))
+        elif args.source == "depth":
+            args.images = args.images or str(s.images)
+            if args.depth_backend:
+                args.depth_dir = args.depth_dir or str(s.depth_dir(args.depth_backend))
+                args.out = args.out or str(s.sbev_out("depth", tag=args.depth_backend))
+        else:
+            args.images = args.images or str(s.images)
+            args.out = args.out or str(s.sbev_out("colmap"))
+        print(f"session '{args.session}': source={args.source} out={args.out}")
 
-    run(args.model, args.images, args.out, segmenter_kind=args.segmenter,
+    if not args.out:
+        ap.error("need --session (+ --depth-backend for depth) or --out")
+    if args.source == "colmap" and (not args.model or not args.images):
+        ap.error("--source colmap requires --model and --images (or --session)")
+    if args.source == "gsplat" and not args.gsplat_dir:
+        ap.error("--source gsplat requires --gsplat-dir (or --session)")
+    if args.source == "depth" and (not args.depth_dir or not args.model or not args.images):
+        ap.error("--source depth requires --depth-dir, --model, --images "
+                 "(or --session + --depth-backend)")
+
+    run(args.model, args.images, args.out, source=args.source, gsplat_dir=args.gsplat_dir,
+        min_opacity=args.min_opacity, depth_dir=args.depth_dir, depth_stride=args.stride,
+        depth_voxel=args.voxel, segmenter_kind=args.segmenter,
         cell_size=args.cell_size, up_axis=args.up_axis, up_sign=args.up_sign,
         limit=args.limit, clip_threshold=args.clip_threshold,
         overwrite_masks=args.overwrite_masks, semantic_mode=args.semantic_mode)

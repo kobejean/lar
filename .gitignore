@@ -10,3 +10,4 @@
 # Claude Code local metadata / g2o debug dumps
 .claude/
 debug.txt
+/models

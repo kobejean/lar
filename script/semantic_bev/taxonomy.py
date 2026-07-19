@@ -126,14 +126,44 @@ def color_lut() -> "list[tuple[int, int, int]]":
 # Keyword -> Klass, for mapping *closed-set* model labels (e.g. ADE20K's 150 names) onto our
 # taxonomy. Checked in order; first substring hit wins, so put specific before generic.
 _KEYWORD_KLASS: list[tuple[str, Klass]] = [
+    # --- explicit disambiguations, must precede the generic keys below ---
+    # Word boundaries fix the accidental hits, but a few labels genuinely contain a keyword
+    # while meaning something else, and a few lost their (accidentally correct) mapping once
+    # the loose match was removed. Both are named here rather than left to chance.
+    ("pool table", Klass.UNKNOWN), ("billiard table", Klass.UNKNOWN),  # indoor, not WATER
+    ("skyscraper", Klass.BUILDING),                                    # a building, not SKY
+    ("playing field", Klass.GRASS), ("soccer field", Klass.GRASS),
+    ("seat", Klass.FURNITURE),
+    ("streetlight", Klass.FURNITURE), ("street lamp", Klass.FURNITURE),
+    ("vending machine", Klass.FURNITURE), ("kiosk", Klass.BUILDING),
+    ("bike rack", Klass.FURNITURE), ("picnic table", Klass.FURNITURE),
+    ("planter", Klass.FURNITURE), ("bollard", Klass.FURNITURE),
+    ("statue", Klass.FURNITURE), ("monument", Klass.FURNITURE),
+    # --- compounds that the OLD loose match happened to get right ---
+    # Anchoring alone is a net regression: "stairway"/"escalator" used to hit via "stair" in
+    # "staircase", "waterfall" via "water", "minibike" via "bike", "traffic light" via "sign"
+    # in "signal". Substring matching was accidentally correct about as often as it was wrong,
+    # so each compound has to be named rather than left to a lucky collision.
+    ("stairway", Klass.STAIRS), ("staircase", Klass.STAIRS), ("escalator", Klass.STAIRS),
+    ("waterfall", Klass.WATER),
+    ("minibike", Klass.VEHICLE), ("motorbike", Klass.VEHICLE), ("motorcycle", Klass.VEHICLE),
+    ("boat", Klass.VEHICLE), ("ship", Klass.VEHICLE), ("bus", Klass.VEHICLE),
+    ("airplane", Klass.VEHICLE), ("aeroplane", Klass.VEHICLE),
+    ("tower", Klass.BUILDING), ("grandstand", Klass.BUILDING),
+    ("traffic light", Klass.FURNITURE), ("traffic signal", Klass.FURNITURE),
+    ("stoplight", Klass.FURNITURE), ("light source", Klass.FURNITURE),
+    ("column", Klass.FURNITURE), ("pillar", Klass.FURNITURE), ("pedestal", Klass.FURNITURE),
+    ("flowerpot", Klass.FURNITURE), ("vase", Klass.FURNITURE),
+    ("bulletin board", Klass.FURNITURE), ("notice board", Klass.FURNITURE),
     ("sidewalk", Klass.PATH), ("pavement", Klass.PAVEMENT), ("runway", Klass.PATH),
     ("road", Klass.PATH), ("path", Klass.PATH),
     ("stair", Klass.STAIRS), ("step", Klass.STAIRS),
     ("grass", Klass.GRASS), ("lawn", Klass.GRASS), ("flower", Klass.GRASS),
+    ("field", Klass.GRASS),          # ADE "field" is a grass field, not bare ground
     ("palm", Klass.TREE), ("tree", Klass.TREE), ("plant", Klass.TREE),
     ("bush", Klass.TREE), ("shrub", Klass.TREE), ("hedge", Klass.TREE),
     ("earth", Klass.TERRAIN), ("ground", Klass.TERRAIN), ("soil", Klass.TERRAIN),
-    ("dirt", Klass.TERRAIN), ("land", Klass.TERRAIN), ("field", Klass.TERRAIN),
+    ("dirt", Klass.TERRAIN), ("land", Klass.TERRAIN),
     ("sand", Klass.TERRAIN), ("gravel", Klass.TERRAIN), ("hill", Klass.TERRAIN),
     ("mountain", Klass.TERRAIN), ("rock", Klass.TERRAIN),
     ("water", Klass.WATER), ("sea", Klass.WATER), ("river", Klass.WATER),
@@ -151,11 +181,39 @@ _KEYWORD_KLASS: list[tuple[str, Klass]] = [
 ]
 
 
+_KW_RE: "list[tuple[object, Klass]]" = []
+
+
 def keyword_klass(name: str) -> Klass:
-    """Map an arbitrary closed-set label name to our taxonomy by keyword; UNKNOWN if no hit."""
+    """Map an arbitrary closed-set label name to our taxonomy by keyword; UNKNOWN if no hit.
+
+    Matching is on WORD BOUNDARIES, not raw substrings. Plain ``kw in name`` silently produced
+    real mislabels, because our keywords are short and English is full of them:
+
+        "seat"           contained "sea"    -> WATER
+        "streetlight"    contained "tree"   -> TREE     (s-TREE-t)
+        "rug, carpet"    contained "car"    -> VEHICLE
+        "kitchen island" contained "land"   -> TERRAIN
+        "skyscraper"     started  "sky"     -> SKY
+
+    Ordering cannot fix this -- ``streetlight`` was already listed as FURNITURE, it just lost
+    the race to ``tree``. Only anchoring the match does. These were not hypothetical: the park
+    BEV carried 9 WATER cells (no water in the park) and misfiled street lamps as trees.
+
+    A name may be a comma-separated synonym list ("rug, carpet, carpeting"); boundary matching
+    spans it naturally, so callers should pass the whole string rather than splitting and
+    combining, which had no principled way to break ties.
+    """
+    global _KW_RE
+    if not _KW_RE:
+        import re
+        # ``s?`` because the keys are singular but label sets are not ("stair" must still
+        # catch "stairs, steps"). Anchoring without this silently drops every plural -- it sent
+        # STAIRS to UNKNOWN on the first attempt.
+        _KW_RE = [(re.compile(r"\b" + re.escape(kw) + r"s?\b"), k) for kw, k in _KEYWORD_KLASS]
     n = name.lower()
-    for kw, k in _KEYWORD_KLASS:
-        if kw in n:
+    for rx, k in _KW_RE:
+        if rx.search(n):
             return k
     return Klass.UNKNOWN
 

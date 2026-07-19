@@ -26,6 +26,8 @@ export — and the semantic labels are intended to feed back into localization.
 
 | file | role |
 |------|------|
+| `geometry.py`    | **pure-geometry front-end**: gravity-align + robust ground DEM + ground/vertical split (no semantics) |
+| `geometry_cli.py`| run `geometry.py` on a COLMAP model → DEM hillshade, structure-height, ground/vertical, trajectory, cross-sections |
 | `colmap_io.py`   | read COLMAP text model; tracks give exact observed pixel per point |
 | `taxonomy.py`    | **the semantic contract**: prompts → internal class → IMDF category |
 | `segmentation.py`| `Segmenter` interface + `Heuristic`/`ClipSeg`/`OneFormer` backends |
@@ -36,6 +38,41 @@ export — and the semantic labels are intended to feed back into localization.
 | `pipeline.py`    | end-to-end driver + CLI (auto up-axis/sign detection) |
 | `compare_segmenters.py` | run backends side-by-side on sample images → comparison grid |
 | `verify_orientation.py` | overlay camera trajectory on the BEV (orientation sanity) |
+
+## Geometry front-end (`geometry.py` / `geometry_cli.py`)
+
+"Master the geometry first" — a semantics-free ground model, so the DEM / ground mask /
+obstacle mask are correct *before* any labels are projected onto them. Three products:
+
+1. **Gravity-aligned frame** — up is measured from camera image-up averaged over all
+   frames (not axis-snapped). On `maguro-park-after-itchy-refined` gravity is only 0.92°
+   off −Y, but that's ~1.5 m of false slope across the 90 m park, so we rotate by the full
+   vector and keep the horizontal axes level.
+2. **Ground DEM** — robust *lower envelope*: a low per-cell quantile seeds the surface,
+   then an iterative refit inside an asymmetric band (tight below, looser above) locks it
+   to the ground cluster without climbing into the bush/canopy layer. Smoothing is
+   normalised-convolution (blur observed ÷ blur mask) so unobserved cells never drag real
+   ground up. Sharp to ~15–20 cm where cameras walked; the rest is marked extrapolated.
+3. **Ground / vertical / floater split** — per-point height-above-ground: within the band
+   = ground, above = vertical structure, below = floater/outlier.
+
+```sh
+uv run python geometry_cli.py \
+  --model ../../output/maguro-park-after-itchy-refined/sparse/0 \
+  --out   ../../output/maguro-park-after-itchy-geom --cell-size 0.5
+```
+
+Emits `ground_field.npz` (dem, coverage, R, up, origin, cell_size) + previews:
+`dem_hillshade`, `structure_height`, `ground_vs_vertical`, `camera_trajectory`,
+`cross_sections` (the real ground-quality test — DEM vs. class-coloured points). No
+matplotlib dependency (renders via cv2).
+
+> **Note — the refined LAR model has no tracks.** `…-refined/sparse/0` stores poses +
+> point *positions* only: `points3D.txt` has no track, colour, or reproj-error (all
+> RGB=180,180,180, error=1.0) and `images.txt` has empty POINTS2D. So track-pixel
+> semantic voting (`labeling.py`) **cannot run on the refined model** — semantics there
+> must come from dense-mask projection (poses + intrinsics), which needs no tracks. The
+> geometry front-end uses only positions + camera orientations, so it works fine.
 
 ## Semantic raster modes (`--semantic-mode`)
 
@@ -85,12 +122,64 @@ uv run python pipeline.py ... --segmenter clipseg --clip-threshold 0.3
 
 Add `--limit N` to process only the first N images while iterating.
 
+### Geometry source: COLMAP points (default) or semantic 3DGS
+
+`--source` selects where `(positions, labels, confidence)` come from. The default
+`colmap` path is above. `--source gsplat` instead consumes a trained **semantic 3DGS**
+export ([`../gsplat`](../gsplat/) `train.py --semantic`): every Gaussian already carries a
+class, so this skips segmentation/voting entirely and feeds a much denser, pre-labelled
+cloud straight into the *same* `build_level`. `--model` is still used (cameras only) to
+detect gravity/up, unless you pass `--up-axis`/`--up-sign`.
+
+**Just pass `--session <name>`** (canonical layout, [`../lar_session.py`](../lar_session.py)):
+it fills `--gsplat-dir` = `output/<name>-gsplat-sem`, `--model` = the refined model (for
+gravity), and `--out` = `output/<name>-sbev-gsplat`. Explicit flags override.
+
+```sh
+uv run python pipeline.py --session maguro-park-after-itchy --source gsplat --cell-size 0.5
+```
+
+Equivalent explicit form:
+
+```sh
+uv run python pipeline.py --source gsplat \
+  --gsplat-dir ../../output/<session>-gsplat-sem \
+  --model      ../../output/<session>-refined/colmap/sparse/0 \
+  --out        ../../output/<session>-sbev-gsplat \
+  --cell-size 0.5 --min-opacity 0.1
+```
+
+`--min-opacity` drops faint Gaussians (3DGS floaters) before rasterising. This is the
+optional "3DGS geometry source" tier: denser height/occupancy than sparse COLMAP tracks,
+at the cost of first training a semantic splat model.
+
 ## Output (`<out>/`)
 
-- `level0.npz` — `height` (m, nan=unobserved), `semantic` (Klass id), `occupancy`
-  (free/blocked/unknown), `coverage` (observed vs interpolated)
+- `level0.npz` — `height` (m, nan=unobserved), `semantic` (ground Klass), `structure`
+  (dominant *vertical* Klass per cell, UNKNOWN=none), `occupancy` (free/blocked/unknown),
+  `coverage` (observed vs interpolated)
 - `level0.meta.json` — grid spec (cell size, origin, up-axis/sign, dims)
-- `level0_{height,semantic,occupancy}.png` — previews (north-up)
+- `level0_{height,semantic,structure,occupancy}.png` — previews (north-up)
+
+### Vertical structures: labelled *and* walkability-tested (3 layers)
+
+A building/tree/wall is two independent facts, kept in two rasters (IMDF keeps them apart
+too — `unit.structure`/`fixture.wall` vs `amenity.landmark`):
+
+- **`structure`** — *what* vertical thing is here: the dominant obstacle class per cell
+  (BUILDING/WALL/TREE/FURNITURE), recorded wherever obstacle points land.
+- **`occupancy`** — *can you walk here*: a cell is BLOCKED only if obstacle points sit in the
+  **body-height clearance band** (`clearance_band`, default 0.4–2.0 m above ground). Tree
+  canopy overhanging a path is *above* the band → the path stays FREE (you walk under it);
+  a trunk/wall/building/bush fills the band → BLOCKED. No morphological *close* (it would fill
+  thin free paths — a walkable corridor is a hole in the blocked forest).
+
+**Occupancy/structure want accurate geometry; height wants density → use different sources.**
+On `maguro-park-after-itchy`, `--source colmap` (sparse but geometrically exact) gives sane
+occupancy (~3.6k blocked, paths free) and clean structure; `--source depth` mono is the best
+*height/coverage* source (dense, smooth) but its ~20% vertical depth noise scatters canopy
+into the body-height band → over-blocks (~80% of cells) and over-labels TREE everywhere.
+Recommended: **mono for `height`+`coverage`, colmap for `structure`+`occupancy`** (hybrid).
 - `masks/` — cached per-image class-id PNGs (+ colour previews); segmentation runs once
 
 ## Status / next
