@@ -241,6 +241,35 @@ def drop_to_ground(px, py, ground_depth, scale, min_depth=0.5):
     return c, r, float(col[r])
 
 
+def pixel_ray(c, r, scale, cam, im):
+    """Render-res pixel (c,r) -> world-space ray (origin = camera centre, unit direction).
+
+    The metric placement's reliable half: uses only the (trusted) pose, no ground depth."""
+    fx, fy, cx, cy = (v * scale for v in pinhole_params(cam))
+    cam_dir = np.array([(c - cx) / fx, (r - cy) / fy, 1.0])
+    R = qvec2rotmat(im.qvec)
+    C = -R.T @ im.tvec                       # camera centre in world
+    d = cam_dir @ R                          # camera dir -> world (world = cam @ R + C)
+    return C, d / (np.linalg.norm(d) + 1e-12)
+
+
+def triangulate_rays(origins: np.ndarray, dirs: np.ndarray):
+    """Least-squares 3D point nearest a bundle of world rays (o_i, unit d_i).
+
+    Solves (Σ Pᵢ) p = Σ Pᵢ oᵢ with Pᵢ = I - dᵢdᵢᵀ (projector onto the plane ⟂ the ray).
+    Returns (point, mean_perp_residual_m, condition_number). A narrow-baseline cluster (all
+    rays near-parallel) yields a high condition number -> triangulation is untrustworthy there."""
+    A = np.zeros((3, 3)); b = np.zeros(3)
+    Ps = []
+    for o, d in zip(origins, dirs):
+        P = np.eye(3) - np.outer(d, d)
+        A += P; b += P @ o; Ps.append(P)
+    cond = float(np.linalg.cond(A))
+    p = np.linalg.solve(A + 1e-6 * np.eye(3), b)
+    resid = float(np.mean([np.linalg.norm(P @ (p - o)) for P, o in zip(Ps, origins)]))
+    return p, resid, cond
+
+
 # --------------------------------------------------------------------------- #
 # clustering (DBSCAN via KDTree; no sklearn)
 # --------------------------------------------------------------------------- #
@@ -292,6 +321,45 @@ def cluster_footprints(pts_uv: np.ndarray, labels: list[str], scores: np.ndarray
     out.sort(key=lambda d: -d["count"])
     log(f"  clustered {len(pts_uv)} foot points -> {len(out)} objects "
         f"({len(set(labels))} classes)")
+    return out
+
+
+def cluster_triangulate(pts_uv, ray_o, ray_d, labels, scores, gf,
+                        eps, min_samples, max_cond=5e3, log=print):
+    """Per-class DBSCAN on the rough (DEM) positions to *group*, then multi-view **triangulate**
+    each cluster's 3D contact from its member rays on the trusted poses — placement no longer
+    rides on single-view depth. Singletons / near-parallel bundles fall back to the DEM centroid.
+    Also reports the triangulated point's height above the DEM ground (should be ~0 if the
+    contacts are consistent) as a built-in quality check."""
+    labels = np.asarray(labels); scores = np.asarray(scores)
+    ray_o = np.asarray(ray_o); ray_d = np.asarray(ray_d)
+    out = []
+    n_tri = n_fallback = 0
+    for c in sorted(set(labels)):
+        m = np.where(labels == c)[0]
+        cl = dbscan(pts_uv[m], eps, min_samples)
+        for k in sorted(set(cl) - {-1}):
+            sel = m[cl == k]
+            centroid = np.average(pts_uv[sel], axis=0, weights=scores[sel])
+            rec = {"class": str(c), "count": int(len(sel)), "score": float(scores[sel].mean())}
+            if len(sel) >= 2:
+                P, resid, cond = triangulate_rays(ray_o[sel], ray_d[sel])
+                if cond <= max_cond:
+                    local = P @ gf.R.T                       # world -> gravity-local
+                    uv = local[:2]                           # axes 0,1 horizontal
+                    hag = float(local[2] - gf.height_at(uv[None, :])[0])   # height above DEM ground
+                    rec.update(u=float(uv[0]), v=float(uv[1]), method="triangulated",
+                               resid_m=round(resid, 3), cond=round(cond, 1),
+                               hag_m=round(hag, 3))
+                    out.append(rec); n_tri += 1
+                    continue
+            rec.update(u=float(centroid[0]), v=float(centroid[1]), method="dem_fallback")
+            out.append(rec); n_fallback += 1
+    out.sort(key=lambda d: -d["count"])
+    resids = [o["resid_m"] for o in out if o.get("method") == "triangulated"]
+    med = float(np.median(resids)) if resids else float("nan")
+    log(f"  clustered {len(pts_uv)} pts -> {len(out)} objects "
+        f"({n_tri} triangulated, {n_fallback} DEM-fallback); median ray residual {med:.2f} m")
     return out
 
 
@@ -495,6 +563,11 @@ def main() -> None:
     ap.add_argument("--text-thr", type=float, default=0.25)
     ap.add_argument("--eps", type=float, default=1.2, help="DBSCAN cluster radius (m)")
     ap.add_argument("--min-samples", type=int, default=3, help="min detections to accept an object")
+    ap.add_argument("--placement", choices=["dem", "triangulate"], default="dem",
+                    help="dem = single-view back-projection to the DEM ground (default); "
+                         "triangulate = group by DEM position, then multi-view ray "
+                         "triangulation on the poses (drops single-view depth for the final "
+                         "position). points mode only.")
     ap.add_argument("--cell-size", type=float, default=0.5)
     ap.add_argument("--size", type=int, default=512, help="DEM render resolution for depth lookup")
     ap.add_argument("--max-range", type=float, default=30.0)
@@ -572,6 +645,7 @@ def main() -> None:
             accum_weight[cls][row, col] += score
 
     all_uv, all_lab, all_score, traj_uv = [], [], [], []
+    all_ray_o, all_ray_d = [], []          # per-detection world ray (origin, unit dir) for triangulation
     n_pts = 0
     for fi, im in enumerate(ims):
         cam = recon.cameras[im.camera_id]
@@ -597,8 +671,9 @@ def main() -> None:
                     continue
                 c, r, d = hit
                 w = world_from_render_px(c, r, d, scale, cam, im)
+                ro, rd = pixel_ray(c, r, scale, cam, im)
                 all_uv.append((w @ gf.R.T)[:2]); all_lab.append(cls)
-                all_score.append(score); n_pts += 1
+                all_score.append(score); all_ray_o.append(ro); all_ray_d.append(rd); n_pts += 1
                 if overlay is not None:
                     col = colour_for(cls, classes.index(cls) if cls in classes else 0)
                     ox, oy = int(x), int(y)                        # VLM object point
@@ -626,8 +701,13 @@ def main() -> None:
                 w = foot_world(box, ground_depth, scale, cam, im)
                 if w is None:
                     continue
+                x0b, y0b, x1b, y1b = box
+                cg = int(round(np.clip((x0b + x1b) * 0.5 * scale, 0, gw - 1)))
+                rg = int(round(np.clip(y1b * scale, 0, gh - 1)))
+                ro, rd = pixel_ray(cg, rg, scale, cam, im)
                 all_uv.append((w @ gf.R.T)[:2]); all_lab.append(cls)
-                all_score.append(float(score)); n_pts += 1
+                all_score.append(float(score)); all_ray_o.append(ro); all_ray_d.append(rd)
+                n_pts += 1
                 if overlay is not None:
                     x0, y0, x1, y1 = box.astype(int)
                     cv2.rectangle(overlay, (x0, y0), (x1, y1), col, 2)
@@ -665,8 +745,13 @@ def main() -> None:
     if args.mode == "points":
         if not all_uv:
             raise SystemExit("no foot points landed on the ground — check detector/prompt/DEM")
-        objects = cluster_footprints(np.array(all_uv), all_lab, np.array(all_score),
-                                     classes, args.eps, args.min_samples)
+        if args.placement == "triangulate":
+            objects = cluster_triangulate(
+                np.array(all_uv), all_ray_o, all_ray_d, all_lab, np.array(all_score),
+                gf, args.eps, args.min_samples)
+        else:
+            objects = cluster_footprints(np.array(all_uv), all_lab, np.array(all_score),
+                                         classes, args.eps, args.min_samples)
         render_bev(gf, objects, traj_uv, out / "bev_footprints.png")
     else:
         objects = []
