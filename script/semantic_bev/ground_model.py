@@ -123,7 +123,7 @@ def build_level(positions: np.ndarray, labels: np.ndarray, confidence: np.ndarra
                 ground_quantile: float = 0.2,
                 bounds_pct: float = 0.02, ground_height_clip: tuple[float, float] = (0.01, 0.99),
                 min_obstacle_count: int = 3, min_structure_count: int = 2,
-                solid_gap: float = 0.8, occupancy_morph: bool = True,
+                clearance_band: tuple[float, float] = (0.4, 2.0), occupancy_morph: bool = True,
                 fill_holes: bool = True, ordinal: int = 0, log=print) -> Level:
     """Rasterise labelled points into a single ground Level."""
     roles = np.array([int(role_of(k)) for k in range(int(max(Klass)) + 1)])[labels]
@@ -192,11 +192,12 @@ def build_level(positions: np.ndarray, labels: np.ndarray, confidence: np.ndarra
     # Two independent questions per cell, kept in two rasters:
     #   structure  -- *what* vertical thing is here: the dominant obstacle class, recorded
     #                 wherever obstacle points land, walkable underneath or not.
-    #   occupancy  -- *can you walk here*: geometry, not mere presence. A barrier is BLOCKED
-    #                 only when its points reach down near the ground (building / wall / trunk /
-    #                 bush). Tree canopy overhanging a path leaves a clearance gap above the
-    #                 ground, so it stays FREE -- you walk under it (the operator did). This is
-    #                 why "any obstacle point -> blocked" over-blocks tree-lined paths.
+    #   occupancy  -- *can you walk here*: decided by what sits at **body height**, not mere
+    #                 presence overhead. A cell is BLOCKED only if obstacle points fall in the
+    #                 clearance band [lo, hi] m above the ground (a trunk / wall / building /
+    #                 bush at body height). Tree canopy overhanging a path is *above* the band,
+    #                 so the band is empty and the path stays FREE -- you walk under it. This is
+    #                 what "any obstacle point -> blocked" got wrong on tree-lined paths.
     o_cells = cell_of(is_obstacle)
     obs_count = np.bincount(o_cells, minlength=ncells)
 
@@ -206,23 +207,22 @@ def build_level(positions: np.ndarray, labels: np.ndarray, confidence: np.ndarra
     structure_flat[obs_count < min_structure_count] = int(Klass.UNKNOWN)
     structure = structure_flat.reshape(rows, cols)
 
-    # Solidity: low quantile of the obstacle points' height-above-ground. Small -> the column
-    # reaches the ground (solid); large -> only high overhang (canopy) with walkable clearance.
-    # A low quantile (not the min) so one stray low point can't fake solidity under a canopy.
+    # Occupancy: count obstacle points in the body-height clearance band above the ground.
     obs_hag = height[is_obstacle] - height_out.reshape(-1)[o_cells]
-    base_hag, _ = _grouped_reduce(o_cells, obs_hag, ncells, "quantile", q=0.1)
-    base_hag = base_hag.reshape(rows, cols)
-    obs_count2d = obs_count.reshape(rows, cols)
-    blocked = (obs_count2d >= min_obstacle_count) & np.isfinite(base_hag) & (base_hag <= solid_gap)
+    lo_c, hi_c = clearance_band
+    in_band = o_cells[(obs_hag >= lo_c) & (obs_hag <= hi_c)]
+    band_count = np.bincount(in_band, minlength=ncells).reshape(rows, cols)
+    blocked = band_count >= min_obstacle_count
     raw_blocked = int(blocked.sum())
 
     if occupancy_morph and blocked.any():
+        # Drop lone specks only. Deliberately NO morphological close: a walkable path is a thin
+        # free corridor through blocked forest, i.e. a "hole" in the blocked mask -- closing
+        # would fill it and erase the path.
         b = blocked.astype(np.float32)
         neighbours = cv2.filter2D(b, -1, np.ones((3, 3), np.float32),
                                   borderType=cv2.BORDER_CONSTANT) - b
-        b = np.where(blocked & (neighbours >= 1), np.uint8(1), np.uint8(0))  # drop lone specks
-        b = cv2.morphologyEx(b, cv2.MORPH_CLOSE, np.ones((3, 3), np.uint8))   # fill pinholes
-        blocked = b.astype(bool)
+        blocked = (blocked & (neighbours >= 1))
 
     occ = np.full((rows, cols), UNKNOWN_OCC, dtype=np.uint8)
     occ[coverage] = FREE

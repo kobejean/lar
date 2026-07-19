@@ -75,7 +75,10 @@ def main():
     ap.add_argument("--images", default=None)
     ap.add_argument("--out", default=None)
     ap.add_argument("--data-factor", type=int, default=2)
-    ap.add_argument("--model-name", default="depth-anything/Depth-Anything-V2-Large-hf")
+    # Default is the Apache-2.0 *Small* model: DA-V2 Base/Large are CC-BY-NC (non-commercial).
+    # Per script/depth/depth_bench.py it's ~tied on near-field accuracy with the best backend
+    # and ~6x faster. Swap in any HF depth model (e.g. Intel/dpt-beit-large-512, MIT) here.
+    ap.add_argument("--model-name", default="depth-anything/Depth-Anything-V2-Small-hf")
     args = ap.parse_args()
 
     if args.session:

@@ -155,10 +155,31 @@ at the cost of first training a semantic splat model.
 
 ## Output (`<out>/`)
 
-- `level0.npz` — `height` (m, nan=unobserved), `semantic` (Klass id), `occupancy`
-  (free/blocked/unknown), `coverage` (observed vs interpolated)
+- `level0.npz` — `height` (m, nan=unobserved), `semantic` (ground Klass), `structure`
+  (dominant *vertical* Klass per cell, UNKNOWN=none), `occupancy` (free/blocked/unknown),
+  `coverage` (observed vs interpolated)
 - `level0.meta.json` — grid spec (cell size, origin, up-axis/sign, dims)
-- `level0_{height,semantic,occupancy}.png` — previews (north-up)
+- `level0_{height,semantic,structure,occupancy}.png` — previews (north-up)
+
+### Vertical structures: labelled *and* walkability-tested (3 layers)
+
+A building/tree/wall is two independent facts, kept in two rasters (IMDF keeps them apart
+too — `unit.structure`/`fixture.wall` vs `amenity.landmark`):
+
+- **`structure`** — *what* vertical thing is here: the dominant obstacle class per cell
+  (BUILDING/WALL/TREE/FURNITURE), recorded wherever obstacle points land.
+- **`occupancy`** — *can you walk here*: a cell is BLOCKED only if obstacle points sit in the
+  **body-height clearance band** (`clearance_band`, default 0.4–2.0 m above ground). Tree
+  canopy overhanging a path is *above* the band → the path stays FREE (you walk under it);
+  a trunk/wall/building/bush fills the band → BLOCKED. No morphological *close* (it would fill
+  thin free paths — a walkable corridor is a hole in the blocked forest).
+
+**Occupancy/structure want accurate geometry; height wants density → use different sources.**
+On `maguro-park-after-itchy`, `--source colmap` (sparse but geometrically exact) gives sane
+occupancy (~3.6k blocked, paths free) and clean structure; `--source depth` mono is the best
+*height/coverage* source (dense, smooth) but its ~20% vertical depth noise scatters canopy
+into the body-height band → over-blocks (~80% of cells) and over-labels TREE everywhere.
+Recommended: **mono for `height`+`coverage`, colmap for `structure`+`occupancy`** (hybrid).
 - `masks/` — cached per-image class-id PNGs (+ colour previews); segmentation runs once
 
 ## Status / next

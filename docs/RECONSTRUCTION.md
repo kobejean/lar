@@ -89,6 +89,8 @@ locked environment, no manual venv activation):
 cd /path/to/lar
 # Recommended for large / low-parallax capture (e.g. a park):
 uv run python script/colmap/colmap.py input/1782302260032 --use_sequential --use_arkit_poses
+~/bin/micromamba run -n colmap uv run python script/colmap/colmap.py \
+    input/maguro-park-after-itchy-copy --use_covisibility
 ```
 
 Replace `1782302260032` with your session folder name. The pipeline:

@@ -134,7 +134,7 @@ class GroundMesh:
 
 
 def backproject_positions(recon, depth_dir: Path, image_ids, stride: int, voxel: float,
-                          log=print) -> np.ndarray:
+                          depth_max: float = 0.0, log=print) -> np.ndarray:
     """Fused world point cloud from per-view metric depth (positions only, voxel-deduped).
 
     Positions-only twin of ``depth_backproject.backproject_labeled_points`` — no MaskStore,
@@ -158,6 +158,8 @@ def backproject_positions(recon, depth_dir: Path, image_ids, stride: int, voxel:
         gx, gy = (a.ravel() for a in np.meshgrid(xs, ys))
         d = depth[gy, gx]
         ok = (d > 0) & np.isfinite(d)
+        if depth_max > 0:
+            ok &= d < depth_max          # far/sky mono depth explodes (1/(a·disp+b)); cull it
         if not ok.any():
             continue
         u, v, dd = gx[ok].astype(np.float32), gy[ok].astype(np.float32), d[ok]
@@ -378,6 +380,8 @@ def main() -> None:
     ap.add_argument("--depth-dir", help="per-view depth .npy dir (default: session.depth_dir('mono'))")
     ap.add_argument("--depth-stride", type=int, default=8, help="pixel stride when back-projecting depth")
     ap.add_argument("--depth-voxel", type=float, default=0.1, help="voxel size (m) for depth dedup")
+    ap.add_argument("--depth-max", type=float, default=40.0,
+                    help="drop mono-depth pixels beyond this range (m); far/sky depth explodes")
     ap.add_argument("--cell-size", type=float, default=0.5, help="DEM cell size (m)")
     ap.add_argument("--clearance-lo", type=float, default=0.4,
                     help="body-height band lower bound above ground (m)")
@@ -425,7 +429,7 @@ def main() -> None:
     if args.dem_source == "mono":
         print(f"DEM source: mono depth <- {depth_dir}")
         dem_world = backproject_positions(recon, depth_dir, list(recon.images),
-                                          args.depth_stride, args.depth_voxel)
+                                          args.depth_stride, args.depth_voxel, args.depth_max)
 
     mesh, occ_world = build_ground_mesh(
         recon, args.cell_size, (args.clearance_lo, args.clearance_hi),
