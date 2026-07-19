@@ -16,7 +16,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from colmap_io import Reconstruction
+from colmap_io import Reconstruction, qvec2rotmat
 from segmentation import Segmenter, save_mask_png
 from taxonomy import Klass
 
@@ -69,19 +69,43 @@ def segment_and_cache(recon: Reconstruction, image_dir: str | Path,
     return done
 
 
-def accumulate_votes(recon: Reconstruction, store: MaskStore,
-                     image_ids: list[int]) -> tuple[np.ndarray, np.ndarray, dict[int, int]]:
+def accumulate_votes(recon: Reconstruction, store: MaskStore, image_ids: list[int],
+                     max_depth: float = 30.0, log=print) -> tuple[np.ndarray, np.ndarray, dict[int, int]]:
     """Stream masks and tally per-point class votes.
 
     Returns ``(point_ids, votes, index)`` where ``votes`` is (P, num_classes) uint16 and
     ``index`` maps a COLMAP point id to its row.
+
+    Uses the exact observed pixel from each image's 2D keypoints when available. For models
+    with no 2D observations (e.g. a BA export with empty POINTS2D and no point tracks), falls
+    back to reprojecting every point into every image (visibility via depth cap + majority).
     """
     point_ids = np.array(sorted(recon.points3d), dtype=np.int64)
     index = {int(pid): i for i, pid in enumerate(point_ids)}
     n_classes = int(max(Klass)) + 1
     votes = np.zeros((len(point_ids), n_classes), dtype=np.uint16)
 
-    id_set = set(image_ids)
+    if not any(len(recon.images[i].xys) for i in image_ids):
+        log("      model has no 2D observations -> reprojection labeling")
+        pos = np.array([recon.points3d[int(pid)].xyz for pid in point_ids])
+        for img_id in image_ids:
+            im = recon.images[img_id]
+            cam = pos @ qvec2rotmat(im.qvec).T + im.tvec
+            z = cam[:, 2]
+            near = (z > 0.1) & (z < max_depth)
+            if not near.any():
+                continue
+            fx, fy, cx, cy = recon.cameras[im.camera_id].params[:4]
+            px = fx * cam[:, 0] / z + cx
+            py = fy * cam[:, 1] / z + cy
+            mask = store.load(im.name)
+            H, W = mask.shape
+            inb = near & (px >= 0) & (px < W) & (py >= 0) & (py < H)
+            idx = np.nonzero(inb)[0]
+            if len(idx):
+                np.add.at(votes, (idx, mask[py[idx].astype(np.int64), px[idx].astype(np.int64)]), 1)
+        return point_ids, votes, index
+
     for img_id in image_ids:
         img = recon.images[img_id]
         mask = store.load(img.name)

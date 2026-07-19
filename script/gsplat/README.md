@@ -27,6 +27,20 @@ pipelines. Output per Gaussian: an argmax class id (`_labels.npy`) + a taxonomy-
 `.ply`. That labelled point set is exactly the `(positions, labels, confidence)` geometry
 source `semantic_bev` is designed to consume, and a route into LAR localization.
 
+**Two-phase training (the reliable, canonical recipe).** Semantics is *not* trained jointly
+with geometry. Following LangSplat / Feature-3DGS / Gaussian Grouping:
+
+1. **Phase 1 (`--max-steps`)** — train RGB + geometry with MCMC densification. This is
+   identical to a plain RGB run; no semantic field exists yet.
+2. **Phase 2 (`--sem-steps`)** — attach a fresh semantic field to the *converged*
+   Gaussians and train only it, with the geometry **detached/frozen** (MCMC off). The 2D
+   masks are distilled onto fixed supports.
+
+Why: geometry from the dense photometric loss is far more reliable than the semantic CE,
+and freezing it means labelling becomes a clean multi-view fusion problem that **cannot
+move or degrade the reconstruction**. Phase 2 is cheap (a few thousand steps — no SSIM,
+no SH, no densification).
+
 ## Modules
 
 | file | role |
@@ -34,7 +48,73 @@ source `semantic_bev` is designed to consume, and a route into LAR localization.
 | `colmap_dataset.py` | read COLMAP **text** model (`poses_txt/`) → posed cameras + init points, RAM-cached at training resolution |
 | `model.py`          | Gaussian init from sparse points (k-NN scale seed); PLY + semantic-label export |
 | `semantic.py`       | cache per-image class masks via `semantic_bev` segmenters (shared taxonomy) |
-| `train.py`          | MCMC trainer (L1+SSIM RGB, optional semantic CE), CLI, exports |
+| `train.py`          | MCMC trainer (L1+SSIM RGB, optional semantic CE), 3DGS/2DGS modes, CLI, exports |
+| `export_depth.py`   | render per-view metric depth from a trained model (3DGS expected-depth / 2DGS median-depth) → depth bake-off contract |
+
+## 2DGS (surfel) mode — cleaner depth for the BEV
+
+`--mode 2dgs` swaps the volumetric 3D Gaussians for **2D Gaussian surfels** (flat disks
+that lie *on* surfaces) plus the 2DGS surface regularizers. The point is **geometry, not
+looks**: surfels give sharp, surface-aligned depth, which is what the `semantic_bev`
+depth back-projection needs for accurate ground height + object footprints. It keeps the
+exact same MCMC `--cap-max` VRAM budget and two-phase semantic recipe, and writes to a
+separate `output/<name>-gsplat2d[-sem]/` dir so it never clobbers a 3DGS model.
+
+```sh
+uv run --extra gsplat python train.py --session <name> --mode 2dgs          # RGB geometry
+uv run --extra gsplat --extra segmentation python train.py --session <name> --mode 2dgs --semantic
+```
+
+- `--normal-reg` (default **0.05**, the 2DGS paper value) — normal-consistency; this is
+  what flattens the surfels onto the surface. The safe, standard regularizer.
+- `--dist-reg` (default **0**) — distortion; sharpens depth further but, like the MCMC
+  regularizers, can misbehave on our un-normalized metric coordinates. Off by default;
+  turn up slowly and watch the depth previews.
+- `--reg-start` (default **500**) — delays both regularizers until the geometry has
+  roughly settled (fighting them too early stalls convergence).
+
+> **Implementation note.** gsplat 1.5.3's `rasterization_2dgs` has three sharp edges we
+> route around in `train.rasterize` (all verified on this build): its **packed** path
+> mis-gathers colours (`colors.shape[0] == nnz`), it only produces `surf_normals` under a
+> **depth render mode**, and with `sh_degree=None` it **omits the camera axis** on colours.
+> So 2DGS always renders unpacked, in `RGB+ED`, with non-SH colours shaped `(1, N, D)`.
+
+Render depth from any trained model for the bake-off:
+
+```sh
+uv run --extra gsplat python export_depth.py --session <name> --backend 2dgs   # 2dgs median depth
+uv run --extra gsplat python export_depth.py --session <name> --backend 3dgs   # 3dgs expected depth
+```
+
+## Top-down BEV render (`render_bev.py`)
+
+Rasterise a trained model from a **virtual orthographic top-down camera** — a true
+photographic BEV where occlusion and above-ground structure are handled by the render
+itself, unlike the `semantic_bev` `--rgb-ortho` ground-drape (which smears anything off the
+ground plane). Uses gsplat's `rasterization(camera_model="ortho")` — real orthographic
+projection (`px = fx·Xc + cx`, no Z-divide), so `fx = fy = 1/cell_size` px-per-metre.
+
+```sh
+uv run --extra gsplat python render_bev.py \
+    --ply  ../../output/<run>/point_cloud.ply \
+    --meta ../../output/<run>-sbev/level0.meta.json \   # align to the DEM/semantic grid
+    --out  ../../output/<run>-sbev --cell-size 0.05
+```
+
+- `--meta level0.meta.json` lands the BEV on the **same grid** as the semantic/height/
+  occupancy rasters (same origin, gravity-canonical row axis) so all layers overlay
+  pixel-for-pixel. Without it, footprint + gravity come from `--model` (COLMAP cameras) and
+  the Gaussian extent.
+- `--cell-size` metres per output pixel (0.05 → high-res); `--min-opacity` (default 0.15)
+  culls floaters. Writes `level0_rgb_bev.png` + `_rgb_bev_masked.png` (alpha = coverage).
+
+> **OOD caveat.** The capture is all grazing ground-level views, so a top-down ortho is a
+> viewpoint with **no training supervision**. Under-trained or unregularised models show
+> needle artifacts (high-opacity Gaussians seen edge-on) and floaters from above. Mitigate
+> with a fully-trained model, `--opacity-reg`/`--scale-reg` during training, and
+> `--min-opacity` at render. 2DGS surfels would be cleaner top-down (flat disks on
+> surfaces), but gsplat 1.5.3's `rasterization_2dgs` has **no ortho** support — a
+> high-focal pinhole placed far above approximates it (follow-up).
 
 ## Install
 
@@ -80,33 +160,30 @@ export TORCH_CUDA_ARCH_LIST=12.0     # Blackwell sm_120
 
 ## Run
 
-Smoke test (subset, few steps — proves the chain end to end):
+**Just pass `--session <name>`** and paths are filled from the canonical layout
+([`../lar_session.py`](../lar_session.py)): `--model` = the refined COLMAP model if it
+exists else the raw one, `--images` = `input/<name>`, `--out` = `output/<name>-gsplat[-sem]`.
+Any explicit flag overrides.
+
+Semantic park model (the usual command):
 
 ```sh
 cd script/gsplat
-uv run --extra gsplat python train.py \
-  --model ../../input/maguro-park-after-itchy/colmap/poses_txt \
-  --out   ../../output/maguro-gsplat-smoke \
-  --limit 40 --data-factor 4 --cap-max 80000 --max-steps 500 --preview-every 100
-```
-
-Coarse park model (RGB):
-
-```sh
-uv run --extra gsplat python train.py \
-  --model ../../input/maguro-park-after-itchy/colmap/poses_txt \
-  --out   ../../output/maguro-gsplat \
-  --data-factor 2 --cap-max 300000 --max-steps 30000
-```
-
-Semantic 3DGS (adds the distilled class head):
-
-```sh
 uv run --extra gsplat --extra segmentation python train.py \
-  --model ../../input/maguro-park-after-itchy/colmap/poses_txt \
-  --out   ../../output/maguro-gsplat-sem \
+  --session maguro-park-after-itchy \
   --data-factor 2 --cap-max 300000 --max-steps 30000 \
   --semantic --segmenter mask2former-large
+```
+
+RGB only — drop `--semantic` (writes to `output/<name>-gsplat`). Smoke test — add
+`--limit 40 --max-steps 500` (and `--out` if you don't want to overwrite the real run).
+
+Explicit paths still work instead of `--session`:
+
+```sh
+uv run --extra gsplat python train.py \
+  --model ../../input/maguro-park-after-itchy/colmap/poses_txt \
+  --out   ../../output/maguro-gsplat --data-factor 2 --cap-max 300000 --max-steps 30000
 ```
 
 `--segmenter` accepts any `semantic_bev` backend: `oneformer` / `oneformer-large` /

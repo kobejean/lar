@@ -38,6 +38,8 @@ class GridSpec:
     origin_v: float           # world coord of row 0 (second horizontal axis)
     cols: int
     rows: int
+    v_sign: float = 1.0       # canonical row = v_sign * world[v_axis]; ties the overhead
+                              # orientation to gravity, not the model's Y-up/Y-down convention
 
     @property
     def horiz_axes(self) -> tuple[int, int]:
@@ -49,7 +51,8 @@ class Level:
     ordinal: int
     spec: GridSpec
     height: np.ndarray        # (rows, cols) float32, nan where unobserved
-    semantic: np.ndarray      # (rows, cols) uint8 Klass
+    semantic: np.ndarray      # (rows, cols) uint8 Klass -- the *ground* surface class
+    structure: np.ndarray     # (rows, cols) uint8 Klass -- dominant *vertical* class (UNKNOWN=none)
     occupancy: np.ndarray     # (rows, cols) uint8
     coverage: np.ndarray      # (rows, cols) bool
 
@@ -117,10 +120,10 @@ def _nearest_fill(grid: np.ndarray, valid: np.ndarray) -> np.ndarray:
 
 def build_level(positions: np.ndarray, labels: np.ndarray, confidence: np.ndarray,
                 cell_size: float = 0.5, up_axis: int = 1, up_sign: float = 1.0,
-                ground_quantile: float = 0.2, obstacle_band: tuple[float, float] = (0.3, 2.2),
+                ground_quantile: float = 0.2,
                 bounds_pct: float = 0.02, ground_height_clip: tuple[float, float] = (0.01, 0.99),
-                min_obstacle_count: int = 3, obstacle_dominance: float = 1.0,
-                occupancy_morph: bool = True,
+                min_obstacle_count: int = 3, min_structure_count: int = 2,
+                solid_gap: float = 0.8, occupancy_morph: bool = True,
                 fill_holes: bool = True, ordinal: int = 0, log=print) -> Level:
     """Rasterise labelled points into a single ground Level."""
     roles = np.array([int(role_of(k)) for k in range(int(max(Klass)) + 1)])[labels]
@@ -128,8 +131,14 @@ def build_level(positions: np.ndarray, labels: np.ndarray, confidence: np.ndarra
     is_obstacle = roles == int(Role.OBSTACLE)
 
     u_axis, v_axis = (a for a in (0, 1, 2) if a != up_axis)
+    # Canonical overhead handedness: the raster's row axis follows gravity (via up_sign),
+    # not the source model's Y-up/Y-down convention. Without this, a model expressed with
+    # +Y-up (up_sign=+1) and the same scene refined to +Y-down (up_sign=-1) rasterise as
+    # vertical mirror images of each other, because the row axis was pinned to world-Z. The
+    # npz stays honest: world[v_axis] = v_sign * (origin_v + row*cell_size). Georef unaffected.
+    v_sign = -up_sign
     u = positions[:, u_axis]
-    v = positions[:, v_axis]
+    v = v_sign * positions[:, v_axis]
     height = up_sign * positions[:, up_axis]
 
     # Drop SfM floaters: keep ground candidates within a robust global height band. Real
@@ -152,7 +161,7 @@ def build_level(positions: np.ndarray, labels: np.ndarray, confidence: np.ndarra
     lo_v, hi_v = np.quantile(v[keep], [bounds_pct, 1 - bounds_pct])
     cols = int(np.ceil((hi_u - lo_u) / cell_size)) + 1
     rows = int(np.ceil((hi_v - lo_v) / cell_size)) + 1
-    spec = GridSpec(cell_size, up_axis, up_sign, float(lo_u), float(lo_v), cols, rows)
+    spec = GridSpec(cell_size, up_axis, up_sign, float(lo_u), float(lo_v), cols, rows, v_sign=v_sign)
     ncells = rows * cols
     log(f"  grid {cols}x{rows} @ {cell_size} m ({cols * cell_size:.0f}x{rows * cell_size:.0f} m)")
 
@@ -179,19 +188,32 @@ def build_level(positions: np.ndarray, labels: np.ndarray, confidence: np.ndarra
     else:
         height_out = height_raster
 
-    # Occupancy = walkability, not "is there anything above the ground". On narrow forest
-    # paths, foliage/branches overhang walkable ground and drop obstacle points into the band,
-    # so "any obstacle point -> blocked" false-blocks the paths the operator literally walked.
-    # Instead block only where obstacle points *dominate* ground points: a trunk/wall/bush has
-    # many obstacle points and little ground beneath it, whereas a path is ground-dominant with
-    # only overhang above. Then require a minimum count and drop isolated specks.
+    # ----- structure footprint + occupancy (solid-to-ground test) --------------
+    # Two independent questions per cell, kept in two rasters:
+    #   structure  -- *what* vertical thing is here: the dominant obstacle class, recorded
+    #                 wherever obstacle points land, walkable underneath or not.
+    #   occupancy  -- *can you walk here*: geometry, not mere presence. A barrier is BLOCKED
+    #                 only when its points reach down near the ground (building / wall / trunk /
+    #                 bush). Tree canopy overhanging a path leaves a clearance gap above the
+    #                 ground, so it stays FREE -- you walk under it (the operator did). This is
+    #                 why "any obstacle point -> blocked" over-blocks tree-lined paths.
     o_cells = cell_of(is_obstacle)
-    delta = height[is_obstacle] - height_out.reshape(-1)[o_cells]
-    lo_b, hi_b = obstacle_band
-    in_band = o_cells[(delta >= lo_b) & (delta <= hi_b)]
-    obs_count = np.bincount(in_band, minlength=ncells).reshape(rows, cols)
-    grd_count = g_count.reshape(rows, cols)
-    blocked = (obs_count >= min_obstacle_count) & (obs_count >= obstacle_dominance * grd_count)
+    obs_count = np.bincount(o_cells, minlength=ncells)
+
+    # Structure class: confidence-weighted obstacle majority where enough points landed.
+    structure_flat = _grouped_majority(o_cells, labels[is_obstacle], confidence[is_obstacle],
+                                       ncells, n_klass)
+    structure_flat[obs_count < min_structure_count] = int(Klass.UNKNOWN)
+    structure = structure_flat.reshape(rows, cols)
+
+    # Solidity: low quantile of the obstacle points' height-above-ground. Small -> the column
+    # reaches the ground (solid); large -> only high overhang (canopy) with walkable clearance.
+    # A low quantile (not the min) so one stray low point can't fake solidity under a canopy.
+    obs_hag = height[is_obstacle] - height_out.reshape(-1)[o_cells]
+    base_hag, _ = _grouped_reduce(o_cells, obs_hag, ncells, "quantile", q=0.1)
+    base_hag = base_hag.reshape(rows, cols)
+    obs_count2d = obs_count.reshape(rows, cols)
+    blocked = (obs_count2d >= min_obstacle_count) & np.isfinite(base_hag) & (base_hag <= solid_gap)
     raw_blocked = int(blocked.sum())
 
     if occupancy_morph and blocked.any():
@@ -207,9 +229,10 @@ def build_level(positions: np.ndarray, labels: np.ndarray, confidence: np.ndarra
     occ[blocked] = BLOCKED
     occupancy = occ
 
-    log(f"  ground cells {int(coverage.sum())}/{ncells} observed"
-        f" ({100 * coverage.mean():.1f}%); blocked {raw_blocked} -> {int(blocked.sum())} after cleanup")
-    return Level(ordinal, spec, height_out, semantic, occupancy, coverage)
+    n_struct = int((structure != int(Klass.UNKNOWN)).sum())
+    log(f"  ground cells {int(coverage.sum())}/{ncells} observed ({100 * coverage.mean():.1f}%); "
+        f"structure cells {n_struct}; blocked {raw_blocked} -> {int(blocked.sum())} after cleanup")
+    return Level(ordinal, spec, height_out, semantic, structure, occupancy, coverage)
 
 
 # ----- export ------------------------------------------------------------------
@@ -233,20 +256,20 @@ def save_level(level: Level, out_dir: str | Path, prefix: str = "level0") -> Non
 
     np.savez_compressed(
         d / f"{prefix}.npz",
-        height=level.height, semantic=level.semantic,
+        height=level.height, semantic=level.semantic, structure=level.structure,
         occupancy=level.occupancy, coverage=level.coverage,
     )
     with open(d / f"{prefix}.meta.json", "w") as f:
         json.dump({
             "ordinal": level.ordinal, "cell_size": s.cell_size,
-            "up_axis": s.up_axis, "up_sign": s.up_sign,
+            "up_axis": s.up_axis, "up_sign": s.up_sign, "v_sign": s.v_sign,
             "origin_u": s.origin_u, "origin_v": s.origin_v,
             "cols": s.cols, "rows": s.rows,
         }, f, indent=2)
 
-    # Orientation: col = +u (=+X), row = +v (=+Z). Shown as-is this is a NON-mirrored
-    # top-down (screen-right=+X, screen-up=-Z), verified against the ARKit trajectory
-    # (Kabsch det=+1, RMSE~0). Do NOT flipud -- that mirrors the map left/right.
+    # Orientation: col = +u (=+X), row = +v where v = -up_sign * world[v_axis]. The row axis
+    # is gravity-canonical (see build_level), so the overhead view renders the same regardless
+    # of whether the source model is Y-up or Y-down. Shown as-is (no flipud -- that mirrors L/R).
     def up(img):
         return img
 
@@ -256,6 +279,12 @@ def save_level(level: Level, out_dir: str | Path, prefix: str = "level0") -> Non
     sem_rgb = lut[level.semantic]
     sem_rgb[~level.coverage] = (30, 30, 30)
     cv2.imwrite(str(d / f"{prefix}_semantic.png"), up(cv2.cvtColor(sem_rgb, cv2.COLOR_RGB2BGR)))
+
+    # Structure footprints (vertical classes): building/wall/tree/... over dimmed ground.
+    struct_rgb = (0.30 * sem_rgb).astype(np.uint8)
+    has_struct = level.structure != int(Klass.UNKNOWN)
+    struct_rgb[has_struct] = lut[level.structure[has_struct]]
+    cv2.imwrite(str(d / f"{prefix}_structure.png"), up(cv2.cvtColor(struct_rgb, cv2.COLOR_RGB2BGR)))
 
     occ_rgb = np.zeros((*level.occupancy.shape, 3), np.uint8)
     occ_rgb[level.occupancy == FREE] = (60, 180, 60)

@@ -28,7 +28,7 @@ HTML = """<!doctype html><html><head><meta charset="utf-8">
 .legend{{background:#fff;padding:8px 10px;border-radius:6px;font:13px sans-serif;line-height:1.6;box-shadow:0 1px 4px rgba(0,0,0,.3)}}
 .sw{{display:inline-block;width:12px;height:12px;margin-right:6px;border:1px solid #0003;vertical-align:middle}}</style>
 </head><body><div id="map"></div><script>
-const UNIT={units}, VENUE={venue}, LEVEL={level}, STYLE={style};
+const UNIT={units}, VENUE={venue}, LEVEL={level}, STYLE={style}, ROUTING={routing};
 const map=L.map('map');
 L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png',
   {{maxZoom:20,attribution:'&copy; OpenStreetMap'}}).addTo(map);
@@ -37,6 +37,8 @@ const units=L.geoJSON(UNIT,{{
   style:f=>STYLE[f.properties.category]||{{color:'#888',fillColor:'#bbb',fillOpacity:.5,weight:1}},
   onEachFeature:(f,l)=>l.bindPopup(`<b>${{f.feature_type}}</b><br>category: ${{f.properties.category}}<br>id: ${{f.id}}`)
 }}).addTo(map);
+if(ROUTING&&ROUTING.features&&ROUTING.features.length)
+  L.geoJSON(ROUTING,{{style:{{color:'#c0392b',weight:2,opacity:0.9,dashArray:'4 3'}}}}).addTo(map);
 const ven=L.geoJSON(VENUE,{{style:{venue_style}}}).addTo(map);
 map.fitBounds(ven.getBounds().pad(0.1));
 const lg=L.control({{position:'bottomright'}});
@@ -56,11 +58,14 @@ def main() -> None:
 
     venue = json.load(open(d / "venue.geojson"))
     title = venue["features"][0]["properties"]["name"].get("en", "IMDF Venue")
+    routing_path = d / "routing.geojson"
+    routing = json.load(open(routing_path)) if routing_path.exists() else {"features": []}
     html = HTML.format(
         title=title,
         units=json.dumps(json.load(open(d / "unit.geojson"))),
         venue=json.dumps(venue),
         level=json.dumps(json.load(open(d / "level.geojson"))),
+        routing=json.dumps(routing),
         style=json.dumps(STYLE),
         venue_style=json.dumps(VENUE_STYLE),
     )

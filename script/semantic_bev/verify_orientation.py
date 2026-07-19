@@ -18,6 +18,7 @@ import cv2
 import numpy as np
 
 from colmap_io import read_model
+from grid_transform import world_to_cell
 from pipeline import _qvec2rotmat
 from taxonomy import Klass, Role, role_of
 
@@ -39,9 +40,9 @@ def main() -> None:
     centers = np.array([-_qvec2rotmat(im.qvec).T @ im.tvec for im in recon.images.values()])
     u_axis, v_axis = (a for a in (0, 1, 2) if a != meta["up_axis"])
 
-    # same mapping the raster uses: col = (u-origin)/cell, row = (v-origin)/cell  (no flip)
-    col = ((centers[:, u_axis] - meta["origin_u"]) / meta["cell_size"]).astype(int)
-    row = ((centers[:, v_axis] - meta["origin_v"]) / meta["cell_size"]).astype(int)
+    # same mapping the raster uses (single source of truth in grid_transform)
+    col_f, row_f = world_to_cell(centers[:, u_axis], centers[:, v_axis], meta)
+    col, row = col_f.astype(int), row_f.astype(int)
     inb = (col >= 0) & (col < meta["cols"]) & (row >= 0) & (row < meta["rows"])
     col, row = col[inb], row[inb]
 

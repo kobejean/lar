@@ -149,9 +149,14 @@ def export_semantic(params: nn.ParameterDict, path_stem: str | Path, color_lut) 
     """
     path_stem = Path(path_stem)
     means = params["means"].detach().cpu().numpy()
-    labels = params["sem"].detach().argmax(dim=1).cpu().numpy().astype(np.uint8)
+    logits = params["sem"].detach()
+    labels = logits.argmax(dim=1).cpu().numpy().astype(np.uint8)
+    # Confidence = peak softmax prob. Poorly-observed Gaussians have near-flat logits
+    # (~1/num_classes), so this down-weights them when the BEV builder votes per cell.
+    conf = torch.softmax(logits, dim=1).max(dim=1).values.cpu().numpy().astype(np.float32)
 
     np.save(path_stem.with_name(path_stem.name + "_labels.npy"), labels)
+    np.save(path_stem.with_name(path_stem.name + "_confidence.npy"), conf)
 
     lut = np.asarray(color_lut, dtype=np.float32) / 255.0
     rgb = lut[labels]
