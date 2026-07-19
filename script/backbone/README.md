@@ -7,9 +7,11 @@ two separate off-the-shelf models (DA2 depth + Mask2Former seg) with one backbon
 
 | file | role |
 |------|------|
-| `probe.py`            | is the frozen backbone worth building on? `pca` (feature viz) + `linprobe` (linear head vs Mask2Former pseudo-labels). Verdict: yes — ViT-S/16 hits 0.87 patch-acc on our taxonomy. |
+| `probe.py`            | is the frozen backbone worth building on? `pca` (feature viz) + `linprobe` (linear head vs Mask2Former pseudo-labels). Verdict: yes — ViT-S/16 hits 0.87 patch-acc on our taxonomy. **Caveat: that 0.87 is agreement with the teacher, not accuracy — see `ade20k_eval.py`.** |
 | `footprint_labels.py` | **generate footprint / free-space supervision** (below) for a ground head, no manual labels. |
 | `base_points.py`      | **deduped discrete object footprints** — open-vocab detection → foot points → BEV clustering (below). |
+| `ade20k_eval.py`      | **score the frozen backbone against real ADE20K ground truth** — semantic linear probe + instance separability (below). |
+| `relabel.py`          | **browser BEV relabeler** — hand-correct `footprint2d` rasters + place semantic ground-contact keypoints (below). |
 
 ## `footprint_labels.py` — footprint / free-space supervision generator
 
@@ -123,6 +125,119 @@ without a prompt trick. Caveats: cloud API (not shippable offline; ~1 paid call/
 daily caps), and `drop_to_ground` can bias a distant object's contact slightly toward the camera
 (the first ground pixel below the trunk). Natural next step: use Gemini as an **oracle to distill
 labels** into a shippable local head.
+
+## `ade20k_eval.py` — the frozen backbone vs real ground truth
+
+`probe.py --task linprobe` trains **and** scores against Mask2Former output, so its 0.87 is
+*agreement with the teacher*, silently capped by the teacher's own errors. ADE20K supplies
+real labels in a matching label space (the cached Mask2Former is ADE-trained), so the two
+can finally be separated.
+
+Data — no registration, ~1 GB + 90 MB, extracted to `/home/play/Code/datasets/ade20k`:
+
+```sh
+curl -fLO http://data.csail.mit.edu/places/ADEchallenge/ADEChallengeData2016.zip   # 20210 train / 2000 val
+curl -fLO http://sceneparsing.csail.mit.edu/data/ChallengeData2017/annotations_instance.tar
+```
+
+```sh
+uv run --extra segmentation --with omegaconf --with /home/play/Code/lingbot-vision \
+  python script/backbone/ade20k_eval.py semantic --num 120 --val-num 60
+uv run --extra segmentation --with omegaconf --with /home/play/Code/lingbot-vision \
+  python script/backbone/ade20k_eval.py instance --num 40
+```
+
+**Measured (LingBot ViT-S/16, 512², 120 train / 60 val images):**
+
+| | mIoU | pixel-acc |
+|---|---|---|
+| LingBot-small + **linear** head | **57.3** | 82.8 |
+| Mask2Former-Swin-**L** (the `probe.py` teacher) | 65.6 | 88.9 |
+
+A *linear* probe on a frozen ViT-S lands **8.4 mIoU** behind a fully-supervised Swin-Large —
+good for the compute, and it reframes the 0.87: the teacher probe.py measured against is
+itself only 65.6 mIoU vs GT. Per class, LingBot wins **FURNITURE 24.6 vs 9.0** — the class
+holding our park objects (bench, pole, sign, trash can, streetlight). Distilling the teacher
+would make the classes we care about *worse*, not better.
+
+Caveats, stated plainly: teacher predictions are mapped to our taxonomy through
+`taxonomy.keyword_klass` while GT uses this file's explicit table, so part of the 8.4 gap is
+mapping mismatch, not model quality — the gap is an **upper bound** on the teacher's real
+advantage. GRASS scores badly for both (7.8 / 9.2), which smells like a label-mapping
+artifact (grass/field/flower folded together) rather than model failure.
+
+**Instance separability** (`instance`, 40 val images) asks the question the BEV pipeline
+chokes on — "the same tree from 970 frames becomes one un-separable blob". It scores how well
+cosine similarity ranks same-instance patch pairs above different-instance-same-class pairs:
+
+```
+same-instance      mean cos 0.655   |   diff-instance same-class  mean cos 0.484
+ROC AUC 0.734  -> instance identity is weakly present; a trained head may separate instances
+```
+
+So the frozen features do carry instance identity beyond semantics — enough to be worth a
+head, not enough to expect it for free.
+
+### ⚠ `taxonomy.keyword_klass` mislabels real classes
+
+The mapper does unanchored substring matching, which produces genuine errors:
+
+| ADE class | maps to | because |
+|---|---|---|
+| `seat` | WATER | contains "sea" |
+| `streetlight` | TREE | contains "s**tree**t" |
+| `carpet` | VEHICLE | contains "car" |
+| `kitchen island` | TERRAIN | contains "**land**" |
+| `skyscraper` | SKY | prefix match |
+| `pool table` | WATER | contains "pool" |
+
+This is **live**: `footprint2d.py`'s `SegKlass` builds its LUT the same way, and
+`maguro-park-after-itchy`'s structure raster carries **9 WATER cells in a park with no
+water**. `ade20k_eval.py` therefore uses a hand-written `_ADE_KLASS` table and offers
+`--mapping keyword` to reproduce the buggy behaviour for comparison.
+
+Note that **mIoU is the wrong instrument** for this bug — it barely moves (57.3 → 56.2),
+because when GT and predictions share the same wrong LUT the head just learns the wrong label
+consistently. The damage shows in the class populations: FURNITURE training patches collapse
+**3031 → 815** (−73%, as bench/pole/sign/streetlight scatter) while WATER inflates
+**1842 → 3776** (2×, absorbing seats and pool tables). Downstream consumers eat that, which is
+exactly what the 9 phantom WATER cells are.
+
+## `relabel.py` — BEV relabeler (hand-correct + keypoints)
+
+`footprint2d.py` gets the broad BEV structure right and the *edges* wrong: footprint
+boundaries bleed where the bottom-most obstacle pixel is a shadow or a leaf, HIDDEN
+over/under-claims, thin structures come out speckled. Fixing that per-frame would mean
+painting 970 images; **fixing it in BEV means painting once** — the park is a single
+201×230 grid — and every frame that sees a cell inherits the correction when the raster is
+rendered back into that camera. That asymmetry is why the editor works in BEV.
+
+```sh
+uv run python script/backbone/relabel.py \
+  --npz output/maguro-park-after-itchy-footprint2d-mono2/footprint2d.npz
+```
+
+Opens a local browser editor (stdlib http.server, no new deps). DEM hillshade underneath for
+terrain context — uncovered cells render near-black, so extrapolated guesswork is visibly
+distinct from observed ground.
+
+- **Ground** tool — paint FREE / FOOTPRINT / HIDDEN / UNKNOWN
+- **Class** tool — assign a `Klass` to footprint cells (fixes the structure raster)
+- **Keypoint** tool — drop semantic **ground-contact points**: the signal `base_points.py`
+  triangulates for. Hand-placed points are both the ground truth to *score* that pipeline
+  against and the target for a contact-point head on frozen LingBot features.
+- wheel zoom, space/middle-drag pan, `1`/`2`/`3` tools, `[`/`]` brush, `z` undo,
+  "Highlight my edits" to see the diff vs the original
+
+Writes `relabel.npz` (corrected `state` + `structure`, with `state_orig`/`structure_orig`
+kept for diffing) and `keypoints.json` next to the input. The original npz is never
+overwritten and re-running resumes.
+
+**Grid registration caveat:** `footprint2d`'s npz stores `cell_size` but not the DEM origin,
+so edits are registered to *that grid*, not world coordinates. Consumers must rebuild the
+GroundField with the same session/cell-size/dem-source (deterministic) and apply edits
+cell-wise. Adding `origin_u`/`origin_v` to `footprint2d`'s `np.savez` would make this
+self-describing, and let keypoints carry true world (u, v).
 
 ### Status / next
 
