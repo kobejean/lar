@@ -200,6 +200,61 @@ def crop_to_content(labels: np.ndarray, margin: int = 3) -> np.ndarray:
     return labels[y0:y1, x0:x1]
 
 
+def absorb_enclosed(occluded: np.ndarray, occupied: np.ndarray,
+                    min_frac: float, max_area: int, log=None) -> np.ndarray:
+    """Occluded pockets whose BORDER is mostly occupied are interior, not walkable ground.
+
+    HIDDEN means "in frustum but never seen walkable" -- which covers two physically different
+    things. A pocket ringed by base contacts is the middle of a tree clump or hedge mass: the
+    ground is invisible because the object stands on it, and a router must treat it as solid.
+    A pocket open on one side is merely that object's occlusion shadow, and the ground there is
+    genuinely unknown -- claiming it is occupied would over-block, the failure this pipeline has
+    rejected repeatedly (it is why mono depth was dropped for occupancy).
+
+    So enclosure is measured per connected component as the fraction of its dilated border that
+    is occupied, and only components above `min_frac` are absorbed. A convex hull would not
+    distinguish the two cases: the hull of a curved hedge sweeps straight across the path it
+    borders.
+    """
+    if min_frac <= 0 or not occluded.any():
+        return occupied
+    n, lab, stats, _ = cv2.connectedComponentsWithStats(occluded.astype(np.uint8), 8)
+    ker = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    out = occupied.copy()
+    absorbed = 0
+    for i in range(1, n):
+        comp = lab == i
+        area = int(stats[i, cv2.CC_STAT_AREA])
+        if area > max_area:
+            continue                                  # too big to be an object interior
+        border = cv2.dilate(comp.astype(np.uint8), ker).astype(bool) & ~comp
+        nb = int(border.sum())
+        if nb == 0:
+            continue
+        if int((border & occupied).sum()) / nb >= min_frac:
+            out |= comp
+            absorbed += 1
+    if log:
+        log(f"  absorbed {absorbed} enclosed occluded pockets into occupied")
+    return out
+
+
+def absorb_walled(occluded: np.ndarray, occupied: np.ndarray, radius: int,
+                  min_dirs: int) -> np.ndarray:
+    """Absorb occluded cells walled in by occupied on >= min_dirs of 8 compass directions.
+
+    Looser than the component test: it fires per cell, so it catches the deep part of a
+    concave shadow without needing the whole pocket to be ringed. Measured on the full park
+    run at radius 6: >=5 dirs absorbs 179 of 4414 occluded cells (4%), >=6 only 41 (0.9%) --
+    small, because occupied is a CRESCENT not a ring. Base contacts come from the path-facing
+    side, so red rarely encircles anything, and most blue is genuine occlusion shadow whose
+    ground is unknown rather than object interior. Kept conservative for that reason.
+    """
+    if min_dirs > 8 or min_dirs <= 0 or not occluded.any() or not occupied.any():
+        return occupied
+    return occupied | (occluded & (surroundedness(occupied, radius) >= min_dirs))
+
+
 def build_labels(z, args) -> tuple[np.ndarray, dict]:
     state = z["state"]
     surface = z["surface"] if "surface" in z else np.zeros_like(state)
@@ -241,6 +296,12 @@ def build_labels(z, args) -> tuple[np.ndarray, dict]:
     # FREE but unclassified surface -> walkable yet we cannot say what it is: that is
     # low-confidence information, not terrain. Rendering it as terrain would be a guess.
     unclassified = free & ~(path | grass | terrain)
+
+    # do this before the per-layer morphology, so absorbed pockets get the same
+    # close/fill treatment as the rest of the occupied mask
+    occupied = absorb_enclosed(hidden, occupied, args.enclose_frac, args.enclose_max_area)
+    occupied = absorb_walled(hidden, occupied, args.surround_radius, args.enclose_dirs)
+    hidden = hidden & ~occupied
 
     layers = {L_OCCUPIED: occupied, L_PATH: path, L_TERRAIN: terrain,
               L_GRASS: grass, L_HIDDEN: hidden}
@@ -342,6 +403,18 @@ def main():
                     help="metres from the well-observed core beyond which cells are dropped "
                          "entirely. Noise lives at the coverage frontier, so cut on distance "
                          "rather than hoping a vote threshold sorts it out. 0 disables.")
+    ap.add_argument("--enclose-frac", type=float, default=0.65,
+                    help="fraction of an occluded pocket's border that must be occupied before "
+                         "the pocket is absorbed as occupied (it is the inside of an object, "
+                         "not walkable ground). 0 disables; high values keep occlusion "
+                         "shadows -- which are genuinely unknown -- out of it.")
+    ap.add_argument("--enclose-dirs", type=int, default=5,
+                    help="absorb an occluded cell into occupied when this many of 8 compass "
+                         "directions hit occupied within --surround-radius. 9 disables. "
+                         "Conservative on purpose: most occluded ground is a one-sided "
+                         "occlusion shadow, and calling that solid would over-block.")
+    ap.add_argument("--enclose-max-area", type=int, default=400,
+                    help="occluded pockets larger than this many cells are never absorbed")
     ap.add_argument("--surround-radius", type=int, default=6,
                     help="how far (cells) the 8 direction probes look when deciding a cell is "
                          "inside an object")
