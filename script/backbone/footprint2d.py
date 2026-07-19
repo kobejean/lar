@@ -21,6 +21,14 @@ Per frame (poses + PINHOLE intrinsics from COLMAP):
      is worst; ray-DEM uses only calibration + the SfM-solid DEM). Canopy over a path is
      high up, so its column's bottom pixel is the trunk base -> footprint lands on the
      trunk, not the whole canopy. This is the fix for "canopy marks everything occupied".
+  5. DEPTH CONTACT GATE (--contact-depth-tol): step 4's "bottom-most obstacle pixel = ground
+     contact" is an assumption, and it fails whenever a mask's bottom abuts ground that is
+     really far behind it -- a bench seat or a canopy silhouetted against open lawn. Compare
+     the measured mono depth at that pixel against the range at which the ray meets the DEM:
+     equal if the object stands there, much nearer if it floats. Note this does not contradict
+     step 4 -- mono depth never *places* a contact here, it only *vetoes* one. A relative
+     comparison at a single pixel is what mono depth is reliable for; metric placement at an
+     object edge is what it is not.
 
 Fuse across frames in BEV; HIDDEN falls out where FREE encloses unobserved cells.
 
@@ -163,10 +171,16 @@ def ray_dem_intersect(C_local, dirs_local, gf, z_near=0.4, z_far=70.0, dz=0.2,
     """Intersect local-frame rays with the ground DEM height field.
 
     Marches cam-depth z; a hit is the first sign change of (ray_height - dem(ray_uv)).
-    Returns (uv (M,2), ok (M,) bool). Rejects hits outside the grid, off-coverage, or
-    beyond ``max_range`` m (far base-contacts are unreliable: ray-DEM at range + thin
-    DEM coverage scatters, so we trust only nearby contacts and let other frames cover
-    the rest)."""
+    Returns (uv (M,2), ok (M,) bool, zt (M,) float). Rejects hits outside the grid,
+    off-coverage, or beyond ``max_range`` m (far base-contacts are unreliable: ray-DEM at
+    range + thin DEM coverage scatters, so we trust only nearby contacts and let other
+    frames cover the rest).
+
+    ``zt`` is the **camera z-depth** of the hit, which is what makes ``depth_contact_gate``
+    possible: ``pixel_dirs`` returns z=1 directions and rotating into the local frame
+    preserves the camera-frame z-component, so ts (hence zt) is z-depth in exactly the same
+    convention ``MonoDepth.metric`` returns -- the two are directly comparable, no
+    conversion."""
     ts = np.arange(z_near, z_far, dz)                       # (K,)
     P = C_local[None, None, :] + ts[None, :, None] * dirs_local[:, None, :]  # (M,K,3)
     uv = P[:, :, :2].reshape(-1, 2)
@@ -186,7 +200,73 @@ def ray_dem_intersect(C_local, dirs_local, gf, z_near=0.4, z_far=70.0, dz=0.2,
     # keep only in-grid, covered cells, within trustworthy range
     cells = gf.cell_of(hit_uv)
     cov = gf.coverage.reshape(-1)[cells]
-    return hit_uv, ok & cov & (zt <= max_range)
+    return hit_uv, ok & cov & (zt <= max_range), zt
+
+
+def depth_contact_gate(dmap, rows, cols, zt, ok, tol: float, log=None, tag: str = ""):
+    """Reject 2D-adjacent-but-not-3D-touching ground contacts using measured depth.
+
+    The bottom-most-obstacle-pixel heuristic assumes an object's silhouette bottom is where
+    it meets the ground. The semantic canopy guard (``footprint_instances.contact_columns``)
+    only asks "are the pixels below me ground?", which is a **2D** test and passes exactly in
+    the failure case: a bench seat or canopy silhouetted against open lawn ten metres beyond.
+    The pixels below *are* ground -- just ground that is far behind the object -- so the
+    ray-DEM hit lands metres past it.
+
+    The geometric test: if the object really stands at the contact, its measured depth equals
+    the range at which that ray meets the ground. Floating/occluding -> the object is much
+    *nearer* than the ground its ray eventually hits, so ``d_obj << zt``.
+
+    Compared against the DEM hit rather than the neighbouring ground pixel on purpose. Mono
+    depth is smoothed across object boundaries (the discontinuity bleeds over several pixels),
+    so a boundary-crossing comparison washes out the very jump it looks for, and costs two
+    noisy samples. This is one noisy sample against the *trusted* pose+DEM.
+
+    The tolerance is **relative** (|d-zt| / zt): grazing distant rays otherwise fail
+    spuriously -- the same lesson the depression gate taught in ``base_points.py``.
+
+    It is also measured against the frame's **median depth ratio**, not against 1.0, and that
+    matters more than it sounds. ``MonoDepth.metric`` fits scale+shift per frame from that
+    frame's SfM points; when the fit is poor the whole depth map is off by a constant factor.
+    Measured on maguro-park frame 0: d_mono median 1.31 m against z_dem 3.04 m, a systematic
+    2.3x error -- an absolute test keeps 0.4% of its contacts and silently deletes the frame,
+    while a median-relative test keeps 72%. Healthy frames sit at ratio 0.91-0.93, so
+    normalising costs them nothing. This is the same trick as base_points' relative ground
+    datum: absorb the systematic per-frame bias, test only the outlier.
+
+    The assumption normalising buys into is that most bottom-most-obstacle pixels in a frame
+    are genuine contacts, so the median tracks the true scale. That holds here because ground
+    is everywhere and floating silhouettes are the minority -- and the ratio is logged so a
+    frame whose median is wildly off (a depth-fit failure worth fixing at the source) stays
+    visible rather than being quietly normalised away.
+
+    Pixels with no valid mono depth are **kept**, not dropped: absence of evidence isn't
+    evidence of floating, and punishing them would silently couple footprint recall to mono
+    coverage. Their count is reported so the blind spot stays visible.
+    """
+    if tol <= 0 or dmap is None:
+        return ok
+    d_obj = dmap[rows, cols]
+    have = d_obj > 0
+    ref = ok & have
+    # per-frame scale reference; too few samples to trust a median -> fall back to absolute
+    if int(ref.sum()) >= 20:
+        med = float(np.median(d_obj[ref] / np.maximum(zt[ref], 1e-6)))
+        if not np.isfinite(med) or med <= 1e-3:
+            med = 1.0
+    else:
+        med = 1.0
+    agree = np.abs(d_obj - med * zt) <= tol * med * np.maximum(zt, 1e-6)
+    gated = ok & (~have | agree)
+    if log is not None:
+        n0 = int(ok.sum())
+        if n0:
+            warn = "  << depth scale suspect" if not 0.7 <= med <= 1.4 else ""
+            log(f"    depth gate{tag}: {n0} -> {int(gated.sum())} contacts "
+                f"({int((ok & have & ~agree).sum())} floating, "
+                f"{int((ok & ~have).sum())} no-depth kept, "
+                f"frame d/z median {med:.3f}){warn}")
+    return gated
 
 
 # ---------------------------------------------------------------------------
@@ -290,7 +370,10 @@ def run(args):
 
     frames = sample_frames(recon, args.num)
     print(f"  {len(frames)} frames, grid {cols}x{rows} @ {args.cell_size} m")
+    if args.contact_depth_tol > 0:
+        print(f"  depth contact gate: |d_mono - z_dem| <= {args.contact_depth_tol:.0%} of z_dem")
     ndbg = 0
+    gate_pre = gate_post = 0
     for fi, img in enumerate(frames):
         bgr = cv2.imread(str(images_dir / img.name), cv2.IMREAD_COLOR)
         if bgr is None:
@@ -329,9 +412,14 @@ def run(args):
             base_klass = klass[by, bx]
             d_cam = pixel_dirs(bx.astype(np.float64), by.astype(np.float64), cam, args.data_factor)
             dir_local = (RwcT @ d_cam.T).T
-            hit_uv, ok = ray_dem_intersect(C_local, dir_local, gf,
-                                           z_far=args.z_far, dz=args.dz,
-                                           max_range=args.max_range)
+            hit_uv, ok, zt = ray_dem_intersect(C_local, dir_local, gf,
+                                               z_far=args.z_far, dz=args.dz,
+                                               max_range=args.max_range)
+            n_pre = int(ok.sum())
+            ok = depth_contact_gate(dmap, by, bx, zt, ok, args.contact_depth_tol,
+                                    log=(print if fi < args.debug_frames else None))
+            gate_pre += n_pre
+            gate_post += int(ok.sum())
             if ok.any():
                 cells = gf.cell_of(hit_uv[ok])
                 np.add.at(foot_ct, cells, 1)
@@ -342,8 +430,11 @@ def run(args):
             dbg = small.copy()
             dbg[gmask] = (0.5 * dbg[gmask] + np.array([0, 120, 0])).astype(np.uint8)
             if base_klass is not None:
-                for x, y in zip(bx, by):
-                    cv2.circle(dbg, (int(x), int(y)), 2, (0, 0, 255), -1)
+                # red = contact kept, magenta = rejected by the depth gate (2D-adjacent to
+                # ground but not touching it in 3D). Eyeballing these is how you tune the tol.
+                for x, y, keep in zip(bx, by, ok):
+                    cv2.circle(dbg, (int(x), int(y)), 2,
+                               (0, 0, 255) if keep else (255, 0, 255), -1)
             cv2.imwrite(str(out / f"frame_{ndbg}_{Path(img.name).stem}.png"), dbg)
             ndbg += 1
         if (fi + 1) % 10 == 0:
@@ -385,6 +476,9 @@ def run(args):
           f"FOOTPRINT {np.mean(state==FOOTPRINT)*100:.1f}%  "
           f"HIDDEN {np.mean(state==HIDDEN)*100:.1f}%  "
           f"UNKNOWN {np.mean(state==UNKNOWN)*100:.1f}%  (of {n} cells)")
+    if args.contact_depth_tol > 0 and gate_pre:
+        print(f"  depth contact gate: {gate_pre} -> {gate_post} contacts "
+              f"({100*(1-gate_post/max(gate_pre,1)):.0f}% rejected as not touching ground in 3D)")
     print(f"  wrote {out}/footprint2d_bev.png  (+ overlay, npz, {ndbg} debug frames)")
 
 
@@ -442,6 +536,10 @@ def main():
     ap.add_argument("--z-far", type=float, default=70.0)
     ap.add_argument("--dz", type=float, default=0.2)
     ap.add_argument("--max-range", type=float, default=20.0, help="max base-contact distance (m)")
+    ap.add_argument("--contact-depth-tol", type=float, default=0.15,
+                    help="reject a ground contact when measured mono depth disagrees with the "
+                         "ray-DEM hit range by more than this FRACTION of the range "
+                         "(catches masks that touch ground in 2D but float in 3D). 0 disables.")
     ap.add_argument("--hidden-close", type=int, default=5, help="HIDDEN gap-fill kernel (cells)")
     ap.add_argument("--hidden-occ-r", type=int, default=4,
                     help="HIDDEN only within this many cells of a base-contact (occlusion shadow)")

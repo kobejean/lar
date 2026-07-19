@@ -19,6 +19,15 @@ Per frame:
   4. **Ray-DEM** those contact pixels (calibration + the gravity DEM, never mono depth at the
      object edge where it is worst) -> BEV cells = this object's ground extent in this frame.
      Too few valid contacts -> keep the object as a point-only landmark (box bottom-centre).
+  5. **Depth contact gate** (``--contact-depth-tol``). Step 3 is a *2D* test and cannot catch a
+     mask whose bottom abuts ground that is really far behind it -- a bench seat or canopy
+     silhouetted against open lawn passes the canopy guard, because the pixels below genuinely
+     are ground. So compare the measured mono depth at the contact against the range at which
+     that ray meets the DEM: if the object stands there they agree; if it floats, it is much
+     nearer than the ground its ray hits. Note this does not contradict step 4 -- mono depth is
+     never used to *place* the contact (it stays ray-DEM), only to *veto* one. A relative
+     comparison at a single pixel is what mono depth is reliable for; metric placement at an
+     object edge is what it is not.
 
 Across frames: union-find clusters observations by label + contact proximity, so the same tree
 seen from 12 views collapses to one instance and a one-frame false positive stays a singleton
@@ -53,7 +62,8 @@ from colmap_io import read_model                     # noqa: E402
 from geometry import from_reconstruction             # noqa: E402
 from taxonomy import Klass, Role, role_of            # noqa: E402
 from footprint2d import (                            # noqa: E402
-    SegKlass, camera_local, pixel_dirs, ray_dem_intersect, mono_dem_field, sample_frames,
+    MonoDepth, SegKlass, camera_local, depth_contact_gate, pixel_dirs, ray_dem_intersect,
+    mono_dem_field, sample_frames,
 )
 
 DEFAULT_PROMPT = "tree. bench. pole. sign. trash can. street lamp. rock. bush. fence."
@@ -242,12 +252,16 @@ def run(args):
 
     seg = SegKlass(args.seg_model, mode="semantic")
     gsam = GroundedSAM(args.det_model, args.sam_model, args.prompt, args.box_th, args.text_th)
+    # The semantic canopy guard in contact_columns is a 2D test and cannot tell a base from a
+    # silhouette against distant ground; depth_contact_gate settles it geometrically.
+    mono = MonoDepth(args.depth_model) if args.contact_depth_tol > 0 else None
     roles = np.array([int(role_of(int(k))) for k in range(int(max(Klass)) + 1)], np.uint8)
 
     frames = sample_frames(recon, args.num)
     print(f"  {len(frames)} frames, grid {cols}x{rows} @ {args.cell_size} m, prompt: {args.prompt}")
 
     obs, ndbg = [], 0
+    gate_pre = gate_post = 0
     for fi, img in enumerate(frames):
         bgr = cv2.imread(str(images_dir / img.name), cv2.IMREAD_COLOR)
         if bgr is None:
@@ -256,6 +270,7 @@ def run(args):
         small = cv2.resize(bgr, (W, H))
         klass, _ = seg(small)
         ground = roles[klass] == int(Role.GROUND)
+        dmap = mono.metric(bgr, recon, img, args.data_factor)[0] if mono is not None else None
         masks, boxes, labels, scores = gsam(small)
         cam = recon.cameras[img.camera_id]
         C_local, RwcT = camera_local(img, gf)
@@ -273,8 +288,11 @@ def run(args):
                 cy = np.array([min(y1, H - 3)], np.int64)
             d_cam = pixel_dirs(cx.astype(np.float64), cy.astype(np.float64), cam, args.data_factor)
             dir_local = (RwcT @ d_cam.T).T
-            hit_uv, ok = ray_dem_intersect(C_local, dir_local, gf, z_far=args.z_far,
-                                           dz=args.dz, max_range=args.max_range)
+            hit_uv, ok, zt = ray_dem_intersect(C_local, dir_local, gf, z_far=args.z_far,
+                                               dz=args.dz, max_range=args.max_range)
+            gate_pre += int(ok.sum())
+            ok = depth_contact_gate(dmap, cy, cx, zt, ok, args.contact_depth_tol)
+            gate_post += int(ok.sum())
             if not ok.any():
                 continue
             hits = hit_uv[ok]
@@ -360,6 +378,9 @@ def run(args):
     (out / "instances.json").write_text(json.dumps(
         {"session": args.session, "cell_size": args.cell_size, "frames": len(frames),
          "prompt": args.prompt, "instances": instances}, indent=1))
+    if args.contact_depth_tol > 0 and gate_pre:
+        print(f"  depth contact gate: {gate_pre} -> {gate_post} contacts "
+              f"({100*(1-gate_post/max(gate_pre,1)):.0f}% rejected as not touching ground in 3D)")
     print(f"  wrote {out}/instances.json, instances.npz, instances_bev.png")
 
 
@@ -420,6 +441,13 @@ def main():
     ap.add_argument("--min-mask-px", type=int, default=400)
     # ground contacts
     ap.add_argument("--col-stride", type=int, default=4, help="column subsample within a mask")
+    ap.add_argument("--contact-depth-tol", type=float, default=0.15,
+                    help="reject a contact when measured mono depth disagrees with the "
+                         "ray-DEM hit range by more than this FRACTION of the range. The "
+                         "3D counterpart to the 2D canopy guard. 0 disables (and skips "
+                         "loading the depth model).")
+    ap.add_argument("--depth-model", default="depth-anything/Depth-Anything-V2-Small-hf",
+                    help="mono depth model backing --contact-depth-tol")
     ap.add_argument("--ground-probe", type=int, default=4,
                     help="pixels below the mask that must be GROUND for a valid contact")
     ap.add_argument("--min-contacts", type=int, default=4,

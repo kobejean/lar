@@ -126,6 +126,48 @@ daily caps), and `drop_to_ground` can bias a distant object's contact slightly t
 (the first ground pixel below the trunk). Natural next step: use Gemini as an **oracle to distill
 labels** into a shippable local head.
 
+## Depth contact gate — "touches the ground in 2D" ≠ "touches it in 3D"
+
+Both footprint paths reduce an object to its **bottom-most pixel** and ray-DEM that to the
+ground. `footprint_instances`' *canopy guard* checks the pixels below are `Role.GROUND`, but
+that is a **2D** test and passes in exactly the case it needs to catch: a signboard panel or
+bench seat silhouetted against open lawn. The pixels below genuinely are ground — just ground
+ten metres behind — so the contact lands metres past the object.
+
+`--contact-depth-tol` (default `0.15`, `0` disables) settles it geometrically: if the object
+really stands there, its measured mono depth equals the range at which that ray meets the DEM;
+if it floats, it is much *nearer* than the ground its ray hits.
+
+Compared against the **DEM hit**, not the neighbouring ground pixel, on purpose — mono depth
+smooths across object boundaries, so a boundary-crossing comparison washes out the very jump
+it looks for, and spends two noisy samples instead of one. And mono depth only ever *vetoes*
+a contact; placement stays ray-DEM. A relative comparison at one pixel is what mono depth is
+reliable for; metric placement at an object edge is what it is not.
+
+**It is measured against the frame's median depth ratio, not against 1.0.** `MonoDepth.metric`
+fits scale+shift per frame from that frame's SfM points, and a poor fit skews the whole map by
+a constant. On maguro-park frame 0 the fit is off 2.3× (d_mono median 1.31 m vs z_dem 3.04 m):
+an absolute test keeps **4 of 960** contacts and silently deletes the frame; the median-relative
+test keeps **693**. Healthy frames sit at 0.91–1.02, so normalising costs them nothing. Same
+trick as `base_points.py`'s relative ground datum — absorb the systematic bias, test the
+outlier. Frames whose median lands outside 0.7–1.4 are flagged `<< depth scale suspect` rather
+than quietly normalised, since that indicates a depth fit worth fixing at the source.
+
+Measured on `maguro-park-after-itchy` (40 frames, `--dem-source mono`):
+
+| | contacts | FOOTPRINT cells |
+|---|---|---|
+| gate off | 24108 | 3.0% |
+| gate on (`0.15`) | **18664** (−23%) | 2.2% |
+
+Debug overlays mark kept contacts **red** and gate-rejected ones **magenta** — on frame 3 the
+magenta traces the underside of a signboard panel while red sits on its two post bases and the
+tree trunk. Eyeballing those is how you tune the tolerance.
+
+Caveat: normalising assumes most bottom-most pixels in a frame are genuine contacts (true here
+— ground is everywhere, floating silhouettes are the minority). A frame of nothing but floating
+objects would normalise to its own wrong consensus.
+
 ## `ade20k_eval.py` — the frozen backbone vs real ground truth
 
 `probe.py --task linprobe` trains **and** scores against Mask2Former output, so its 0.87 is
