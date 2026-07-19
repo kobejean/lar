@@ -116,6 +116,90 @@ def smooth(mask: np.ndarray, k: int) -> np.ndarray:
     return m.astype(bool)
 
 
+
+def surroundedness(mask: np.ndarray, radius: int) -> np.ndarray:
+    """For each cell, how many of the 8 compass directions hit `mask` within `radius`.
+
+    `fill_small_holes` only closes *fully enclosed* voids, so an object whose base contacts
+    were seen from one side stays a C-shaped rim with its middle open to the outside -- the
+    hollow-object look. "Nearly surrounded" is the missing test: a cell walled in on 6 of 8
+    sides is inside the object even though a gap technically connects it to the exterior.
+
+    Direction-counting rather than a bigger morphological close, because a close with a kernel
+    wide enough to bridge the gap also welds together neighbouring objects that merely pass
+    near each other.
+    """
+    h, w = mask.shape
+    hits = np.zeros((h, w), np.uint8)
+    for dy, dx in ((-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)):
+        seen = np.zeros((h, w), bool)
+        cur = mask.copy()
+        for _ in range(radius):
+            cur = np.roll(cur, (dy, dx), (0, 1))
+            # a roll wraps; kill the wrapped edge so the far side of the map cannot vote
+            if dy > 0:
+                cur[0, :] = False
+            elif dy < 0:
+                cur[-1, :] = False
+            if dx > 0:
+                cur[:, 0] = False
+            elif dx < 0:
+                cur[:, -1] = False
+            seen |= cur
+        hits += seen.astype(np.uint8)
+    return hits
+
+
+def fill_surrounded(mask: np.ndarray, radius: int, min_dirs: int, rounds: int = 3) -> np.ndarray:
+    """Grow `mask` into cells walled in on >= min_dirs of 8 sides. Iterated, because each
+    round makes the next concavity shallower."""
+    if min_dirs > 8 or radius < 1:
+        return mask
+    out = mask.copy()
+    for _ in range(rounds):
+        grow = (surroundedness(out, radius) >= min_dirs) & ~out
+        if not grow.any():
+            break
+        out |= grow
+    return out
+
+
+def range_limit_true(near: np.ndarray, max_m: float) -> np.ndarray:
+    """Keep cells the camera actually came within `max_m` of (from `near_range` in the npz).
+
+    Strictly better than the distance-from-core proxy below: view COUNT cannot distinguish a
+    cell seen 60 times from 30 m away at a grazing angle from one seen 6 times at 4 m, and it
+    is the former that is noisy. -1 marks cells never raycast."""
+    if max_m <= 0:
+        return np.ones_like(near, bool)
+    return (near >= 0) & (near <= max_m)
+
+
+def range_limit(confident: np.ndarray, cell_size: float, max_m: float) -> np.ndarray:
+    """Cells within `max_m` of the well-observed core.
+
+    Noise is not spread evenly -- it lives at the coverage frontier, far from where the camera
+    actually went, where a cell has one or two grazing observations. Rather than trusting a
+    vote threshold to sort that out, cut on distance from the confident core outright. The
+    trajectory itself is not in the npz (no DEM origin is stored), but the set of
+    well-observed cells is a faithful stand-in for where the camera was.
+    """
+    if max_m <= 0 or not confident.any():
+        return np.ones_like(confident, bool)
+    d = cv2.distanceTransform((~confident).astype(np.uint8), cv2.DIST_L2, 5)
+    return d * cell_size <= max_m
+
+
+def crop_to_content(labels: np.ndarray, margin: int = 3) -> np.ndarray:
+    """Trim the dead border so the map fills its frame."""
+    ys, xs = np.where(labels != L_UNSURVEYED)
+    if not len(ys):
+        return labels
+    y0, y1 = max(0, ys.min() - margin), min(labels.shape[0], ys.max() + margin + 1)
+    x0, x1 = max(0, xs.min() - margin), min(labels.shape[1], xs.max() + margin + 1)
+    return labels[y0:y1, x0:x1]
+
+
 def build_labels(z, args) -> tuple[np.ndarray, dict]:
     state = z["state"]
     surface = z["surface"] if "surface" in z else np.zeros_like(state)
@@ -125,10 +209,29 @@ def build_labels(z, args) -> tuple[np.ndarray, dict]:
     # The survey frontier is dithered at cell level (one ray lands, its neighbour misses), which
     # renders as salt-and-pepper along every edge. Smooth the *masks* so the boundary reads as a
     # boundary; this changes only where we admit to knowing, never what we claim to know.
-    surveyed = smooth(obs > 0, args.smooth)
-    confident = smooth(obs >= args.min_views, args.smooth)
+    # De-speckle BEFORE smoothing: a lone surveyed cell survives the close as a plus-shaped
+    # nub (the kernel's own footprint), which is why crosses were littering the border.
+    surveyed = smooth(remove_small_blobs(obs > 0, args.min_blob), args.smooth)
+    confident = smooth(remove_small_blobs(obs >= args.min_views, args.min_blob), args.smooth)
 
-    occupied = (state == FOOTPRINT) & (bearings >= args.min_bearings)
+    # Range is measured from the WELL-travelled core, not merely the confident set: obs peaks
+    # along the walked route, so a high threshold approximates the trajectory the npz does not
+    # store. Measuring from `confident` (>=4 views) made the core so broad that 25 m reached
+    # the frontier it was meant to exclude.
+    if "near_range" in z:
+        in_range = range_limit_true(z["near_range"], args.max_range)
+    else:
+        # Older npz: fall back to distance from the well-travelled core. Weak here, because the
+        # park is uniformly well-observed -- obs>=12 covers half the grid and every surveyed
+        # cell sits within 12 m of it, so the proxy has almost nothing to cut.
+        core = remove_small_blobs(obs >= args.core_views, args.min_blob)
+        if not core.any():
+            core = confident
+        in_range = range_limit(core, float(z["cell_size"]), args.max_range)
+    surveyed &= in_range
+    confident &= in_range
+
+    occupied = (state == FOOTPRINT) & (bearings >= args.min_bearings) & in_range
     hidden = (state == HIDDEN) & confident
     free = (state == FREE) & confident
 
@@ -154,6 +257,7 @@ def build_labels(z, args) -> tuple[np.ndarray, dict]:
             m = remove_small_blobs(m, args.min_blob_occupied)
             m = close_only(m, args.occupied_close)
             m = fill_small_holes(m, args.max_fill)
+            m = fill_surrounded(m, args.surround_radius, args.surround_dirs)
         else:
             m = remove_small_blobs(m, args.min_blob)
             m = smooth(m, args.smooth)
@@ -168,24 +272,55 @@ def build_labels(z, args) -> tuple[np.ndarray, dict]:
     return out, stats
 
 
-def colorize(labels: np.ndarray, scale: int, legend: bool) -> np.ndarray:
+def colorize(labels, scale, legend, cell_size=0.5, outline=True):
     lut = np.zeros((len(PALETTE), 3), np.uint8)
     for k, v in PALETTE.items():
         lut[k] = v
-    rgb = lut[labels]
-    rgb = np.flipud(rgb)                                  # north-up, as footprint2d renders
+    total = labels.size
+    pct = {lid: 100.0 * float((labels == lid).sum()) / total for lid in NAMES}
+
+    rgb = np.flipud(lut[labels])                          # north-up, as footprint2d renders
+    occ = np.flipud(labels == L_OCCUPIED)
     if scale > 1:
         rgb = cv2.resize(rgb, None, fx=scale, fy=scale, interpolation=cv2.INTER_NEAREST)
+        occ = cv2.resize(occ.astype(np.uint8), None, fx=scale, fy=scale,
+                         interpolation=cv2.INTER_NEAREST).astype(bool)
+    if outline:
+        # A dark keyline round occupied regions. Obstacles are the one class a user must not
+        # misread as ground, and at small sizes a fill alone reads as a colour blotch.
+        cnts, _ = cv2.findContours(occ.astype(np.uint8), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+        cv2.drawContours(rgb, cnts, -1, (70, 22, 18), max(1, scale // 3))
+
+    # scale bar: a map without one cannot be measured, and this is metric
+    h, w = rgb.shape[:2]
+    px_per_m = scale / cell_size
+    target = max(5.0, round((w * 0.18) / px_per_m / 5.0) * 5.0)      # ~18% of width, round 5 m
+    bar = int(target * px_per_m)
+    x0, y0 = 18, h - 26
+    cv2.rectangle(rgb, (x0, y0), (x0 + bar, y0 + 6), (245, 245, 245), -1)
+    cv2.rectangle(rgb, (x0, y0), (x0 + bar, y0 + 6), (20, 20, 20), 1)
+    cv2.putText(rgb, f"{target:.0f} m", (x0, y0 - 7), cv2.FONT_HERSHEY_SIMPLEX,
+                0.5, (245, 245, 245), 1, cv2.LINE_AA)
+    # north arrow (rows increase northward before the flip, so up is north here)
+    nx, ny = w - 34, 34
+    cv2.arrowedLine(rgb, (nx, ny + 20), (nx, ny - 12), (245, 245, 245), 2, tipLength=0.4)
+    cv2.putText(rgb, "N", (nx - 6, ny + 38), cv2.FONT_HERSHEY_SIMPLEX,
+                0.5, (245, 245, 245), 1, cv2.LINE_AA)
+
     if not legend:
         return rgb
-    pad, sw, lh = 14, 18, 26
-    bar = np.full((rgb.shape[0], 210, 3), PALETTE[L_UNSURVEYED], np.uint8)
+    pad, sw, lh = 14, 18, 27
+    bar_w = 232
+    panel = np.full((h, bar_w, 3), PALETTE[L_UNSURVEYED], np.uint8)
     for i, (lid, name) in enumerate(NAMES.items()):
         y = pad + i * lh
-        bar[y:y + sw, pad:pad + sw] = PALETTE[lid]
-        cv2.putText(bar, name, (pad + sw + 9, y + sw - 4), cv2.FONT_HERSHEY_SIMPLEX,
+        panel[y:y + sw, pad:pad + sw] = PALETTE[lid]
+        cv2.rectangle(panel, (pad, y), (pad + sw, y + sw), (20, 20, 20), 1)
+        cv2.putText(panel, name, (pad + sw + 9, y + sw - 5), cv2.FONT_HERSHEY_SIMPLEX,
                     0.42, (235, 238, 242), 1, cv2.LINE_AA)
-    return np.hstack([rgb, bar])
+        cv2.putText(panel, f"{pct[lid]:4.1f}%", (pad + sw + 9, y + sw + 9),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.34, (150, 155, 165), 1, cv2.LINE_AA)
+    return np.hstack([rgb, panel])
 
 
 def main():
@@ -199,6 +334,22 @@ def main():
                     help="distinct bearings required to draw a cell as occupied")
     ap.add_argument("--min-blob", type=int, default=4,
                     help="drop connected components smaller than this many cells (speckle)")
+    ap.add_argument("--core-views", type=int, default=12,
+                    help="views defining the well-travelled core that --max-range is measured "
+                         "from; obs peaks along the walked route, so this approximates the "
+                         "trajectory (which the npz does not store)")
+    ap.add_argument("--max-range", type=float, default=18.0,
+                    help="metres from the well-observed core beyond which cells are dropped "
+                         "entirely. Noise lives at the coverage frontier, so cut on distance "
+                         "rather than hoping a vote threshold sorts it out. 0 disables.")
+    ap.add_argument("--surround-radius", type=int, default=6,
+                    help="how far (cells) the 8 direction probes look when deciding a cell is "
+                         "inside an object")
+    ap.add_argument("--surround-dirs", type=int, default=6,
+                    help="of 8 directions, how many must hit occupied before an interior cell "
+                         "is filled. 8 = fully enclosed only; 6 tolerates a C-shaped rim. "
+                         "Lower bleeds objects outward.")
+    ap.add_argument("--no-crop", action="store_true", help="keep the empty border")
     ap.add_argument("--min-blob-occupied", type=int, default=2,
                     help="separate, smaller speckle threshold for occupied cells (base "
                          "contacts are sparse; the area-class threshold would erase objects)")
@@ -226,8 +377,11 @@ def main():
         n = int((labels == lid).sum())
         print(f"  final {name:<16s} {100*n/total:5.1f}%")
 
+    if not args.no_crop:
+        labels = crop_to_content(labels)
     out = Path(args.out) if args.out else npz.parent / "bev_clean.png"
-    cv2.imwrite(str(out), colorize(labels, args.scale, not args.no_legend)[:, :, ::-1])
+    img = colorize(labels, args.scale, not args.no_legend, float(z["cell_size"]))
+    cv2.imwrite(str(out), img[:, :, ::-1])
     print(f"  wrote {out}")
 
 

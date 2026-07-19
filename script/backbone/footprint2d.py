@@ -379,13 +379,13 @@ def visible_cells(C_local, RwcT, cam, gf, H, W, stride, factor, z_far, dz, max_r
     ys, xs = np.mgrid[0:H:stride, 0:W:stride]
     d_cam = pixel_dirs(xs.ravel().astype(np.float64), ys.ravel().astype(np.float64), cam, factor)
     dirs = (RwcT @ d_cam.T).T
-    hit_uv, ok, _ = ray_dem_intersect(C_local, dirs, gf, z_far=z_far, dz=dz, max_range=max_range)
+    hit_uv, ok, zt = ray_dem_intersect(C_local, dirs, gf, z_far=z_far, dz=dz, max_range=max_range)
     if not ok.any():
-        return np.zeros(0, np.int64), np.zeros((0, 2))
+        return np.zeros(0, np.int64), np.zeros((0, 2)), np.zeros(0)
     uv = hit_uv[ok]
     cells = gf.cell_of(uv)
     keep = np.unique(cells, return_index=True)[1]        # one vote per cell per frame
-    return cells[keep], uv[keep]
+    return cells[keep], uv[keep], zt[ok][keep]
 
 
 # ---------------------------------------------------------------------------
@@ -495,6 +495,7 @@ def run(args):
     foot_ct = np.zeros(ncells, np.int32)
     free_bear = np.zeros(ncells, np.uint32)
     foot_bear = np.zeros(ncells, np.uint32)
+    near_m = np.full(ncells, np.inf, np.float32)
     struct_ct = np.zeros((ncells, int(max(Klass)) + 1), np.int32)  # per-cell obstacle class votes
     # Which KIND of ground: Role.GROUND lumps PATH/PAVEMENT/GRASS/TERRAIN/STAIRS together, so
     # the walkable-surface distinction was being computed per pixel and then discarded. A
@@ -528,8 +529,12 @@ def run(args):
         # back-projects mono depth with neither restriction. So seed obs with the raycast and
         # union in whatever this frame actually voted -- a cell seen as ground was, tautologically,
         # in view.
-        ocells, _ = visible_cells(C_local, RwcT, cam, gf, H, W, args.obs_stride,
-                                  args.data_factor, args.z_far, args.dz, args.obs_max_range)
+        ocells, _, ozt = visible_cells(C_local, RwcT, cam, gf, H, W, args.obs_stride,
+                                       args.data_factor, args.z_far, args.dz, args.obs_max_range)
+        # Closest the camera ever came to each cell. A cell can be seen 60 times and still be
+        # junk if every look was from 30 m away at a grazing angle -- view COUNT cannot express
+        # that, so record nearest approach and let the renderer cut on it.
+        np.minimum.at(near_m, ocells, ozt)
         frame_obs = [ocells]
 
         # ---- FREE: ground pixels back-projected with metric depth ----
@@ -682,6 +687,7 @@ def run(args):
 
     np.savez(out / "footprint2d.npz", state=state, structure=struct, surface=surface,
              obs_count=obs_ct.reshape(rows, cols),
+             near_range=np.where(np.isfinite(near_m), near_m, -1).reshape(rows, cols),
              foot_bearings=popcount32(foot_bear).reshape(rows, cols),
              free_count=free_ct.reshape(rows, cols), foot_count=foot_ct.reshape(rows, cols),
              dem=gf.dem, coverage=gf.coverage, cell_size=args.cell_size)
