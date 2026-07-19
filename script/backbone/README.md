@@ -126,6 +126,29 @@ daily caps), and `drop_to_ground` can bias a distant object's contact slightly t
 (the first ground pixel below the trunk). Natural next step: use Gemini as an **oracle to distill
 labels** into a shippable local head.
 
+## Walkable surface: PATH separated from ground
+
+`Role.GROUND` lumps `PATH` / `PAVEMENT` / `GRASS` / `TERRAIN` / `STAIRS` into one
+undifferentiated FREE, so the surface distinction was computed per pixel and then thrown away.
+A navigation graph wants paved path separated from lawn.
+
+`surface` is now a per-cell ground class (exactly mirroring how `structure` works for footprint
+cells), saved in the npz and rendered three ways:
+
+- `footprint2d_bev.png` — FREE cells painted with their ground class instead of flat green
+- `footprint2d_surface.png` — the walkable-surface map alone
+- `footprint2d_path.png` — path/pavement/stairs (yellow) vs grass (green) vs terrain (grey)
+
+On `maguro-park-after-itchy` (40 frames): PATH 5.8%, TERRAIN 5.3%, GRASS 1.6%, STAIRS 0.1%,
+UNKNOWN 4.1% of the grid. The path corridors and their Y-junction come out as coherent
+connected structure, matching the walked capture.
+
+**`--min-surf-votes` (default 4).** `state` is multi-view gated but this argmax is not, so a
+cell that scraped through FREE could take its class from a couple of distant pixels — visible
+as speckle over open ground. Below the floor a cell stays walkable but **unclassified**, which
+is the honest answer rather than a coin flip. It moved PATH 8.1% → 5.8% and removed most of the
+far-field scatter.
+
 ## Multi-view evidence: ratios, bearings, and a geometric HIDDEN
 
 Fusion used to be raw vote counts (`foot_ct >= min_foot`) over *pixels*, which has no

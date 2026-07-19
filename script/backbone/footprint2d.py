@@ -496,6 +496,10 @@ def run(args):
     free_bear = np.zeros(ncells, np.uint32)
     foot_bear = np.zeros(ncells, np.uint32)
     struct_ct = np.zeros((ncells, int(max(Klass)) + 1), np.int32)  # per-cell obstacle class votes
+    # Which KIND of ground: Role.GROUND lumps PATH/PAVEMENT/GRASS/TERRAIN/STAIRS together, so
+    # the walkable-surface distinction was being computed per pixel and then discarded. A
+    # navigation graph wants paved path separated from lawn, not one undifferentiated FREE.
+    surf_ct = np.zeros((ncells, int(max(Klass)) + 1), np.int32)
 
     frames = sample_frames(recon, args.num)
     print(f"  {len(frames)} frames, grid {cols}x{rows} @ {args.cell_size} m")
@@ -539,6 +543,7 @@ def run(args):
             dir_local = (RwcT @ d_cam.T).T
             pts = C_local[None, :] + dmap[gy, gx][:, None] * dir_local
             cells = gf.cell_of(pts[:, :2])
+            np.add.at(surf_ct, (cells, klass[gy, gx]), 1)     # class votes stay per-pixel
             uniq, ui = np.unique(cells, return_index=True)
             np.add.at(free_ct, uniq, 1)
             np.bitwise_or.at(free_bear, uniq, bearing_bits(pts[ui, :2], C_local))
@@ -665,17 +670,32 @@ def run(args):
     struct = struct_ct.reshape(rows, cols, -1).argmax(2).astype(np.uint8)
     struct[state != FOOTPRINT] = int(Klass.UNKNOWN)
 
-    np.savez(out / "footprint2d.npz", state=state, structure=struct,
+    # `state` is multi-view gated but this argmax is not, so a cell that scraped through FREE
+    # could take its class from a couple of distant pixels -- that is the speckle over open
+    # ground. Require the winner to clear a vote floor; below it the cell stays walkable but
+    # unclassified, which is the honest answer rather than a coin-flip surface.
+    surf_g = surf_ct.reshape(rows, cols, -1)
+    surface = surf_g.argmax(2).astype(np.uint8)
+    weak = np.take_along_axis(surf_g, surface[:, :, None].astype(np.intp), 2)[:, :, 0] < args.min_surf_votes
+    surface[weak] = int(Klass.UNKNOWN)
+    surface[state != FREE] = int(Klass.UNKNOWN)     # only walkable cells carry a surface
+
+    np.savez(out / "footprint2d.npz", state=state, structure=struct, surface=surface,
              obs_count=obs_ct.reshape(rows, cols),
              foot_bearings=popcount32(foot_bear).reshape(rows, cols),
              free_count=free_ct.reshape(rows, cols), foot_count=foot_ct.reshape(rows, cols),
              dem=gf.dem, coverage=gf.coverage, cell_size=args.cell_size)
-    _render(out, state, struct, gf)
+    _render(out, state, struct, surface, gf)
     n = state.size
     print(f"[footprint2d] FREE {np.mean(state==FREE)*100:.1f}%  "
           f"FOOTPRINT {np.mean(state==FOOTPRINT)*100:.1f}%  "
           f"HIDDEN {np.mean(state==HIDDEN)*100:.1f}%  "
           f"UNKNOWN {np.mean(state==UNKNOWN)*100:.1f}%  (of {n} cells)")
+    gnames = [k.name for k in sorted(Klass, key=int)]
+    sv, sc = np.unique(surface[state == FREE], return_counts=True)
+    if len(sv):
+        print("  walkable surface: " + ", ".join(
+            f"{gnames[v]} {100*c/state.size:.1f}%" for v, c in sorted(zip(sv, sc), key=lambda t: -t[1])))
     seen = obs_ct > 0
     print(f"  visibility: {100*np.mean(seen):.1f}% of cells ever in frustum, "
           f"median {int(np.median(obs_ct[seen])) if seen.any() else 0} views where seen "
@@ -691,10 +711,15 @@ def run(args):
     print(f"  wrote {out}/footprint2d_bev.png  (+ overlay, npz, {ndbg} debug frames)")
 
 
-def _render(out, state, struct, gf):
+def _render(out, state, struct, surface, gf):
     """North-up: row 0 = origin_v (south), flip so up = +v (north)."""
+    lut_bgr = np.array(color_lut(), np.uint8)[:, ::-1]      # RGB->BGR for cv2
     rgb = np.zeros((*state.shape, 3), np.uint8)
-    rgb[state == FREE] = (60, 170, 60)
+    # FREE is no longer one flat green: each walkable cell is painted with its ground class,
+    # so paved path reads distinctly from lawn at a glance.
+    freem = state == FREE
+    rgb[freem] = lut_bgr[surface[freem]]
+    rgb[freem & (surface == int(Klass.UNKNOWN))] = (60, 170, 60)   # walkable, class unvoted
     rgb[state == FOOTPRINT] = (40, 40, 220)
     rgb[state == HIDDEN] = (60, 200, 230)
     rgb[state == UNKNOWN] = (35, 35, 35)
@@ -718,6 +743,19 @@ def _render(out, state, struct, gf):
     hask = struct != int(Klass.UNKNOWN)
     srgb[hask] = lut[struct[hask]]
     cv2.imwrite(str(out / "footprint2d_structure.png"), up(srgb))
+
+    # walkable-surface map on its own, plus the isolated path mask
+    grgb = (0.25 * base).astype(np.uint8)
+    hasg = surface != int(Klass.UNKNOWN)
+    grgb[hasg] = lut_bgr[surface[hasg]]
+    cv2.imwrite(str(out / "footprint2d_surface.png"), up(grgb))
+
+    pathm = np.isin(surface, [int(Klass.PATH), int(Klass.PAVEMENT), int(Klass.STAIRS)])
+    prgb = (0.25 * base).astype(np.uint8)
+    prgb[surface == int(Klass.GRASS)] = (60, 110, 60)
+    prgb[surface == int(Klass.TERRAIN)] = (70, 90, 110)
+    prgb[pathm] = (90, 220, 255)
+    cv2.imwrite(str(out / "footprint2d_path.png"), up(prgb))
 
 
 def main():
@@ -776,6 +814,10 @@ def main():
                          "asks whether the ground was in view at all.")
     ap.add_argument("--obs-stride", type=int, default=8,
                     help="pixel stride for the per-frame visibility raycast (the denominator)")
+    ap.add_argument("--min-surf-votes", type=int, default=4,
+                    help="pixel votes the winning ground class needs before a FREE cell is "
+                         "labelled PATH/GRASS/... ; below it the cell stays walkable but "
+                         "unclassified instead of guessing")
     ap.add_argument("--min-obs", type=int, default=2,
                     help="frames that must have had a cell's ground in frustum before we call it")
     ap.add_argument("--min-free-frac", type=float, default=0.25,
