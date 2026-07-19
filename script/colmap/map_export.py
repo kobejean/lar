@@ -57,8 +57,15 @@ def update_anchor_transforms(anchors, arkit_frames, colmap_poses):
     
     for anchor_id, anchor_data in anchors:
         frame_id = anchor_data["frame_id"]
-        arkit_frame = arkit_frames[frame_id]
-        
+        # Look up by id, not by list position: the frame list may be reordered or
+        # truncated (see --max_frames), so arkit_frames[frame_id] is wrong and can
+        # raise IndexError for anchors whose frame was dropped from the subset.
+        arkit_frame = find_arkit_frame_by_id(arkit_frames, frame_id)
+        if arkit_frame is None:
+            print(f"Warning: ARKit frame {frame_id} not in the reconstruction subset, keeping original anchor {anchor_id}")
+            updated_anchors.append([anchor_id, anchor_data])
+            continue
+
         # Find the corresponding COLMAP pose
         colmap_pose = colmap_poses.get(frame_id)
         if colmap_pose is None:
