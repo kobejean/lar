@@ -152,6 +152,16 @@ Three things it does that the evidence raster must not:
 3. **Drops speckle** — components under `--min-blob` are demoted to **grey**, not to a
    neighbouring class: an isolated cell is unsupported, not evidence for its surroundings.
 
+**Occupied is coloured by what is standing there** — `structure` gives each footprint cell a
+`Klass`, and each occupied blob takes the majority class of its voted cells (so one object is
+one colour rather than a speckled mosaic). Full run: tree/bush 2.5%, building 0.7%, wall 0.1%,
+furniture 0.1%.
+
+Walkable-vs-solid is carried by **lightness, not hue** — ground classes light and desaturated,
+occupied dark and saturated, hue distinguishing class within each group. Colouring occupied
+*tree* in the same green family and lightness as *grass* made the two read alike at a glance,
+which is the one confusion a navigation map cannot afford.
+
 Two tuning traps, both hit while building it:
 
 - **Occupied needs `close_only`, never `smooth`.** `smooth()` closes *then opens*, and an open

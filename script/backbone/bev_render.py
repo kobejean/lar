@@ -45,21 +45,36 @@ from taxonomy import Klass  # noqa: E402
 UNKNOWN, FREE, FOOTPRINT, HIDDEN = 0, 1, 2, 3
 
 # presentation labels (priority order matters when classes overlap after morphology)
-L_UNSURVEYED, L_LOWCONF, L_GRASS, L_TERRAIN, L_PATH, L_HIDDEN, L_OCCUPIED = range(7)
+(L_UNSURVEYED, L_LOWCONF, L_GRASS, L_TERRAIN, L_PATH, L_HIDDEN,
+ L_OCC_TREE, L_OCC_WALL, L_OCC_BUILDING, L_OCC_FURNITURE, L_OCC_OTHER) = range(11)
+OCC_LABELS = (L_OCC_TREE, L_OCC_WALL, L_OCC_BUILDING, L_OCC_FURNITURE, L_OCC_OTHER)
+# structure Klass -> presentation label
+OCC_OF_KLASS = {int(Klass.TREE): L_OCC_TREE, int(Klass.WALL): L_OCC_WALL,
+                int(Klass.BUILDING): L_OCC_BUILDING, int(Klass.FURNITURE): L_OCC_FURNITURE}
 
+# The load-bearing distinction in this map is walkable vs solid, so that is carried by
+# LIGHTNESS, not hue: ground classes are light and desaturated, occupied classes dark and
+# saturated. Hue then says which class within each group. Colouring occupied tree the same
+# green family as grass at similar lightness made the two read alike at a glance -- the one
+# confusion a navigation map cannot afford.
 PALETTE = {                      # RGB
-    L_UNSURVEYED: (24, 26, 30),
-    L_LOWCONF:    (105, 108, 115),
-    L_GRASS:      (104, 152, 92),
-    L_TERRAIN:    (150, 132, 106),
-    L_PATH:       (238, 220, 170),
-    L_HIDDEN:     (72, 88, 104),
-    L_OCCUPIED:   (188, 74, 62),
+    L_UNSURVEYED:    (24, 26, 30),
+    L_LOWCONF:       (108, 112, 120),
+    L_GRASS:         (154, 188, 130),
+    L_TERRAIN:       (178, 160, 132),
+    L_PATH:          (242, 228, 190),
+    L_HIDDEN:        (92, 108, 126),
+    L_OCC_TREE:      (20, 76, 42),
+    L_OCC_WALL:      (92, 60, 46),
+    L_OCC_BUILDING:  (138, 44, 92),
+    L_OCC_FURNITURE: (200, 112, 24),
+    L_OCC_OTHER:     (168, 48, 40),
 }
 NAMES = {
     L_UNSURVEYED: "not surveyed", L_LOWCONF: "low confidence", L_GRASS: "grass",
     L_TERRAIN: "terrain", L_PATH: "path / paved", L_HIDDEN: "occluded ground",
-    L_OCCUPIED: "occupied",
+    L_OCC_TREE: "tree / bush", L_OCC_WALL: "wall / fence", L_OCC_BUILDING: "building",
+    L_OCC_FURNITURE: "furniture", L_OCC_OTHER: "occupied (unclassed)",
 }
 
 
@@ -150,14 +165,21 @@ def surroundedness(mask: np.ndarray, radius: int) -> np.ndarray:
     return hits
 
 
-def fill_surrounded(mask: np.ndarray, radius: int, min_dirs: int, rounds: int = 3) -> np.ndarray:
-    """Grow `mask` into cells walled in on >= min_dirs of 8 sides. Iterated, because each
-    round makes the next concavity shallower."""
+def fill_surrounded(mask, radius, min_dirs, allowed=None, rounds: int = 3):
+    """Grow `mask` into cells walled in on >= min_dirs of 8 sides, restricted to `allowed`.
+
+    The allow-mask is not optional in spirit: without it the fill walks straight over PATH,
+    because a path pixel between two tree clumps genuinely is surrounded by occupied on most
+    sides. It is still a path. Never claim occupied where ground was directly OBSERVED
+    walkable -- an obstacle cannot be standing where we watched people walk.
+    """
     if min_dirs > 8 or radius < 1:
         return mask
     out = mask.copy()
     for _ in range(rounds):
         grow = (surroundedness(out, radius) >= min_dirs) & ~out
+        if allowed is not None:
+            grow &= allowed
         if not grow.any():
             break
         out |= grow
@@ -303,13 +325,18 @@ def build_labels(z, args) -> tuple[np.ndarray, dict]:
     occupied = absorb_walled(hidden, occupied, args.surround_radius, args.enclose_dirs)
     hidden = hidden & ~occupied
 
-    layers = {L_OCCUPIED: occupied, L_PATH: path, L_TERRAIN: terrain,
+    # Everything the fill is permitted to claim. Observed walkable ground is excluded outright:
+    # a path pinched between two tree clumps is surrounded by occupied on most sides and is
+    # still a path -- that is what let the fill eat the walkways.
+    growable = ~(path | grass | terrain)
+
+    layers = {"occ": occupied, L_PATH: path, L_TERRAIN: terrain,
               L_GRASS: grass, L_HIDDEN: hidden}
 
     stats = {}
     for lid, m in layers.items():
         before = int(m.sum())
-        if lid == L_OCCUPIED:
+        if lid == "occ":
             # Occupied is the sparsest layer by construction -- FOOTPRINT marks base contacts,
             # a camera-facing rim, and at 0.5 m a bench or trunk is one or two cells. The blob
             # filter tuned for area classes deletes exactly those, so occupied gets its own
@@ -318,18 +345,32 @@ def build_labels(z, args) -> tuple[np.ndarray, dict]:
             m = remove_small_blobs(m, args.min_blob_occupied)
             m = close_only(m, args.occupied_close)
             m = fill_small_holes(m, args.max_fill)
-            m = fill_surrounded(m, args.surround_radius, args.surround_dirs)
+            m = fill_surrounded(m, args.surround_radius, args.surround_dirs, growable)
         else:
             m = remove_small_blobs(m, args.min_blob)
             m = smooth(m, args.smooth)
         layers[lid] = m
-        stats[NAMES[lid]] = (before, int(m.sum()))
+        stats["occupied" if lid == "occ" else NAMES[lid]] = (before, int(m.sum()))
 
     out = np.full(state.shape, L_UNSURVEYED, np.uint8)
     out[surveyed] = L_LOWCONF                      # surveyed but not confident -> grey
     out[unclassified] = L_LOWCONF
-    for lid in (L_HIDDEN, L_GRASS, L_TERRAIN, L_PATH, L_OCCUPIED):   # last wins
+    for lid in (L_HIDDEN, L_GRASS, L_TERRAIN, L_PATH):
         out[layers[lid]] = lid
+
+    # Occupied carries WHAT is standing there. `structure` only labels cells that actually won
+    # a class vote, so morphology/fill leaves holes; each connected blob takes the majority
+    # class of its voted cells, which keeps one object one colour instead of a speckled mosaic.
+    occ_m = layers["occ"]
+    struct = z["structure"] if "structure" in z else np.zeros_like(state)
+    n, lab = cv2.connectedComponents(occ_m.astype(np.uint8), 8)
+    for i in range(1, n):
+        comp = lab == i
+        votes = struct[comp & (struct != int(Klass.UNKNOWN))]
+        lid = L_OCC_OTHER
+        if votes.size:
+            lid = OCC_OF_KLASS.get(int(np.bincount(votes).argmax()), L_OCC_OTHER)
+        out[comp] = lid
     return out, stats
 
 
@@ -341,7 +382,7 @@ def colorize(labels, scale, legend, cell_size=0.5, outline=True):
     pct = {lid: 100.0 * float((labels == lid).sum()) / total for lid in NAMES}
 
     rgb = np.flipud(lut[labels])                          # north-up, as footprint2d renders
-    occ = np.flipud(labels == L_OCCUPIED)
+    occ = np.flipud(np.isin(labels, OCC_LABELS))
     if scale > 1:
         rgb = cv2.resize(rgb, None, fx=scale, fy=scale, interpolation=cv2.INTER_NEAREST)
         occ = cv2.resize(occ.astype(np.uint8), None, fx=scale, fy=scale,
@@ -350,7 +391,7 @@ def colorize(labels, scale, legend, cell_size=0.5, outline=True):
         # A dark keyline round occupied regions. Obstacles are the one class a user must not
         # misread as ground, and at small sizes a fill alone reads as a colour blotch.
         cnts, _ = cv2.findContours(occ.astype(np.uint8), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-        cv2.drawContours(rgb, cnts, -1, (70, 22, 18), max(1, scale // 3))
+        cv2.drawContours(rgb, cnts, -1, (16, 14, 16), max(1, scale // 3))
 
     # scale bar: a map without one cannot be measured, and this is metric
     h, w = rgb.shape[:2]
