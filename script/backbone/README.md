@@ -126,6 +126,47 @@ daily caps), and `drop_to_ground` can bias a distant object's contact slightly t
 (the first ground pixel below the trunk). Natural next step: use Gemini as an **oracle to distill
 labels** into a shippable local head.
 
+## Multi-view evidence: ratios, bearings, and a geometric HIDDEN
+
+Fusion used to be raw vote counts (`foot_ct >= min_foot`) over *pixels*, which has no
+denominator: 3 votes looked identical whether the cell was in view 3 times (unanimous) or 40
+(7.5%, noise). And two pixels in a single image counted as "2 votes" — not multi-view evidence
+at all.
+
+Three changes:
+
+- **Visibility denominator.** Each frame rasterises which cells had their ground in frustum
+  (`visible_cells`, a coarse raycast). Votes are now per-*frame*, thresholded as a **fraction**
+  of observing frames (`--min-free-frac`, `--min-foot-frac`).
+- **Distinct bearings** (`--min-bearings`, 32 bins packed in a `uint32`, popcount to test).
+  Ten votes from one viewpoint are ONE correlated observation; counting them individually
+  manufactures confidence from a single mistake, which is what drew the radial BEV streaks.
+- **HIDDEN is now geometric** (`--hidden-mode visibility`, default). In frustum yet never
+  observed as walkable ⇒ something stood in front of it. This replaces a morphological
+  close + occluder-proximity dilate that had to *guess* occlusion from the shape of the FREE
+  blob. The old path is kept as `--hidden-mode morphology` for comparison.
+
+**The denominator must be a superset of every numerator**, or cells get disqualified for "not
+being observed" by the very frame that observed them. The raycast alone isn't: it's
+coverage-gated and capped at `--obs-max-range`, while FREE back-projects mono depth with
+neither limit. So `obs` is seeded with the raycast and **unioned with whatever the frame
+actually voted**. Getting this wrong first time cost 19 points of FREE (24.9% → 6.0%).
+
+**This is stricter, and honestly so.** At 40 frames, 1103 of 1196 footprint-voted cells had
+exactly *one* bearing — the old 2.3% FOOTPRINT was mostly single-view claims counted per pixel.
+Evidence scales with sampling:
+
+| | 40 frames | 150 frames |
+|---|---|---|
+| cells ever in frustum | 49.7% | **72.0%** (median 2 → 4 views) |
+| FREE | 16.7% | **42.1%** |
+| FOOTPRINT | 0.2% | **1.6%** |
+| UNKNOWN | 70.5% | **41.7%** |
+| footprint cells ≥2 bearings | 93 / 1196 | **939 / 3377** |
+
+So the honest reading: multi-view corroboration is a sampling-density question, not a
+threshold-tuning one. Run denser rather than loosening the gates.
+
 ## Depth contact gate — "touches the ground in 2D" ≠ "touches it in 3D"
 
 Both footprint paths reduce an object to its **bottom-most pixel** and ray-DEM that to the

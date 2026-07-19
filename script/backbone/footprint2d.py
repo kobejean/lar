@@ -7,8 +7,9 @@ target*. Three ground states come out, IMDF-ready:
 
   FREE       -- walkable ground, directly observed
   FOOTPRINT  -- ground occupied by a vertical object's *base* (not walkable)
-  HIDDEN     -- ground enclosed by free space but unobserved in every view (walk-under
-                / occluded); recovered by multi-view fusion, not any single frame
+  HIDDEN     -- ground that WAS in frustum but was never observed as walkable: something
+                stood in front of it (walk-under / occluded). Derived from the visibility
+                denominator, not from the shape of the free-space blob
 
 Per frame (poses + PINHOLE intrinsics from COLMAP):
   1. panoptic seg (Mask2Former, MIT) -> per-pixel taxonomy Klass + Role
@@ -30,7 +31,19 @@ Per frame (poses + PINHOLE intrinsics from COLMAP):
      comparison at a single pixel is what mono depth is reliable for; metric placement at an
      object edge is what it is not.
 
-Fuse across frames in BEV; HIDDEN falls out where FREE encloses unobserved cells.
+Fusion is by RATIO, not raw count. Each frame also rasterises which cells had their ground in
+frustum at all (`visible_cells`), giving the denominator the raster never had: three votes
+means something very different from 3 observations (unanimous) than from 40 (7.5% = noise).
+Cells additionally need votes from >= --min-bearings distinct camera bearings, because ten
+votes from one viewpoint are ONE correlated observation -- counting them ten times manufactures
+confidence from a single mistake, which is what drew the radial BEV streaks. HIDDEN then falls
+out geometrically: in frustum, yet never seen free.
+
+This is stricter than the old pixel-count rule, and honestly so: at 40 frames the previous
+2.3% FOOTPRINT was largely single-view claims counted once per pixel (1103 of 1196 voted cells
+had exactly one bearing). Multi-view evidence scales with sampling -- 40 -> 150 frames takes
+visibility 49.7% -> 72.0% (median 2 -> 4 views) and FOOTPRINT 0.2% -> 1.6%, now actually
+corroborated.
 
 Run (from repo root):
   uv run --extra segmentation --with /home/play/Code/lingbot-vision \
@@ -330,6 +343,51 @@ def depth_contact_gate(dmap, rows, cols, zt, ok, tol: float, log=None, tag: str 
     return gated
 
 
+
+# Multi-view evidence: 32 bearing bins packed into a uint32 per cell.
+NBEARINGS = 32
+_POP8 = np.array([bin(i).count("1") for i in range(256)], np.uint8)
+
+
+def popcount32(a: np.ndarray) -> np.ndarray:
+    """Number of distinct bearing bins set per cell. uint8-LUT so it works on any numpy."""
+    return _POP8[a.astype(np.uint32).view(np.uint8).reshape(-1, 4)].sum(1).astype(np.int32)
+
+
+def bearing_bits(cell_uv: np.ndarray, C_local: np.ndarray) -> np.ndarray:
+    """Quantised camera->cell bearing as a one-hot uint32.
+
+    Ten votes from one viewpoint are ONE piece of evidence, not ten: errors along a ray are
+    correlated, so counting them ten times manufactures confidence out of a single mistake --
+    which is exactly what draws the radial streaks in the BEV. Counting *distinct bearings*
+    instead is the trick footprint_instances already uses for its polygons.
+    """
+    ang = np.degrees(np.arctan2(cell_uv[:, 1] - C_local[1], cell_uv[:, 0] - C_local[0]))
+    b = ((ang % 360.0) * (NBEARINGS / 360.0)).astype(np.int64) % NBEARINGS
+    return (np.uint32(1) << b.astype(np.uint32))
+
+
+def visible_cells(C_local, RwcT, cam, gf, H, W, stride, factor, z_far, dz, max_range):
+    """Cells whose GROUND is geometrically in frustum this frame, occlusion ignored.
+
+    This is the denominator the raster never had. ``ray_dem_intersect`` hits the ground height
+    field only, so a ray through a tree trunk still lands on the ground behind it -- which is
+    the point: it separates "this cell's ground was never in view" (UNKNOWN) from "it was in
+    view but something stood in front of it" (HIDDEN). That distinction used to be
+    reverse-engineered with a morphological close; here it falls straight out of the geometry.
+    """
+    ys, xs = np.mgrid[0:H:stride, 0:W:stride]
+    d_cam = pixel_dirs(xs.ravel().astype(np.float64), ys.ravel().astype(np.float64), cam, factor)
+    dirs = (RwcT @ d_cam.T).T
+    hit_uv, ok, _ = ray_dem_intersect(C_local, dirs, gf, z_far=z_far, dz=dz, max_range=max_range)
+    if not ok.any():
+        return np.zeros(0, np.int64), np.zeros((0, 2))
+    uv = hit_uv[ok]
+    cells = gf.cell_of(uv)
+    keep = np.unique(cells, return_index=True)[1]        # one vote per cell per frame
+    return cells[keep], uv[keep]
+
+
 # ---------------------------------------------------------------------------
 def sample_frames(recon, num):
     imgs = sorted(recon.images.values(), key=lambda im: im.name)
@@ -430,8 +488,13 @@ def run(args):
     rescue_klass = int(Klass[args.rescue_klass])
     rescued: dict[str, int] = {}
 
+    # Frame counts, not pixel counts: a ratio against obs_ct is only meaningful if numerator
+    # and denominator are both "how many frames".
+    obs_ct = np.zeros(ncells, np.int32)
     free_ct = np.zeros(ncells, np.int32)
     foot_ct = np.zeros(ncells, np.int32)
+    free_bear = np.zeros(ncells, np.uint32)
+    foot_bear = np.zeros(ncells, np.uint32)
     struct_ct = np.zeros((ncells, int(max(Klass)) + 1), np.int32)  # per-cell obstacle class votes
 
     frames = sample_frames(recon, args.num)
@@ -455,6 +518,15 @@ def run(args):
         role_map = roles[klass]
         cam = recon.cameras[img.camera_id]
         C_local, RwcT = camera_local(img, gf)
+        # The denominator must be a SUPERSET of every numerator or ratios exceed 1 and cells
+        # get disqualified for "not being observed" in the very frame that observed them. The
+        # raycast alone is not: it is coverage-gated and capped at --obs-max-range, while FREE
+        # back-projects mono depth with neither restriction. So seed obs with the raycast and
+        # union in whatever this frame actually voted -- a cell seen as ground was, tautologically,
+        # in view.
+        ocells, _ = visible_cells(C_local, RwcT, cam, gf, H, W, args.obs_stride,
+                                  args.data_factor, args.z_far, args.dz, args.obs_max_range)
+        frame_obs = [ocells]
 
         # ---- FREE: ground pixels back-projected with metric depth ----
         gmask = (role_map == int(Role.GROUND)) & (dmap > 0)
@@ -467,7 +539,10 @@ def run(args):
             dir_local = (RwcT @ d_cam.T).T
             pts = C_local[None, :] + dmap[gy, gx][:, None] * dir_local
             cells = gf.cell_of(pts[:, :2])
-            np.add.at(free_ct, cells, 1)
+            uniq, ui = np.unique(cells, return_index=True)
+            np.add.at(free_ct, uniq, 1)
+            np.bitwise_or.at(free_bear, uniq, bearing_bits(pts[ui, :2], C_local))
+            frame_obs.append(uniq)
 
         # ---- RESCUE: open-vocab masks for solid objects the closed-set seg calls UNKNOWN ----
         # ADE-150 has no "vending machine", so Mask2Former labels one UNKNOWN -> Role.IGNORE and
@@ -520,8 +595,13 @@ def run(args):
             gate_post += int(ok.sum())
             if ok.any():
                 cells = gf.cell_of(hit_uv[ok])
-                np.add.at(foot_ct, cells, 1)
-                np.add.at(struct_ct, (cells, base_klass[ok]), 1)
+                uniq, ui = np.unique(cells, return_index=True)
+                np.add.at(foot_ct, uniq, 1)
+                np.bitwise_or.at(foot_bear, uniq, bearing_bits(hit_uv[ok][ui], C_local))
+                np.add.at(struct_ct, (cells, base_klass[ok]), 1)   # class votes stay per-pixel
+                frame_obs.append(uniq)
+
+        obs_ct[np.unique(np.concatenate(frame_obs))] += 1
 
         # ---- per-frame debug overlay (first few) ----
         if ndbg < args.debug_frames:
@@ -539,9 +619,18 @@ def run(args):
             print(f"  {fi + 1}/{len(frames)}  free~{int(free_ct.sum())} foot~{int(foot_ct.sum())}")
 
     # ---- fuse -> ground-state raster ----
+    # Evidence is now a RATIO, not a count. Three votes means something entirely different
+    # when the cell was in view 3 times (unanimous) than when it was in view 40 (7.5% -- noise).
+    # Without the denominator both looked identical, which is what the raw-count rule did.
     state = np.full(ncells, UNKNOWN, np.uint8)
-    free = free_ct >= args.min_free
-    foot = foot_ct >= args.min_foot
+    obs_ok = obs_ct >= args.min_obs
+    denom = np.maximum(obs_ct, 1)
+    p_free = free_ct / denom
+    p_foot = foot_ct / denom
+    nb_foot = popcount32(foot_bear)
+    free = obs_ok & (free_ct >= args.min_free) & (p_free >= args.min_free_frac)
+    foot = (obs_ok & (foot_ct >= args.min_foot) & (p_foot >= args.min_foot_frac)
+            & (nb_foot >= args.min_bearings))
     state[free] = FREE
     state[foot] = FOOTPRINT                                  # footprint wins ties
     state = state.reshape(rows, cols)
@@ -552,20 +641,33 @@ def run(args):
     # fill to cells within `hidden_occ_r` of a base-contact (a real occluder): the
     # camera-facing side of an obstacle is observed -> FREE, so the UNKNOWN cells left next to
     # a footprint are precisely its shadow. No footprint nearby -> just unobserved, not hidden.
-    k = max(3, int(args.hidden_close) | 1)                  # odd
-    freem = (state == FREE).astype(np.uint8)
-    closed = cv2.morphologyEx(freem, cv2.MORPH_CLOSE,
-                              cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k)))
-    occ_r = max(1, int(args.hidden_occ_r))
-    occ = (foot_ct.reshape(rows, cols) > 0).astype(np.uint8)   # any base-contact = an occluder
-    occ_dil = cv2.dilate(occ, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * occ_r + 1,) * 2))
-    hidden = (closed == 1) & (state == UNKNOWN) & (occ_dil > 0)
-    state[hidden] = HIDDEN
+    if args.hidden_mode == "visibility":
+        # HIDDEN is no longer inferred from the SHAPE of the free space. A cell whose ground
+        # was in frustum (obs_ct) yet never actually observed as walkable is, by definition,
+        # occluded -- something stood in front of it. The morphological close below could only
+        # guess that from geometry of the FREE blob, and needed an occluder-proximity fudge to
+        # stop it claiming every unwalked fringe.
+        hidden = (obs_ok & ~free & ~foot).reshape(rows, cols)
+        state[hidden] = HIDDEN
+    else:
+        state_f = state.reshape(-1)
+        k = max(3, int(args.hidden_close) | 1)                  # odd
+        freem = (state == FREE).astype(np.uint8)
+        closed = cv2.morphologyEx(freem, cv2.MORPH_CLOSE,
+                                  cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k)))
+        occ_r = max(1, int(args.hidden_occ_r))
+        occ = (foot_ct.reshape(rows, cols) > 0).astype(np.uint8)
+        occ_dil = cv2.dilate(occ, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * occ_r + 1,) * 2))
+        hidden = (closed == 1) & (state == UNKNOWN) & (occ_dil > 0)
+        state[hidden] = HIDDEN
+        del state_f
 
     struct = struct_ct.reshape(rows, cols, -1).argmax(2).astype(np.uint8)
     struct[state != FOOTPRINT] = int(Klass.UNKNOWN)
 
     np.savez(out / "footprint2d.npz", state=state, structure=struct,
+             obs_count=obs_ct.reshape(rows, cols),
+             foot_bearings=popcount32(foot_bear).reshape(rows, cols),
              free_count=free_ct.reshape(rows, cols), foot_count=foot_ct.reshape(rows, cols),
              dem=gf.dem, coverage=gf.coverage, cell_size=args.cell_size)
     _render(out, state, struct, gf)
@@ -574,6 +676,11 @@ def run(args):
           f"FOOTPRINT {np.mean(state==FOOTPRINT)*100:.1f}%  "
           f"HIDDEN {np.mean(state==HIDDEN)*100:.1f}%  "
           f"UNKNOWN {np.mean(state==UNKNOWN)*100:.1f}%  (of {n} cells)")
+    seen = obs_ct > 0
+    print(f"  visibility: {100*np.mean(seen):.1f}% of cells ever in frustum, "
+          f"median {int(np.median(obs_ct[seen])) if seen.any() else 0} views where seen "
+          f"(max {int(obs_ct.max())});  footprint cells with >=2 bearings: "
+          f"{int((nb_foot >= 2).sum())} of {int((foot_ct > 0).sum())} voted")
     if rescued:
         top = sorted(rescued.items(), key=lambda kv: -kv[1])
         print(f"  obstacle rescue: {sum(rescued.values())} masks over {len(rescued)} labels -> "
@@ -662,6 +769,26 @@ def main():
                     help="reject a ground contact when measured mono depth disagrees with the "
                          "ray-DEM hit range by more than this FRACTION of the range "
                          "(catches masks that touch ground in 2D but float in 3D). 0 disables.")
+    # --- multi-view evidence ---
+    ap.add_argument("--obs-max-range", type=float, default=40.0,
+                    help="range cap for the visibility raycast. Deliberately looser than "
+                         "--max-range: that bounds where a CONTACT is trustworthy, this only "
+                         "asks whether the ground was in view at all.")
+    ap.add_argument("--obs-stride", type=int, default=8,
+                    help="pixel stride for the per-frame visibility raycast (the denominator)")
+    ap.add_argument("--min-obs", type=int, default=2,
+                    help="frames that must have had a cell's ground in frustum before we call it")
+    ap.add_argument("--min-free-frac", type=float, default=0.25,
+                    help="fraction of observing frames that must see a cell as ground -> FREE")
+    ap.add_argument("--min-foot-frac", type=float, default=0.20,
+                    help="fraction of observing frames that must vote base-contact -> FOOTPRINT")
+    ap.add_argument("--min-bearings", type=int, default=2,
+                    help="distinct camera bearings (of 32 bins) required for FOOTPRINT; "
+                         "votes from a single viewpoint are one correlated observation, and "
+                         "counting them individually is what draws the radial BEV streaks")
+    ap.add_argument("--hidden-mode", default="visibility", choices=["visibility", "morphology"],
+                    help="visibility: in-frustum but never seen free = occluded (geometric). "
+                         "morphology: the older close+dilate heuristic, kept for comparison.")
     ap.add_argument("--hidden-close", type=int, default=5, help="HIDDEN gap-fill kernel (cells)")
     ap.add_argument("--hidden-occ-r", type=int, default=4,
                     help="HIDDEN only within this many cells of a base-contact (occlusion shadow)")
