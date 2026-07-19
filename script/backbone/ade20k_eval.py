@@ -127,8 +127,10 @@ def ade_to_klass(names: list[str], mapping: str = "explicit") -> np.ndarray:
     lut = np.zeros(151, dtype=np.uint8)
     if mapping == "keyword":
         for i, n in enumerate(names):
-            lut[i] = int(Klass.UNKNOWN) if i == 0 else \
-                int(max((keyword_klass(s.strip()) for s in n.split(",")), key=int))
+            # keyword_klass matches on word boundaries across the whole synonym list now, so
+            # the old per-synonym max() tie-break (which just picked the highest Klass id) is
+            # gone -- it had no principled basis.
+            lut[i] = int(Klass.UNKNOWN) if i == 0 else int(keyword_klass(n))
         return lut
     for i, k in _ADE_KLASS.items():
         lut[i] = int(k)
