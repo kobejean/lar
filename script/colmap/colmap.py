@@ -319,6 +319,22 @@ def copy_images(source_dir, work_dir, allowed_names=None):
             print(f"No *_image.jpeg files matched the requested frame subset in {source_dir}")
             return False
 
+        # Prune images left over from a previous (e.g. full) run. The OpenCV SIFT
+        # extractor globs the working directory directly, so stale images that
+        # aren't in the database would otherwise be re-extracted and defeat
+        # --max_frames. Remove each stale image and its `<name>.txt` feature
+        # sidecar so nothing outside the subset can slip into feature import.
+        pruned = 0
+        for stale in work_path.glob("*_image.jpeg"):
+            if stale.name not in allowed_names:
+                stale.unlink()
+                sidecar = stale.with_suffix(stale.suffix + ".txt")
+                if sidecar.exists():
+                    sidecar.unlink()
+                pruned += 1
+        if pruned:
+            print(f"Pruned {pruned} stale image(s) from {work_path} not in the requested frame subset")
+
     print(f"Found {len(image_files)} image files")
 
     # Copy images to working directory
