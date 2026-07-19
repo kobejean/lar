@@ -113,6 +113,67 @@ class SegKlass:
 
 
 # ---------------------------------------------------------------------------
+# open-vocabulary instances: Grounding DINO boxes -> SAM masks
+# ---------------------------------------------------------------------------
+class GroundedSAM:
+    """(masks, boxes, labels, scores) for one BGR image, all from cached weights."""
+
+    def __init__(self, det_model: str, sam_model: str, prompt: str,
+                 box_th: float, text_th: float, device: str | None = None):
+        import torch
+        from transformers import (AutoModelForZeroShotObjectDetection, AutoProcessor,
+                                  SamModel, SamProcessor)
+        self.torch = torch
+        self.prompt = prompt
+        self.box_th, self.text_th = box_th, text_th
+        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+        self.dproc = AutoProcessor.from_pretrained(det_model)
+        self.det = AutoModelForZeroShotObjectDetection.from_pretrained(det_model).to(self.device).eval()
+        self.sproc = SamProcessor.from_pretrained(sam_model)
+        self.sam = SamModel.from_pretrained(sam_model).to(self.device).eval()
+
+    def __call__(self, bgr: np.ndarray):
+        from PIL import Image as PILImage
+        torch = self.torch
+        pil = PILImage.fromarray(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB))
+        inp = self.dproc(images=pil, text=self.prompt, return_tensors="pt").to(self.device)
+        with torch.no_grad():
+            out = self.det(**inp)
+        res = self.dproc.post_process_grounded_object_detection(
+            out, inp.input_ids, threshold=self.box_th, text_threshold=self.text_th,
+            target_sizes=[bgr.shape[:2]])[0]
+        boxes = res["boxes"].cpu().numpy()
+        if not len(boxes):
+            return np.zeros((0, *bgr.shape[:2]), bool), boxes, [], np.zeros(0, np.float32)
+        labels = [str(x) for x in res.get("text_labels", res["labels"])]
+        scores = res["scores"].cpu().numpy().astype(np.float32)
+        si = self.sproc(pil, input_boxes=[boxes.tolist()], return_tensors="pt").to(self.device)
+        with torch.no_grad():
+            so = self.sam(**si, multimask_output=False)
+        masks = self.sproc.image_processor.post_process_masks(
+            so.pred_masks.cpu(), si["original_sizes"].cpu(), si["reshaped_input_sizes"].cpu())[0]
+        return masks[:, 0].numpy().astype(bool), boxes, labels, scores
+
+
+
+def snap_label(raw: str, prompt: str) -> str:
+    """Grounding DINO returns BPE-merged labels -- '##nding machine kiosk' for two adjacent
+    prompt phrases. The '##' is a WordPiece continuation marker and the merge crosses phrase
+    boundaries, so the raw string names no real class. Snap it to the prompt phrase sharing the
+    most words; cosmetic while every rescue maps to one Klass, but load-bearing the moment
+    per-label classes are wanted."""
+    toks = set(raw.replace("##", "").split())
+    best, hits = raw.strip(), 0
+    for phrase in (x.strip() for x in prompt.split(".")):
+        if not phrase:
+            continue
+        n = len(toks & set(phrase.split()))
+        if n > hits:
+            best, hits = phrase, n
+    return best
+
+
+# ---------------------------------------------------------------------------
 # metric depth (DA2-small, SfM-scaled) -- same recipe as mono_depth.py
 # ---------------------------------------------------------------------------
 class MonoDepth:
@@ -363,6 +424,11 @@ def run(args):
 
     pan = SegKlass(args.seg_model, mode=args.seg_mode)
     depth = MonoDepth(args.depth_model)
+    gsam = (GroundedSAM(args.det_model, args.sam_model, args.rescue_prompt,
+                        args.rescue_box_th, args.rescue_text_th)
+            if args.rescue_prompt.strip() else None)
+    rescue_klass = int(Klass[args.rescue_klass])
+    rescued: dict[str, int] = {}
 
     free_ct = np.zeros(ncells, np.int32)
     foot_ct = np.zeros(ncells, np.int32)
@@ -372,6 +438,8 @@ def run(args):
     print(f"  {len(frames)} frames, grid {cols}x{rows} @ {args.cell_size} m")
     if args.contact_depth_tol > 0:
         print(f"  depth contact gate: |d_mono - z_dem| <= {args.contact_depth_tol:.0%} of z_dem")
+    if gsam is not None:
+        print(f"  obstacle rescue -> {args.rescue_klass}: {args.rescue_prompt}")
     ndbg = 0
     gate_pre = gate_post = 0
     for fi, img in enumerate(frames):
@@ -400,6 +468,36 @@ def run(args):
             pts = C_local[None, :] + dmap[gy, gx][:, None] * dir_local
             cells = gf.cell_of(pts[:, :2])
             np.add.at(free_ct, cells, 1)
+
+        # ---- RESCUE: open-vocab masks for solid objects the closed-set seg calls UNKNOWN ----
+        # ADE-150 has no "vending machine", so Mask2Former labels one UNKNOWN -> Role.IGNORE and
+        # a large solid obstacle contributes NO footprint at all. Measured on maguro-park frame
+        # 8, the vending-machine region is 100% UNKNOWN/IGNORE: the machines are invisible to
+        # the occupancy map. For a navigation map that is the dangerous direction to fail in --
+        # free space asserted where something solid stands. Grounding DINO + SAM fill the hole
+        # from a text prompt, since the long tail of park objects can never be enumerated in a
+        # closed label set. Rescued pixels never overwrite a class the segmenter was confident
+        # about; they only fill IGNORE/UNKNOWN gaps.
+        if gsam is not None:
+            rmasks, _, rlabels, rscores = gsam(small)
+            # Highest score first: rescue is order-dependent (each mask only fills what earlier
+            # ones left), so without a fixed order the result depends on detector output order.
+            for i in np.argsort(-np.asarray(rscores)) if len(rscores) else []:
+                rm = rmasks[i]
+                # A single park object is not a third of the frame. Grounding DINO happily
+                # returns such boxes ('playground equipment' covering 192k px = 28% of frame 8,
+                # i.e. the vending machines and everything around them); letting one through
+                # blankets the BEV with phantom occupancy, the same over-blocking this pipeline
+                # rejected mono depth for.
+                if rm.mean() > args.rescue_max_frac:
+                    continue
+                fill = rm & (role_map != int(Role.OBSTACLE))
+                if int(fill.sum()) < args.rescue_min_px:
+                    continue
+                klass[fill] = rescue_klass
+                role_map[fill] = int(Role.OBSTACLE)
+                lab = snap_label(rlabels[i], args.rescue_prompt)
+                rescued[lab] = rescued.get(lab, 0) + 1
 
         # ---- FOOTPRINT: bottom-most obstacle pixel per column, ray-DEM ----
         obst = (role_map == int(Role.OBSTACLE))
@@ -476,6 +574,10 @@ def run(args):
           f"FOOTPRINT {np.mean(state==FOOTPRINT)*100:.1f}%  "
           f"HIDDEN {np.mean(state==HIDDEN)*100:.1f}%  "
           f"UNKNOWN {np.mean(state==UNKNOWN)*100:.1f}%  (of {n} cells)")
+    if rescued:
+        top = sorted(rescued.items(), key=lambda kv: -kv[1])
+        print(f"  obstacle rescue: {sum(rescued.values())} masks over {len(rescued)} labels -> "
+              + ", ".join(f"{k}x{v}" for k, v in top[:8]))
     if args.contact_depth_tol > 0 and gate_pre:
         print(f"  depth contact gate: {gate_pre} -> {gate_post} contacts "
               f"({100*(1-gate_post/max(gate_pre,1)):.0f}% rejected as not touching ground in 3D)")
@@ -536,6 +638,26 @@ def main():
     ap.add_argument("--z-far", type=float, default=70.0)
     ap.add_argument("--dz", type=float, default=0.2)
     ap.add_argument("--max-range", type=float, default=20.0, help="max base-contact distance (m)")
+    # --- obstacle rescue (open-vocab fill for classes the closed set lacks) ---
+    ap.add_argument("--rescue-prompt",
+                    default="vending machine. kiosk. public toilet. statue. planter. "
+                            "bollard. bike rack. playground equipment. picnic table.",
+                    help="open-vocab classes to rescue into Role.OBSTACLE when the closed-set "
+                         "segmenter leaves them UNKNOWN/IGNORE. Empty string disables (and "
+                         "skips loading the detector).")
+    ap.add_argument("--rescue-klass", default="FURNITURE",
+                    choices=[k.name for k in Klass],
+                    help="taxonomy class assigned to rescued pixels")
+    ap.add_argument("--rescue-min-px", type=int, default=600,
+                    help="ignore rescued masks smaller than this (noise)")
+    ap.add_argument("--rescue-max-frac", type=float, default=0.25,
+                    help="reject a rescued mask covering more than this fraction of the frame "
+                         "(open-vocab detectors emit whole-scene boxes that would blanket the "
+                         "BEV with phantom occupancy)")
+    ap.add_argument("--rescue-box-th", type=float, default=0.35)
+    ap.add_argument("--rescue-text-th", type=float, default=0.25)
+    ap.add_argument("--det-model", default="IDEA-Research/grounding-dino-tiny")
+    ap.add_argument("--sam-model", default="facebook/sam-vit-base")
     ap.add_argument("--contact-depth-tol", type=float, default=0.15,
                     help="reject a ground contact when measured mono depth disagrees with the "
                          "ray-DEM hit range by more than this FRACTION of the range "

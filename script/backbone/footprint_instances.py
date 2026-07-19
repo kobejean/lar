@@ -62,8 +62,8 @@ from colmap_io import read_model                     # noqa: E402
 from geometry import from_reconstruction             # noqa: E402
 from taxonomy import Klass, Role, role_of            # noqa: E402
 from footprint2d import (                            # noqa: E402
-    MonoDepth, SegKlass, camera_local, depth_contact_gate, pixel_dirs, ray_dem_intersect,
-    mono_dem_field, sample_frames,
+    GroundedSAM, MonoDepth, SegKlass, camera_local, depth_contact_gate, pixel_dirs,
+    ray_dem_intersect, mono_dem_field, sample_frames,
 )
 
 DEFAULT_PROMPT = "tree. bench. pole. sign. trash can. street lamp. rock. bush. fence."
@@ -86,49 +86,6 @@ def color_for(label: str) -> tuple[int, int, int]:
     if label in CLASS_COLORS:
         return CLASS_COLORS[label]
     return _FALLBACK[hash(label) % len(_FALLBACK)]
-
-
-# ---------------------------------------------------------------------------
-# open-vocabulary instances: Grounding DINO boxes -> SAM masks
-# ---------------------------------------------------------------------------
-class GroundedSAM:
-    """(masks, boxes, labels, scores) for one BGR image, all from cached weights."""
-
-    def __init__(self, det_model: str, sam_model: str, prompt: str,
-                 box_th: float, text_th: float, device: str | None = None):
-        import torch
-        from transformers import (AutoModelForZeroShotObjectDetection, AutoProcessor,
-                                  SamModel, SamProcessor)
-        self.torch = torch
-        self.prompt = prompt
-        self.box_th, self.text_th = box_th, text_th
-        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-        self.dproc = AutoProcessor.from_pretrained(det_model)
-        self.det = AutoModelForZeroShotObjectDetection.from_pretrained(det_model).to(self.device).eval()
-        self.sproc = SamProcessor.from_pretrained(sam_model)
-        self.sam = SamModel.from_pretrained(sam_model).to(self.device).eval()
-
-    def __call__(self, bgr: np.ndarray):
-        from PIL import Image as PILImage
-        torch = self.torch
-        pil = PILImage.fromarray(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB))
-        inp = self.dproc(images=pil, text=self.prompt, return_tensors="pt").to(self.device)
-        with torch.no_grad():
-            out = self.det(**inp)
-        res = self.dproc.post_process_grounded_object_detection(
-            out, inp.input_ids, threshold=self.box_th, text_threshold=self.text_th,
-            target_sizes=[bgr.shape[:2]])[0]
-        boxes = res["boxes"].cpu().numpy()
-        if not len(boxes):
-            return np.zeros((0, *bgr.shape[:2]), bool), boxes, [], np.zeros(0, np.float32)
-        labels = [str(x) for x in res.get("text_labels", res["labels"])]
-        scores = res["scores"].cpu().numpy().astype(np.float32)
-        si = self.sproc(pil, input_boxes=[boxes.tolist()], return_tensors="pt").to(self.device)
-        with torch.no_grad():
-            so = self.sam(**si, multimask_output=False)
-        masks = self.sproc.image_processor.post_process_masks(
-            so.pred_masks.cpu(), si["original_sizes"].cpu(), si["reshaped_input_sizes"].cpu())[0]
-        return masks[:, 0].numpy().astype(bool), boxes, labels, scores
 
 
 # ---------------------------------------------------------------------------
