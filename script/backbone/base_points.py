@@ -61,6 +61,69 @@ _FALLBACK = [(200, 100, 60), (60, 100, 200), (100, 200, 60), (200, 60, 160)]
 
 
 # --------------------------------------------------------------------------- #
+# 2DGS surfel ground surface: the trained surfels are surface-aligned, so their
+# centres are a dense, accurate surface cloud (same COLMAP frame gsplat trained on).
+# Feed as `dem_world` — build_ground_mesh extracts ground as the low per-cell quantile.
+# --------------------------------------------------------------------------- #
+def read_gsplat_ply(path: Path, opacity_min: float = 0.1, log=print) -> np.ndarray:
+    """Read a 3DGS/2DGS point_cloud.ply -> (N,3) surfel centres, opacity-filtered.
+
+    Minimal binary_little_endian reader: parses the property list (all float32 in this
+    format) to locate x/y/z/opacity by name, so it survives field-count changes."""
+    raw = path.read_bytes()
+    hdr_end = raw.index(b"end_header\n") + len(b"end_header\n")
+    header = raw[:hdr_end].decode("ascii", "replace").splitlines()
+    props, n = [], 0
+    for line in header:
+        if line.startswith("element vertex"):
+            n = int(line.split()[-1])
+        elif line.startswith("property"):
+            props.append(line.split()[-1])          # property float <name>
+    assert {"x", "y", "z"} <= set(props), f"ply missing xyz: {props[:6]}"
+    arr = np.frombuffer(raw[hdr_end:hdr_end + n * len(props) * 4],
+                        dtype=np.float32).reshape(n, len(props))
+    xyz = arr[:, [props.index("x"), props.index("y"), props.index("z")]].astype(np.float64)
+    if opacity_min and "opacity" in props:
+        alpha = 1.0 / (1.0 + np.exp(-arr[:, props.index("opacity")]))   # gsplat stores logit
+        keep = alpha >= opacity_min
+        xyz = xyz[keep]
+        log(f"  2DGS surfels: {n} -> {len(xyz)} kept (opacity sigmoid >= {opacity_min})")
+    else:
+        log(f"  2DGS surfels: {n}")
+    return xyz
+
+
+def adapt_cameras_to_images(recon, images_dir, log=print):
+    """Rescale COLMAP intrinsics to the actual image resolution.
+
+    Common gotcha (e.g. mip-NeRF 360): COLMAP is solved on full-res but the provided images
+    are a downsampled ``images_N`` dir, so detection pixels (image space) and the projection
+    intrinsics (full-res) disagree by the downscale factor. No-op when sizes already match."""
+    for cam in recon.cameras.values():
+        name = next((im.name for im in recon.images.values() if im.camera_id == cam.id), None)
+        if not name:
+            continue
+        p = Path(images_dir) / name
+        if not p.exists():
+            continue
+        with Image.open(p) as im0:
+            w, h = im0.size
+        if (w, h) == (cam.width, cam.height):
+            continue
+        rx, ry = w / cam.width, h / cam.height
+        q = cam.params.astype(float).copy()
+        if cam.model == "PINHOLE":              # [fx, fy, cx, cy]
+            q[0] *= rx; q[1] *= ry; q[2] *= rx; q[3] *= ry
+        elif cam.model in ("SIMPLE_PINHOLE", "SIMPLE_RADIAL", "RADIAL"):  # [f, cx, cy, ...]
+            q[0] *= rx; q[1] *= rx; q[2] *= ry
+        else:                                    # OPENCV etc.: scale the [fx,fy,cx,cy] head
+            q[:4] = q[:4] * [rx, ry, rx, ry]
+        cam.params, cam.width, cam.height = q, w, h
+        log(f"  adapted camera {cam.id}: {int(cam.width/rx)}x{int(cam.height/ry)} -> {w}x{h}")
+    return recon
+
+
+# --------------------------------------------------------------------------- #
 # detection
 # --------------------------------------------------------------------------- #
 def load_detector(model_id: str, device: str):
@@ -191,6 +254,54 @@ def gemini_points(client_model, pil: Image.Image, classes: list[str], retries: i
             return []
         return _parse_gemini(resp.text or "", W, H)
     return []
+
+
+# --------------------------------------------------------------------------- #
+# Moondream3 cloud pointing backend (needs $MOONDREAM_API_KEY). Same oracle role
+# as gemini: Moondream3 is 9B-MoE (2B active) — the whole 9B (~18 GB bf16) must be
+# resident, so it does NOT fit local 8 GB VRAM; the hosted API exposes the identical
+# .point() interface. BSL-1.1 + Additional Use Grant (commercial internal use OK).
+# --------------------------------------------------------------------------- #
+def load_moondream_cloud(model_id: str):
+    """Moondream cloud client (moondream3-preview by default). Needs $MOONDREAM_API_KEY."""
+    import moondream as md
+    key = os.environ.get("MOONDREAM_API_KEY")
+    if not key:
+        raise SystemExit("--backend moondream3 needs MOONDREAM_API_KEY in the environment")
+    return md.vl(api_key=key, model=model_id) if model_id else md.vl(api_key=key)
+
+
+def moondream_cloud_points(model, pil: Image.Image, classes: list[str], retries: int = 4):
+    """One cloud .point() call per class -> [(x_px, y_px, class, 1.0)] in original px.
+
+    Cloud .point() returns the SAME normalised {"points":[{"x":0..1,"y":0..1}]} shape as the
+    local moondream backend, but each call is a network round-trip -> retry on transient errors
+    (mirrors gemini_points). API returns no per-point confidence, so score=1."""
+    W, H = pil.size
+    out = []
+    for c in classes:
+        res = None
+        for attempt in range(retries):
+            try:
+                res = model.point(pil, c)
+            except Exception as e:
+                msg = str(e)
+                transient = any(t in msg for t in ("429", "RESOURCE_EXHAUSTED", "503", "502",
+                                                   "timeout", "timed out", "Connection",
+                                                   "name resolution"))
+                if transient and attempt < retries - 1:
+                    time.sleep(10 * (attempt + 1)); continue
+                print(f"  moondream cloud error [{c}]: {msg[:110]}")
+                res = None
+            break
+        if not res:
+            continue
+        pts = res.get("points", res) if isinstance(res, dict) else res
+        for p in pts:
+            x = (p["x"] if isinstance(p, dict) else p[0]) * W
+            y = (p["y"] if isinstance(p, dict) else p[1]) * H
+            out.append((float(x), float(y), c, 1.0))
+    return out
 
 
 # --------------------------------------------------------------------------- #
@@ -325,7 +436,7 @@ def cluster_footprints(pts_uv: np.ndarray, labels: list[str], scores: np.ndarray
 
 
 def cluster_triangulate(pts_uv, ray_o, ray_d, labels, scores, gf,
-                        eps, min_samples, max_cond=5e3, log=print):
+                        eps, min_samples, ground_tol=0.75, max_cond=5e3, log=print):
     """Per-class DBSCAN on the rough (DEM) positions to *group*, then multi-view **triangulate**
     each cluster's 3D contact from its member rays on the trusted poses — placement no longer
     rides on single-view depth. Singletons / near-parallel bundles fall back to the DEM centroid.
@@ -349,12 +460,24 @@ def cluster_triangulate(pts_uv, ray_o, ray_d, labels, scores, gf,
                     uv = local[:2]                           # axes 0,1 horizontal
                     hag = float(local[2] - gf.height_at(uv[None, :])[0])   # height above DEM ground
                     rec.update(u=float(uv[0]), v=float(uv[1]), method="triangulated",
-                               resid_m=round(resid, 3), cond=round(cond, 1),
-                               hag_m=round(hag, 3))
+                               resid_m=round(resid, 3), cond=round(cond, 1), hag_m=round(hag, 3))
                     out.append(rec); n_tri += 1
                     continue
-            rec.update(u=float(centroid[0]), v=float(centroid[1]), method="dem_fallback")
+            # singleton / ill-conditioned: no reliable 3D -> DEM centroid, ground unknown
+            rec.update(u=float(centroid[0]), v=float(centroid[1]), method="dem_fallback",
+                       on_ground=True)
             out.append(rec); n_fallback += 1
+    # The DEM is not a trustworthy ABSOLUTE ground datum (systematic vertical bias), so classify
+    # ground-vs-elevated RELATIVE to the object population's own ground level: on-ground objects
+    # pile up at the median hag; a vase-on-table sits a table-height above it. Absorbs DEM bias.
+    hags = [o["hag_m"] for o in out if o.get("method") == "triangulated"]
+    datum = float(np.median(hags)) if hags else 0.0
+    for o in out:
+        if "hag_m" in o:
+            o["hag_rel"] = round(o["hag_m"] - datum, 3)
+            o["on_ground"] = bool(o["hag_rel"] <= ground_tol)   # above the local ground = elevated
+    log(f"  ground datum (median hag vs DEM) = {datum:+.2f} units; "
+        f"elevated = hag_rel > {ground_tol}")
     out.sort(key=lambda d: -d["count"])
     resids = [o["resid_m"] for o in out if o.get("method") == "triangulated"]
     med = float(np.median(resids)) if resids else float("nan")
@@ -537,22 +660,35 @@ def main() -> None:
     ap.add_argument("--model", help="COLMAP text model dir (default: session.best_model())")
     ap.add_argument("--images", help="image dir (default: session.images)")
     ap.add_argument("--out", help="output dir (default: output/<session>-basepoints)")
-    ap.add_argument("--dem-source", choices=["colmap", "mono"], default="colmap")
+    ap.add_argument("--dem-source", choices=["colmap", "mono", "gsplat2d"], default="colmap",
+                    help="ground-surface cloud for the DEM: colmap (sparse) / mono (dense but "
+                         "vertically noisy) / gsplat2d (dense AND surface-aligned surfels). "
+                         "Occupancy always stays on the COLMAP obstacle cloud.")
     ap.add_argument("--depth-dir", help="mono depth dir (default: session.depth_dir('mono'))")
+    ap.add_argument("--gsplat-ply", help="2DGS point_cloud.ply (default: session gsplat2d out)")
+    ap.add_argument("--gsplat-opacity", type=float, default=0.1,
+                    help="drop 2DGS surfels below this sigmoid opacity (floaters)")
     ap.add_argument("--mode", choices=["points", "mask-contour"], default="points",
                     help="points = foot point per object (thin objects); "
                          "mask-contour = SAM mask -> ground silhouette -> footprint polygon "
                          "(multi-contact objects: benches, signs)")
-    ap.add_argument("--backend", choices=["gdino", "moondream", "gemini"], default="gdino",
+    ap.add_argument("--backend", choices=["gdino", "moondream", "moondream3", "gemini"],
+                    default="gdino",
                     help="gdino = Grounding DINO boxes (foot point / mask-contour); "
-                         "moondream = local VLM pointing (Apache-2.0); "
+                         "moondream = local Moondream2 VLM pointing (Apache-2.0); "
+                         "moondream3 = Moondream3 cloud pointing (needs $MOONDREAM_API_KEY; "
+                         "9B-MoE, too big for local 8 GB VRAM); "
                          "gemini = cloud VLM pointing oracle (needs $GEMINI_API_KEY). "
-                         "Both VLM backends emit one point per instance, then drop to the "
+                         "All VLM backends emit one point per instance, then drop to the "
                          "ground contact. Force --mode points.")
     ap.add_argument("--detector", default="IDEA-Research/grounding-dino-tiny")
     ap.add_argument("--vlm-model", default="vikhyatk/moondream2")
     ap.add_argument("--vlm-revision", default="2025-06-21")
     ap.add_argument("--gemini-model", default="gemini-flash-lite-latest")
+    ap.add_argument("--moondream-model", default="",
+                    help="Moondream cloud model id for --backend moondream3; empty (default) = "
+                         "client/server default, which is moondream3-preview. Pin a finetune "
+                         "via 'moondream3-preview/ft_id@step'.")
     ap.add_argument("--sam-model", default="facebook/sam-vit-base",
                     help="SAM checkpoint for mask-contour (SAM2 is a drop-in)")
     ap.add_argument("--accum-cell", type=float, default=0.25, help="BEV accumulator cell (m)")
@@ -568,6 +704,14 @@ def main() -> None:
                          "triangulate = group by DEM position, then multi-view ray "
                          "triangulation on the poses (drops single-view depth for the final "
                          "position). points mode only.")
+    ap.add_argument("--min-depression", type=float, default=7.0,
+                    help="reject a detection whose contact ray is shallower than this many "
+                         "degrees below horizontal (grazing near-horizon rays carry ~no range "
+                         "info; a walking cam sees most distant objects this way).")
+    ap.add_argument("--ground-tol", type=float, default=0.75,
+                    help="triangulated anchor within this height (scene units) of the DEM "
+                         "ground = a ground obstacle; higher = elevated (vase-on-table, hung "
+                         "sign) and flagged on_ground=false. Scale with the scene.")
     ap.add_argument("--cell-size", type=float, default=0.5)
     ap.add_argument("--size", type=int, default=512, help="DEM render resolution for depth lookup")
     ap.add_argument("--max-range", type=float, default=30.0)
@@ -581,11 +725,14 @@ def main() -> None:
         images = Path(args.images) if args.images else s.images
         out = Path(args.out) if args.out else s.root / "output" / f"{s.name}-basepoints"
         depth_dir = Path(args.depth_dir) if args.depth_dir else s.depth_dir("mono")
+        gsplat_ply = (Path(args.gsplat_ply) if args.gsplat_ply
+                      else s.gsplat_out(mode="2dgs") / "point_cloud.ply")
     else:
         if not (args.model and args.images and args.out):
             ap.error("without --session, pass --model, --images and --out")
         model, images, out = Path(args.model), Path(args.images), Path(args.out)
         depth_dir = Path(args.depth_dir) if args.depth_dir else None
+        gsplat_ply = Path(args.gsplat_ply) if args.gsplat_ply else None
     out.mkdir(parents=True, exist_ok=True)
     det_dir = out / "detections"
     det_dir.mkdir(exist_ok=True)
@@ -593,6 +740,7 @@ def main() -> None:
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"model {model}\nimages {images}\nout {out}\ndevice {device}")
     recon = read_model(str(model))
+    adapt_cameras_to_images(recon, images)   # handle downsampled images_N dirs (no-op if matched)
 
     dem_world = None
     if args.dem_source == "mono":
@@ -600,6 +748,18 @@ def main() -> None:
             ap.error("--dem-source mono needs --depth-dir (or --session)")
         print(f"DEM source: mono depth <- {depth_dir}")
         dem_world = backproject_positions(recon, depth_dir, list(recon.images), 8, 0.1)
+    elif args.dem_source == "gsplat2d":
+        if gsplat_ply is None or not gsplat_ply.exists():
+            ap.error(f"--dem-source gsplat2d needs a 2DGS ply (--gsplat-ply); got {gsplat_ply}")
+        print(f"DEM source: 2DGS surfels <- {gsplat_ply}")
+        dem_world = read_gsplat_ply(gsplat_ply, args.gsplat_opacity)
+        # 3DGS/2DGS park a few background surfels at extreme coords -> clip to the scene
+        # (camera-trajectory bbox + object range) or they blow up the DEM grid.
+        cams = np.array([-qvec2rotmat(im.qvec).T @ im.tvec for im in recon.images.values()])
+        lo, hi = cams.min(0) - args.max_range, cams.max(0) + args.max_range
+        inside = np.all((dem_world >= lo) & (dem_world <= hi), axis=1)
+        print(f"  clipped to scene bbox: {len(dem_world)} -> {int(inside.sum())} surfels")
+        dem_world = dem_world[inside]
     mesh, occ_world = build_ground_mesh(
         recon, args.cell_size, (0.4, 2.0), 3, 0.8, dem_world=dem_world)
     gf = mesh.gf
@@ -607,13 +767,16 @@ def main() -> None:
     classes = [c.strip().lower() for c in args.prompt.split(".") if c.strip()]
     print(f"classes: {classes}")
     proc = det_model = pointer = gemini = sam_proc = sam_model = None
-    is_vlm = args.backend in ("moondream", "gemini")
+    is_vlm = args.backend in ("moondream", "moondream3", "gemini")
     if is_vlm and args.mode != "points":
         print(f"{args.backend} backend -> forcing --mode points")
         args.mode = "points"
     if args.backend == "moondream":
         print(f"loading pointer VLM {args.vlm_model}@{args.vlm_revision}")
         pointer = load_pointer(args.vlm_model, args.vlm_revision, device)
+    elif args.backend == "moondream3":
+        print(f"moondream3 cloud pointing: {args.moondream_model or '(client default)'}")
+        pointer = load_moondream_cloud(args.moondream_model)
     elif args.backend == "gemini":
         print(f"gemini pointing oracle: {args.gemini_model}")
         gemini = load_gemini(args.gemini_model)
@@ -646,6 +809,7 @@ def main() -> None:
 
     all_uv, all_lab, all_score, traj_uv = [], [], [], []
     all_ray_o, all_ray_d = [], []          # per-detection world ray (origin, unit dir) for triangulation
+    all_dep = []                            # sin(depression below horizontal) of each contact ray
     n_pts = 0
     for fi, im in enumerate(ims):
         cam = recon.cameras[im.camera_id]
@@ -661,8 +825,12 @@ def main() -> None:
         pil = Image.open(images / im.name).convert("RGB")
 
         if is_vlm:
-            vpts = (vlm_points(pointer, pil, classes) if args.backend == "moondream"
-                    else gemini_points(gemini, pil, classes))
+            if args.backend == "moondream":
+                vpts = vlm_points(pointer, pil, classes)
+            elif args.backend == "moondream3":
+                vpts = moondream_cloud_points(pointer, pil, classes)
+            else:
+                vpts = gemini_points(gemini, pil, classes)
             overlay = cv2.imread(str(images / im.name)) if fi < args.save_detections else None
             for (x, y, cls_raw, score) in vpts:
                 cls = canonical(cls_raw, classes)
@@ -671,9 +839,10 @@ def main() -> None:
                     continue
                 c, r, d = hit
                 w = world_from_render_px(c, r, d, scale, cam, im)
-                ro, rd = pixel_ray(c, r, scale, cam, im)
+                ro, rd = pixel_ray(x * scale, y * scale, scale, cam, im)   # ray through the anchor
                 all_uv.append((w @ gf.R.T)[:2]); all_lab.append(cls)
-                all_score.append(score); all_ray_o.append(ro); all_ray_d.append(rd); n_pts += 1
+                all_score.append(score); all_ray_o.append(ro); all_ray_d.append(rd)
+                all_dep.append(float(-np.dot(rd, gf.up))); n_pts += 1
                 if overlay is not None:
                     col = colour_for(cls, classes.index(cls) if cls in classes else 0)
                     ox, oy = int(x), int(y)                        # VLM object point
@@ -707,7 +876,7 @@ def main() -> None:
                 ro, rd = pixel_ray(cg, rg, scale, cam, im)
                 all_uv.append((w @ gf.R.T)[:2]); all_lab.append(cls)
                 all_score.append(float(score)); all_ray_o.append(ro); all_ray_d.append(rd)
-                n_pts += 1
+                all_dep.append(float(-np.dot(rd, gf.up))); n_pts += 1
                 if overlay is not None:
                     x0, y0, x1, y1 = box.astype(int)
                     cv2.rectangle(overlay, (x0, y0), (x1, y1), col, 2)
@@ -745,14 +914,28 @@ def main() -> None:
     if args.mode == "points":
         if not all_uv:
             raise SystemExit("no foot points landed on the ground — check detector/prompt/DEM")
+        uv = np.array(all_uv); ro = np.array(all_ray_o); rd = np.array(all_ray_d)
+        lab = np.array(all_lab); sc = np.array(all_score); dep = np.array(all_dep)
+        # depression-angle gate: drop grazing near-horizon rays (no usable range; a walking cam
+        # sees most distant objects this way). Steep/close observations are what localise.
+        keep = dep >= np.sin(np.radians(args.min_depression))
+        print(f"  depression gate (>= {args.min_depression:.0f} deg): "
+              f"{len(uv)} -> {int(keep.sum())} contacts kept")
+        uv, ro, rd, lab, sc = uv[keep], ro[keep], rd[keep], lab[keep], sc[keep]
+        if len(uv) == 0:
+            raise SystemExit("no contacts survived the depression gate — lower --min-depression")
         if args.placement == "triangulate":
-            objects = cluster_triangulate(
-                np.array(all_uv), all_ray_o, all_ray_d, all_lab, np.array(all_score),
-                gf, args.eps, args.min_samples)
+            objects = cluster_triangulate(uv, ro, rd, lab, sc, gf,
+                                          args.eps, args.min_samples, ground_tol=args.ground_tol)
+            ground = [o for o in objects if o.get("on_ground", True)]
+            print(f"  {len(ground)}/{len(objects)} on-ground obstacles "
+                  f"(rest elevated: hag > {args.ground_tol} units)")
         else:
-            objects = cluster_footprints(np.array(all_uv), all_lab, np.array(all_score),
-                                         classes, args.eps, args.min_samples)
-        render_bev(gf, objects, traj_uv, out / "bev_footprints.png")
+            objects = cluster_footprints(uv, lab, sc, classes, args.eps, args.min_samples)
+        # BEV shows the walkable-footprint layer = on-ground obstacles only (elevated objects
+        # stay in objects.json flagged on_ground=false for downstream use).
+        render_bev(gf, [o for o in objects if o.get("on_ground", True)], traj_uv,
+                   out / "bev_footprints.png")
     else:
         objects = []
         for cls in accum_count:
