@@ -126,6 +126,45 @@ daily caps), and `drop_to_ground` can bias a distant object's contact slightly t
 (the first ground pixel below the trunk). Natural next step: use Gemini as an **oracle to distill
 labels** into a shippable local head.
 
+## `bev_render.py` — presentation-grade BEV for UI
+
+`footprint2d.npz` is **evidence**: every cell is whatever the multi-view votes support, speckle
+and all. Right for a raster you compute against, wrong for a UI — a map that draws a lone
+mis-voted cell as confidently as a corridor seen 101 times reads as broken, and an object drawn
+as a hollow ring of base contacts reads as a hole in the world.
+
+So this is a separate, deliberately **lossy** layer. Nothing feeds back into the npz, and
+re-rendering is instant instead of an hour.
+
+```sh
+uv run python script/backbone/bev_render.py --npz output/<session>-footprint2d/footprint2d.npz
+```
+
+Three things it does that the evidence raster must not:
+
+1. **Says "I don't know" out loud** — below `--min-views` (4) a cell renders **grey** instead of
+   committing to a class. This is what stops coverage-frontier speckle reading as real
+   structure. FREE-but-unclassified surface also goes grey, not terrain: walkable-but-unknown
+   is information, guessing is not.
+2. **Fills occupied interiors** — FOOTPRINT marks base contacts (a camera-facing rim), so
+   objects come out hollow. Enclosed holes up to `--max-fill` are filled; larger voids are real
+   (a tree-ringed courtyard) and stay open.
+3. **Drops speckle** — components under `--min-blob` are demoted to **grey**, not to a
+   neighbouring class: an isolated cell is unsupported, not evidence for its surroundings.
+
+Two tuning traps, both hit while building it:
+
+- **Occupied needs `close_only`, never `smooth`.** `smooth()` closes *then opens*, and an open
+  with a 5-cell kernel erases anything smaller than the kernel — which is every trunk and bench
+  at 0.5 m/cell. Using it dropped occupied 925 → 151 cells; close-only plus a smaller
+  `--min-blob-occupied` gives 2.6% coverage that reads as real structure.
+- **Smooth the survey masks, not just the classes.** The frontier is dithered at cell level (one
+  ray lands, its neighbour misses) and renders as salt-and-pepper along every edge. Smoothing
+  `surveyed`/`confident` changes only where we admit to knowing, never what we claim to know.
+
+Full-run output: path/paved 19.1%, terrain 24.1%, grass 7.5%, occluded 7.6%, occupied 2.6%,
+low-confidence 29.7%, not-surveyed 9.5%.
+
 ## Walkable surface: PATH separated from ground
 
 `Role.GROUND` lumps `PATH` / `PAVEMENT` / `GRASS` / `TERRAIN` / `STAIRS` into one
