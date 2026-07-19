@@ -32,8 +32,10 @@ import cv2
 import numpy as np
 import torch
 
-from gsplat import rasterization
+from gsplat import rasterization, rasterization_2dgs
 from colmap_dataset import read_cameras, read_images, camera_center
+
+_SH_C0 = 0.28209479177387814  # SH band-0 constant; DC coeff -> base RGB
 
 
 # ----- load the exported Gaussians (INRIA PLY layout) --------------------------
@@ -61,6 +63,7 @@ def load_ply(path: Path, device: str) -> dict:
     shN = f_rest.reshape(n, 3, k_minus1).transpose(0, 2, 1)
     sh = np.concatenate([f_dc[:, None, :], shN], axis=1)
     sh_degree = int(round(sh.shape[1] ** 0.5)) - 1
+    rgb_dc = np.clip(f_dc * _SH_C0 + 0.5, 0.0, 1.0)  # view-independent base colour (for 2dgs path)
 
     opacities = torch.sigmoid(torch.from_numpy(data[:, [col["opacity"]]].copy()).squeeze(-1))
     scales = torch.exp(torch.from_numpy(
@@ -69,6 +72,7 @@ def load_ply(path: Path, device: str) -> dict:
     return dict(
         means_np=means, means=torch.from_numpy(means).to(device),
         colors=torch.from_numpy(sh.copy()).to(device),
+        rgb_dc=torch.from_numpy(rgb_dc.copy()).to(device),
         opacities=opacities.to(device), scales=scales.to(device), quats=quats.to(device),
         sh_degree=sh_degree, n=n,
     )
@@ -95,6 +99,14 @@ def main() -> None:
                    help="COLMAP model dir for gravity (needed when --meta is absent)")
     p.add_argument("--out", default=None, help="output dir (default: alongside the ply)")
     p.add_argument("--prefix", default="level0")
+    p.add_argument("--mode", choices=["3dgs", "2dgs"], default="3dgs",
+                   help="3dgs: true orthographic rasterisation. 2dgs: surfels via a high-focal "
+                        "pinhole placed far above (pseudo-ortho) — gsplat's rasterization_2dgs "
+                        "has no ortho camera. Surfels lie flat on surfaces, so the ground renders "
+                        "clean from above and vertical stuff shrinks to lines (ideal for a BEV)")
+    p.add_argument("--ortho-distance", type=float, default=2000.0,
+                   help="(2dgs) virtual camera height in m; larger = closer to true ortho "
+                        "(less perspective across the footprint)")
     p.add_argument("--cell-size", type=float, default=0.05, help="metres per output pixel")
     p.add_argument("--pad", type=float, default=2.0, help="footprint padding (m) when auto (no --meta)")
     p.add_argument("--bounds-pct", type=float, default=0.01,
@@ -120,7 +132,7 @@ def main() -> None:
     if args.min_opacity > 0:
         keep = g["opacities"] >= args.min_opacity
         nk = int(keep.sum())
-        for k in ("means", "colors", "opacities", "scales", "quats"):
+        for k in ("means", "colors", "rgb_dc", "opacities", "scales", "quats"):
             g[k] = g[k][keep]
         g["means_np"] = g["means_np"][keep.cpu().numpy()]
         print(f"  kept {nk}/{g['n']} Gaussians with opacity >= {args.min_opacity}")
@@ -165,6 +177,21 @@ def main() -> None:
     if W * H > args.max_pixels:
         raise SystemExit(f"grid {W}x{H} = {W * H} px exceeds --max-pixels {args.max_pixels}; "
                          f"raise --cell-size")
+
+    # Cull Gaussians outside the footprint column (+margin). An under-trained model can have
+    # floaters millions of metres away; without this they never show in the BEV but WOULD push
+    # the virtual-camera height (below) to infinity, collapsing the whole scene to sub-pixel.
+    m = 5.0
+    uu, vv = means[:, u_axis], means[:, v_axis]
+    inside = ((uu >= u_lo - m) & (uu <= u_hi + m) &
+              (vv >= v_lo_w - m) & (vv <= v_hi_w + m))
+    if inside.sum() < g["n"]:
+        for k in ("means", "colors", "rgb_dc", "opacities", "scales", "quats"):
+            g[k] = g[k][torch.from_numpy(inside).to(g[k].device)]
+        means = means[inside]
+        print(f"  culled {g['n'] - int(inside.sum())} out-of-footprint floaters -> "
+              f"{int(inside.sum())} Gaussians")
+        g["n"] = int(inside.sum())
     print(f"BEV grid {W}x{H} @ {cs} m  (footprint {u_hi - u_lo:.1f} x {v_hi_w - v_lo_w:.1f} m, "
           f"up=axis{up_axis}{up_sign:+.0f}, v_sign={v_sign:+.0f})")
 
@@ -175,30 +202,42 @@ def main() -> None:
     down = np.cross(forward, right)            # right-handed OpenCV cam frame (X right, Y down, Z fwd)
     R_wc = np.stack([right, down, forward], axis=0)  # world->camera rotation (rows are cam axes)
 
-    # Camera centre: over the footprint centre, above the highest Gaussian.
-    up_hi = up_sign * float(means[:, up_axis].max())      # highest height in the scene
+    # Camera centre: over the footprint centre. 3dgs ortho ignores distance (no Z-divide), so
+    # sit just above the top. 2dgs pseudo-ortho needs the camera far away with a matching focal
+    # length (f = distance/cs) so perspective across the footprint is negligible.
+    up_hi = up_sign * float(np.quantile(means[:, up_axis], 0.999))  # robust top (ignore floaters)
+    dist = 5.0 if args.mode == "3dgs" else args.ortho_distance
+    focal = (1.0 / cs) if args.mode == "3dgs" else (dist / cs)
     C = np.zeros(3)
     C[u_axis] = 0.5 * (u_lo + u_hi)
     C[v_axis] = 0.5 * (v_lo_w + v_hi_w)
-    C[up_axis] = up_sign * (up_hi + 5.0)                  # 5 m above the top
+    C[up_axis] = up_sign * (up_hi + dist)
     tvec = -R_wc @ C
     viewmat = np.eye(4)
     viewmat[:3, :3] = R_wc
     viewmat[:3, 3] = tvec
-
-    # Intrinsics: 1/cs px per metre; principal point centres the footprint (camera is at centre).
-    K = np.array([[1.0 / cs, 0, W / 2.0], [0, 1.0 / cs, H / 2.0], [0, 0, 1.0]])
+    K = np.array([[focal, 0, W / 2.0], [0, focal, H / 2.0], [0, 0, 1.0]])
 
     vt = torch.from_numpy(viewmat).float().to(device)[None]
     Kt = torch.from_numpy(K).float().to(device)[None]
     with torch.no_grad():
-        renders, alphas, _ = rasterization(
-            means=g["means"], quats=g["quats"], scales=g["scales"],
-            opacities=g["opacities"], colors=g["colors"],
-            viewmats=vt, Ks=Kt, width=W, height=H,
-            sh_degree=g["sh_degree"], packed=True, render_mode="RGB",
-            camera_model="ortho",
-        )
+        if args.mode == "3dgs":
+            renders, alphas, _ = rasterization(
+                means=g["means"], quats=g["quats"], scales=g["scales"],
+                opacities=g["opacities"], colors=g["colors"],
+                viewmats=vt, Ks=Kt, width=W, height=H,
+                sh_degree=g["sh_degree"], packed=True, render_mode="RGB",
+                camera_model="ortho",
+            )
+        else:
+            # rasterization_2dgs: unpacked, RGB+ED, non-SH colours (see train.rasterize notes).
+            r2d = rasterization_2dgs(
+                means=g["means"], quats=g["quats"], scales=g["scales"],
+                opacities=g["opacities"], colors=g["rgb_dc"][None],
+                viewmats=vt, Ks=Kt, width=W, height=H,
+                sh_degree=None, packed=False, render_mode="RGB+ED",
+            )
+            renders, alphas = r2d[0][..., :3], r2d[1]
     # renders are alpha-composited over black; place them over the --bg grey via the alpha.
     rgb = renders[0].clamp(0, 1).cpu().numpy()
     alpha = alphas[0, ..., 0].cpu().numpy()
