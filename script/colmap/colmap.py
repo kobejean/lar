@@ -291,37 +291,71 @@ def run_colmap_feature_import(work_dir, database_path):
         print(f"Feature import failed: {e}")
         return False
 
-def copy_images(source_dir, work_dir):
-    """Copy all *_image.jpeg files from source to working directory"""
+def copy_images(source_dir, work_dir, allowed_names=None):
+    """Copy *_image.jpeg files from source to working directory.
+
+    When `allowed_names` is provided (a set of filenames like
+    `00000123_image.jpeg`), only those images are copied. This keeps the working
+    directory in sync with a truncated frame set (see --max_frames) so the mapper
+    never sees images that aren't in the database.
+    """
     source_path = Path(source_dir)
     work_path = Path(work_dir)
-    
+
     # Create working directory if it doesn't exist
     work_path.mkdir(parents=True, exist_ok=True)
-    
+
     # Find all image files matching the pattern
     image_pattern = source_path / "*_image.jpeg"
     image_files = glob.glob(str(image_pattern))
-    
+
     if not image_files:
         print(f"No *_image.jpeg files found in {source_dir}")
         return False
-    
+
+    if allowed_names is not None:
+        image_files = [f for f in image_files if os.path.basename(f) in allowed_names]
+        if not image_files:
+            print(f"No *_image.jpeg files matched the requested frame subset in {source_dir}")
+            return False
+
     print(f"Found {len(image_files)} image files")
-    
+
     # Copy images to working directory
     for img_file in image_files:
         filename = os.path.basename(img_file)
         dest_path = work_path / filename
         shutil.copy2(img_file, dest_path)
         print(f"Copied: {filename}")
-    
+
     return True
+
+def limit_frames(arkit_frames, max_frames):
+    """Keep only the first `max_frames` ARKit frames in capture order.
+
+    Frame ids are assigned sequentially at capture time (images are named
+    `{id:08d}_image.jpeg`), so sorting by id and taking the head gives the
+    earliest N frames. Returns the (possibly unchanged) frame list. A non-positive
+    or None `max_frames` is a no-op.
+    """
+    if not max_frames or max_frames <= 0:
+        return arkit_frames
+    ordered = sorted(arkit_frames, key=lambda frame: frame['id'])
+    if max_frames >= len(ordered):
+        print(f"--max_frames {max_frames} >= {len(ordered)} available frames; using all frames")
+        return ordered
+    kept = ordered[:max_frames]
+    print(f"Limiting reconstruction to the first {len(kept)} of {len(ordered)} frames "
+          f"(frame ids {kept[0]['id']}..{kept[-1]['id']})")
+    return kept
 
 def setup(args, frames_json_path, database_path, work_dir):
     arkit_frames = load_arkit_data(frames_json_path)
+    arkit_frames = limit_frames(arkit_frames, args.max_frames)
     create_colmap_database(arkit_frames, database_path, work_dir)
-    if not copy_images(args.source_dir, work_dir):
+    allowed_names = {f"{frame['id']:08d}_image.jpeg" for frame in arkit_frames} \
+        if args.max_frames and args.max_frames > 0 else None
+    if not copy_images(args.source_dir, work_dir, allowed_names):
         print("Failed to copy images. Exiting.")
         exit()
     return arkit_frames
@@ -473,6 +507,10 @@ def main():
                        help="Use COLMAP's built-in SIFT extractor instead of OpenCV")
     parser.add_argument("--max_num_features", type=int, default=16384,
                        help="Maximum number of features to extract per image (default: 16384)")
+    parser.add_argument("--max_frames", type=int, default=None,
+                       help="Use only the first N frames (earliest N by capture order / frame id) "
+                            "and their images. Handy for excluding drift-heavy tail frames and "
+                            "trying a cleaner reconstruction. Default: use all frames.")
     parser.add_argument("--alignment_max_error", type=float, default=0.1,
                        help="Maximum error threshold for model alignment (default: 0.1)")
     parser.add_argument("--use_vocab_tree", action="store_true",
