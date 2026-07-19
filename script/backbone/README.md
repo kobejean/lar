@@ -94,6 +94,36 @@ bush, 12 bench, 11 pole, 8 sign, 5 trash-can, 4 rock; trees line the walked path
 IMDF `amenity.landmark` (trees/benches) / `unit.structure`. Knobs: `--prompt`, `--box-thr/
 --text-thr` (detector), `--eps/--min-samples` (cluster radius / min detections per object).
 
+### `--backend {moondream,gemini}` — pointing-VLM front-end
+
+Same points pipeline, different instance detector. A **pointing VLM** emits *one 2D point per
+instance* directly from a class name — no boxes. Because the VLM points at the object body
+(trunk/seat), not its base, we **drop straight down the image column to the first ground
+(DEM-finite) pixel** = the object's ground contact directly below. That contact feeds the
+*identical* `world → DBSCAN` clustering as the box path, so the backends are directly comparable.
+
+- **`gemini`** (cloud oracle) — Gemini's trained pointing via `google-genai`; needs
+  `GEMINI_API_KEY` in the env. Default `gemini-flash-lite-latest` (free-tier accessible). One
+  multi-class call per frame returns `{"point":[y,x],"label"}` at the ground contact.
+- **`moondream`** (local, Apache-2.0) — Moondream2's native `.point()`. **Currently blocked**:
+  its HF remote code is incompatible with transformers ≥ 5 (`all_tied_weights_keys`); needs a
+  transformers-4 env or the standalone `moondream` package. Weights download fine.
+
+```sh
+# cloud oracle (quality ceiling); GEMINI_API_KEY must be set, never commit it
+GEMINI_API_KEY=... uv run --extra segmentation --with google-genai python \
+  script/backbone/base_points.py --session maguro-park-after-itchy --backend gemini --sample 40
+```
+
+**Gemini vs Grounding DINO, apples-to-apples (40 frames, `--dem-source mono --min-samples 2`):**
+DINO 231 pts → **29 objects**; Gemini 828 pts → **115 objects** (77 tree, 16 bush, 9 rock, 5
+pole, 5 bench, 2 sign, 1 trash can). ~4× the recall — Gemini catches background trees, saplings,
+and occluded contacts a tiny box detector misses, and its points land on the ground contact
+without a prompt trick. Caveats: cloud API (not shippable offline; ~1 paid call/frame, free-tier
+daily caps), and `drop_to_ground` can bias a distant object's contact slightly toward the camera
+(the first ground pixel below the trunk). Natural next step: use Gemini as an **oracle to distill
+labels** into a shippable local head.
+
 ### Status / next
 
 - [x] `base_points.py`: open-vocab foot-point → BEV clustering → 109 deduped labelled objects

@@ -28,7 +28,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import re
 import sys
+import time
 from pathlib import Path
 
 import cv2
@@ -92,21 +95,150 @@ def canonical(label: str, classes: list[str]) -> str:
 
 
 # --------------------------------------------------------------------------- #
+# VLM pointing backend (Moondream2, Apache-2.0 — native .point() per class)
+# --------------------------------------------------------------------------- #
+def load_pointer(model_id: str, revision: str, device: str):
+    """A pointing VLM: emits a 2D point per instance from a class name (no boxes)."""
+    from transformers import AutoModelForCausalLM
+    model = AutoModelForCausalLM.from_pretrained(
+        model_id, revision=revision, trust_remote_code=True,
+        torch_dtype=torch.float16).to(device).eval()
+    return model
+
+
+@torch.no_grad()
+def vlm_points(model, pil: Image.Image, classes: list[str]):
+    """Query the VLM once per class -> list of (x_px, y_px, class, score) in original px.
+
+    Moondream `.point(image, "<class>")` returns {"points": [{"x":0..1,"y":0..1}, ...]},
+    one entry per detected instance (normalised coords). No per-point confidence, so score=1.
+    """
+    W, H = pil.size
+    out = []
+    for c in classes:
+        res = model.point(pil, c)
+        pts = res.get("points", res) if isinstance(res, dict) else res
+        for p in pts:
+            x = (p["x"] if isinstance(p, dict) else p[0]) * W
+            y = (p["y"] if isinstance(p, dict) else p[1]) * H
+            out.append((float(x), float(y), c, 1.0))
+    return out
+
+
+# --------------------------------------------------------------------------- #
+# Gemini pointing backend (cloud oracle — needs $GEMINI_API_KEY). Not shippable
+# as an offline model; used to measure the quality ceiling above the local pointers.
+# --------------------------------------------------------------------------- #
+def load_gemini(model_id: str):
+    from google import genai
+    key = os.environ.get("GEMINI_API_KEY")
+    if not key:
+        raise SystemExit("--backend gemini needs GEMINI_API_KEY in the environment")
+    return genai.Client(api_key=key), model_id
+
+
+def _parse_gemini(txt: str, W: int, H: int):
+    """Tolerant parse of Gemini's pointing reply -> [(x_px, y_px, label, score)].
+
+    Slice to the outermost JSON array; if that won't parse, regex each {...} object. Accepts
+    'point'/'point_2d'/'box_2d' [y,x] (0-1000). Robust to stray prose or code fences."""
+    i, j = txt.find("["), txt.rfind("]")
+    data = None
+    if 0 <= i < j:
+        try:
+            data = json.loads(txt[i:j + 1])
+        except Exception:
+            data = None
+    if data is None:
+        data = []
+        for m in re.finditer(r"\{[^{}]*\}", txt):
+            try:
+                data.append(json.loads(m.group()))
+            except Exception:
+                pass
+    out = []
+    for d in data:
+        if not isinstance(d, dict):
+            continue
+        p = d.get("point") or d.get("point_2d") or d.get("box_2d")
+        if not isinstance(p, (list, tuple)) or len(p) < 2:
+            continue
+        y, x = float(p[0]), float(p[1])
+        out.append((x / 1000 * W, y / 1000 * H, str(d.get("label", "")).lower(), 1.0))
+    return out
+
+
+def gemini_points(client_model, pil: Image.Image, classes: list[str], retries: int = 4):
+    """One multi-class call per frame -> list of (x_px, y_px, class, score). Gemini returns
+    ground-contact points as {"point": [y, x], "label"} normalised 0-1000. Retries only on
+    rate-limit / transient network errors (content errors just yield whatever parsed)."""
+    client, model_id = client_model
+    W, H = pil.size
+    prompt = ("Point to each " + ", ".join(classes) + " in this image, at the spot where the "
+              "object meets the ground. Respond with ONLY a JSON list of "
+              '{"point": [y, x], "label": "<class>"}, where class is exactly one of the listed '
+              "names and [y, x] are normalised to 0-1000. No prose, no code fences.")
+    for attempt in range(retries):
+        try:
+            resp = client.models.generate_content(model=model_id, contents=[pil, prompt])
+        except Exception as e:
+            msg = str(e)
+            transient = any(t in msg for t in ("429", "RESOURCE_EXHAUSTED", "503",
+                                               "UNAVAILABLE", "name resolution", "timed out"))
+            if transient and attempt < retries - 1:
+                time.sleep(15 * (attempt + 1)); continue
+            print(f"  gemini call error: {msg[:110]}")
+            return []
+        return _parse_gemini(resp.text or "", W, H)
+    return []
+
+
+# --------------------------------------------------------------------------- #
 # foot point -> ground world point
 # --------------------------------------------------------------------------- #
-def foot_world(box, ground_depth, scale, cam, im, min_depth=0.5):
-    """Bottom-centre of the box -> world point on the DEM ground (or None if off-ground)."""
-    x0, y0, x1, y1 = box
+def world_from_render_px(c, r, d, scale, cam, im):
+    """Render-res pixel (c,r) + its ground depth -> world point."""
+    fx, fy, cx, cy = (v * scale for v in pinhole_params(cam))
+    cam_pt = np.array([(c - cx) / fx * d, (r - cy) / fy * d, d])
+    R = qvec2rotmat(im.qvec)
+    return cam_pt @ R + (-R.T @ im.tvec)  # world = cam @ R + C
+
+
+def pixel_world(px, py, ground_depth, scale, cam, im, min_depth=0.5):
+    """A single original-image pixel -> world point on the DEM ground (None if off-ground).
+
+    `px,py` are in original image coordinates; `scale` maps them into the render-res
+    ground-depth buffer. Shared by the box foot-point path and the VLM point path.
+    """
     h, w = ground_depth.shape
-    fx_px = int(round(np.clip((x0 + x1) * 0.5 * scale, 0, w - 1)))
-    fy_px = int(round(np.clip(y1 * scale, 0, h - 1)))
+    fx_px = int(round(np.clip(px * scale, 0, w - 1)))
+    fy_px = int(round(np.clip(py * scale, 0, h - 1)))
     d = ground_depth[fy_px, fx_px]
     if not np.isfinite(d) or d < min_depth:
         return None
-    fx, fy, cx, cy = (v * scale for v in pinhole_params(cam))
-    cam_pt = np.array([(fx_px - cx) / fx * d, (fy_px - cy) / fy * d, d])
-    R = qvec2rotmat(im.qvec)
-    return cam_pt @ R + (-R.T @ im.tvec)  # world = cam @ R + C
+    return world_from_render_px(fx_px, fy_px, d, scale, cam, im)
+
+
+def foot_world(box, ground_depth, scale, cam, im, min_depth=0.5):
+    """Bottom-centre of the box -> world point on the DEM ground (or None if off-ground)."""
+    x0, y0, x1, y1 = box
+    return pixel_world((x0 + x1) * 0.5, y1, ground_depth, scale, cam, im, min_depth)
+
+
+def drop_to_ground(px, py, ground_depth, scale, min_depth=0.5):
+    """A VLM object point lands mid-object (trunk/seat), where DEM depth is NaN. Walk DOWN
+    that image column to the first ground pixel = the object's ground contact directly below.
+    Returns (col, row, depth) in render-res, or None if no ground below the point."""
+    h, w = ground_depth.shape
+    c = int(round(np.clip(px * scale, 0, w - 1)))
+    r0 = int(round(np.clip(py * scale, 0, h - 1)))
+    col = ground_depth[:, c]
+    finite = np.where(np.isfinite(col) & (col >= min_depth))[0]
+    finite = finite[finite >= r0]
+    if len(finite) == 0:
+        return None
+    r = int(finite[0])
+    return c, r, float(col[r])
 
 
 # --------------------------------------------------------------------------- #
@@ -343,7 +475,16 @@ def main() -> None:
                     help="points = foot point per object (thin objects); "
                          "mask-contour = SAM mask -> ground silhouette -> footprint polygon "
                          "(multi-contact objects: benches, signs)")
+    ap.add_argument("--backend", choices=["gdino", "moondream", "gemini"], default="gdino",
+                    help="gdino = Grounding DINO boxes (foot point / mask-contour); "
+                         "moondream = local VLM pointing (Apache-2.0); "
+                         "gemini = cloud VLM pointing oracle (needs $GEMINI_API_KEY). "
+                         "Both VLM backends emit one point per instance, then drop to the "
+                         "ground contact. Force --mode points.")
     ap.add_argument("--detector", default="IDEA-Research/grounding-dino-tiny")
+    ap.add_argument("--vlm-model", default="vikhyatk/moondream2")
+    ap.add_argument("--vlm-revision", default="2025-06-21")
+    ap.add_argument("--gemini-model", default="gemini-flash-lite-latest")
     ap.add_argument("--sam-model", default="facebook/sam-vit-base",
                     help="SAM checkpoint for mask-contour (SAM2 is a drop-in)")
     ap.add_argument("--accum-cell", type=float, default=0.25, help="BEV accumulator cell (m)")
@@ -392,11 +533,22 @@ def main() -> None:
 
     classes = [c.strip().lower() for c in args.prompt.split(".") if c.strip()]
     print(f"classes: {classes}")
-    proc, det_model = load_detector(args.detector, device)
-    sam_proc = sam_model = None
-    if args.mode == "mask-contour":
-        print(f"loading SAM {args.sam_model}")
-        sam_proc, sam_model = load_sam(args.sam_model, device)
+    proc = det_model = pointer = gemini = sam_proc = sam_model = None
+    is_vlm = args.backend in ("moondream", "gemini")
+    if is_vlm and args.mode != "points":
+        print(f"{args.backend} backend -> forcing --mode points")
+        args.mode = "points"
+    if args.backend == "moondream":
+        print(f"loading pointer VLM {args.vlm_model}@{args.vlm_revision}")
+        pointer = load_pointer(args.vlm_model, args.vlm_revision, device)
+    elif args.backend == "gemini":
+        print(f"gemini pointing oracle: {args.gemini_model}")
+        gemini = load_gemini(args.gemini_model)
+    else:
+        proc, det_model = load_detector(args.detector, device)
+        if args.mode == "mask-contour":
+            print(f"loading SAM {args.sam_model}")
+            sam_proc, sam_model = load_sam(args.sam_model, device)
 
     ims = sorted(recon.images.values(), key=lambda im: im.name)
     if args.sample and args.sample < len(ims):
@@ -433,6 +585,35 @@ def main() -> None:
         gh, gw = ground_depth.shape
         scale = args.size / max(cam.width, cam.height)
         pil = Image.open(images / im.name).convert("RGB")
+
+        if is_vlm:
+            vpts = (vlm_points(pointer, pil, classes) if args.backend == "moondream"
+                    else gemini_points(gemini, pil, classes))
+            overlay = cv2.imread(str(images / im.name)) if fi < args.save_detections else None
+            for (x, y, cls_raw, score) in vpts:
+                cls = canonical(cls_raw, classes)
+                hit = drop_to_ground(x, y, ground_depth, scale)   # object point -> ground contact
+                if hit is None:
+                    continue
+                c, r, d = hit
+                w = world_from_render_px(c, r, d, scale, cam, im)
+                all_uv.append((w @ gf.R.T)[:2]); all_lab.append(cls)
+                all_score.append(score); n_pts += 1
+                if overlay is not None:
+                    col = colour_for(cls, classes.index(cls) if cls in classes else 0)
+                    ox, oy = int(x), int(y)                        # VLM object point
+                    gx, gy = int(c / scale), int(r / scale)        # ground contact (orig px)
+                    cv2.circle(overlay, (ox, oy), 5, col, 2, cv2.LINE_AA)
+                    cv2.line(overlay, (ox, oy), (gx, gy), col, 1, cv2.LINE_AA)
+                    cv2.circle(overlay, (gx, gy), 6, (0, 0, 255), -1, cv2.LINE_AA)
+                    cv2.putText(overlay, cls, (ox + 6, max(oy - 6, 12)),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, col, 2, cv2.LINE_AA)
+            if overlay is not None:
+                cv2.imwrite(str(det_dir / f"{Path(im.name).stem}.jpg"), overlay)
+            if (fi + 1) % 20 == 0:
+                print(f"  {fi + 1}/{len(ims)} frames, {n_pts} points")
+            continue
+
         dets = detect(proc, det_model, pil, args.prompt, device, args.box_thr, args.text_thr)
         masks = (sam_masks(sam_proc, sam_model, pil, [d[0] for d in dets], device)
                  if args.mode == "mask-contour" else [None] * len(dets))
