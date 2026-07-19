@@ -70,6 +70,23 @@ PALETTE = {                      # RGB
     L_OCC_FURNITURE: (200, 112, 24),
     L_OCC_OTHER:     (168, 48, 40),
 }
+# The cf3d965 palette, kept because that render is the reference the project judged the map
+# against. Reproducing a past figure must not require checking out a past commit — the script
+# should be able to draw its own history.
+PALETTE_V1 = {
+    L_UNSURVEYED:    (24, 26, 30),
+    L_LOWCONF:       (105, 108, 115),
+    L_GRASS:         (104, 152, 92),
+    L_TERRAIN:       (150, 132, 106),
+    L_PATH:          (238, 220, 170),
+    L_HIDDEN:        (72, 88, 104),
+    L_OCC_TREE:      (188, 74, 62),
+    L_OCC_WALL:      (188, 74, 62),
+    L_OCC_BUILDING:  (188, 74, 62),
+    L_OCC_FURNITURE: (188, 74, 62),
+    L_OCC_OTHER:     (188, 74, 62),
+}
+
 NAMES = {
     L_UNSURVEYED: "not surveyed", L_LOWCONF: "low confidence", L_GRASS: "grass",
     L_TERRAIN: "terrain", L_PATH: "path / paved", L_HIDDEN: "occluded ground",
@@ -374,12 +391,14 @@ def build_labels(z, args) -> tuple[np.ndarray, dict]:
     return out, stats
 
 
-def colorize(labels, scale, legend, cell_size=0.5, outline=True):
-    lut = np.zeros((len(PALETTE), 3), np.uint8)
-    for k, v in PALETTE.items():
+def colorize(labels, scale, legend, cell_size=0.5, outline=True, palette=None,
+             furniture=True, pct=True):
+    palette = palette or PALETTE
+    lut = np.zeros((max(palette) + 1, 3), np.uint8)
+    for k, v in palette.items():
         lut[k] = v
     total = labels.size
-    pct = {lid: 100.0 * float((labels == lid).sum()) / total for lid in NAMES}
+    shares = {lid: 100.0 * float((labels == lid).sum()) / total for lid in NAMES}
 
     rgb = np.flipud(lut[labels])                          # north-up, as footprint2d renders
     occ = np.flipud(np.isin(labels, OCC_LABELS))
@@ -387,14 +406,15 @@ def colorize(labels, scale, legend, cell_size=0.5, outline=True):
         rgb = cv2.resize(rgb, None, fx=scale, fy=scale, interpolation=cv2.INTER_NEAREST)
         occ = cv2.resize(occ.astype(np.uint8), None, fx=scale, fy=scale,
                          interpolation=cv2.INTER_NEAREST).astype(bool)
-    if outline:
+    if outline and furniture:
         # A dark keyline round occupied regions. Obstacles are the one class a user must not
         # misread as ground, and at small sizes a fill alone reads as a colour blotch.
         cnts, _ = cv2.findContours(occ.astype(np.uint8), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
         cv2.drawContours(rgb, cnts, -1, (16, 14, 16), max(1, scale // 3))
 
-    # scale bar: a map without one cannot be measured, and this is metric
     h, w = rgb.shape[:2]
+    if not furniture:
+        return rgb if not legend else _legend(rgb, palette, shares, pct, not furniture)
     px_per_m = scale / cell_size
     target = max(5.0, round((w * 0.18) / px_per_m / 5.0) * 5.0)      # ~18% of width, round 5 m
     bar = int(target * px_per_m)
@@ -411,17 +431,31 @@ def colorize(labels, scale, legend, cell_size=0.5, outline=True):
 
     if not legend:
         return rgb
+    return _legend(rgb, palette, shares, pct)
+
+
+def _legend(rgb, palette, shares, pct, merge_occ=False):
+    h = rgb.shape[0]
     pad, sw, lh = 14, 18, 27
     bar_w = 232
-    panel = np.full((h, bar_w, 3), PALETTE[L_UNSURVEYED], np.uint8)
-    for i, (lid, name) in enumerate(NAMES.items()):
+    panel = np.full((h, bar_w, 3), palette[L_UNSURVEYED], np.uint8)
+    items = list(NAMES.items())
+    if merge_occ:
+        # v1 painted every occupied sub-class the same red; listing five identical swatches
+        # would be noise, so they collapse to the single row the reference figure had.
+        items = [(l, n) for l, n in items if l not in OCC_LABELS]
+        items.append((L_OCC_OTHER, "occupied"))
+        shares = dict(shares)
+        shares[L_OCC_OTHER] = sum(shares.get(l, 0.0) for l in OCC_LABELS)
+    for i, (lid, name) in enumerate(items):
         y = pad + i * lh
-        panel[y:y + sw, pad:pad + sw] = PALETTE[lid]
+        panel[y:y + sw, pad:pad + sw] = palette[lid]
         cv2.rectangle(panel, (pad, y), (pad + sw, y + sw), (20, 20, 20), 1)
         cv2.putText(panel, name, (pad + sw + 9, y + sw - 5), cv2.FONT_HERSHEY_SIMPLEX,
                     0.42, (235, 238, 242), 1, cv2.LINE_AA)
-        cv2.putText(panel, f"{pct[lid]:4.1f}%", (pad + sw + 9, y + sw + 9),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.34, (150, 155, 165), 1, cv2.LINE_AA)
+        if pct:
+            cv2.putText(panel, f"{shares[lid]:4.1f}%", (pad + sw + 9, y + sw + 9),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.34, (150, 155, 165), 1, cv2.LINE_AA)
     return np.hstack([rgb, panel])
 
 
@@ -476,7 +510,19 @@ def main():
     ap.add_argument("--smooth", type=int, default=3, help="morphological kernel (cells), <3 off")
     ap.add_argument("--scale", type=int, default=4, help="upscale factor")
     ap.add_argument("--no-legend", action="store_true")
+    ap.add_argument("--style", default="current", choices=["current", "clean3"],
+                    help="'clean3' reproduces the cf3d965 reference render exactly: flat-red "
+                         "occupied, v1 palette, no range limit, no surrounded/enclosed fill, "
+                         "no crop or map furniture. Kept so that figure stays reproducible "
+                         "from HEAD instead of requiring a checkout of an old commit.")
     args = ap.parse_args()
+
+    if args.style == "clean3":
+        args.max_range = 0.0
+        args.surround_dirs = 9
+        args.enclose_dirs = 9
+        args.enclose_frac = 0.0
+        args.no_crop = True
 
     npz = Path(args.npz).expanduser().resolve()
     z = np.load(npz)
@@ -494,7 +540,9 @@ def main():
     if not args.no_crop:
         labels = crop_to_content(labels)
     out = Path(args.out) if args.out else npz.parent / "bev_clean.png"
-    img = colorize(labels, args.scale, not args.no_legend, float(z["cell_size"]))
+    v1 = args.style == "clean3"
+    img = colorize(labels, args.scale, not args.no_legend, float(z["cell_size"]),
+                   palette=PALETTE_V1 if v1 else PALETTE, furniture=not v1, pct=not v1)
     cv2.imwrite(str(out), img[:, :, ::-1])
     print(f"  wrote {out}")
 

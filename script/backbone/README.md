@@ -128,6 +128,14 @@ labels** into a shippable local head.
 
 ## `bev_render.py` — presentation-grade BEV for UI
 
+> **Archive.** The full 643-frame run and its renders are kept at
+> `output/maguro-park-bev-archive/` with a `REPRODUCE.md` recording exact commands and commit
+> SHAs. That run costs ~1 h of GPU time and `output/` is **gitignored**, so those files exist on
+> disk only — back them up if they matter. `--style clean3` regenerates the reference figure
+> from HEAD (99.4% pixel-identical; the remainder is the later border-speckle fix), so
+> reproducing it never requires checking out an old commit.
+
+
 `footprint2d.npz` is **evidence**: every cell is whatever the multi-view votes support, speckle
 and all. Right for a raster you compute against, wrong for a UI — a map that draws a lone
 mis-voted cell as confidently as a corridor seen 101 times reads as broken, and an object drawn
